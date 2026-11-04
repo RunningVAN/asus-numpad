@@ -89,7 +89,9 @@ SKUJSON
 %{_bindir}/asus-numpad
 %{_userunitdir}/asus-numpad.service
 %{_udevrulesdir}/99-asus-numpad.rules
-%{_mandir}/man1/asus-numpad.1
+# Fedora/openSUSE 的 brp-compress 会把 man page 压成 .1.gz，
+# %files 里写死 .1 会在「Processing files」阶段报 File not found，必须吃通配。
+%{_mandir}/man1/asus-numpad.1*
 %dir %{_datadir}/asus-numpad
 %dir %{_datadir}/asus-numpad/lang
 %{_datadir}/asus-numpad/lang/zh_CN.lang

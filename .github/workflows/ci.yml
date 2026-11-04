@@ -54,29 +54,39 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 发行版自带的 rustc 版本不可控（debian bookworm 只有 1.63，低于 MSRV 1.75），
+          # 出包这条线统一用 rustup 装 stable，与 release 走同一套环境。
           - distro: debian
             image: debian:bookworm
             setup: >-
               apt-get update &&
               apt-get install -y --no-install-recommends
-              cargo rustc dpkg-dev fakeroot ca-certificates
+              curl ca-certificates dpkg-dev fakeroot build-essential &&
+              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable &&
+              ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             target: deb
           - distro: ubuntu
             image: ubuntu:24.04
             setup: >-
               apt-get update &&
               apt-get install -y --no-install-recommends
-              cargo rustc dpkg-dev ca-certificates
+              curl ca-certificates dpkg-dev build-essential &&
+              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable &&
+              ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             target: deb
           - distro: fedora
             image: fedora:latest
             setup: >-
-              dnf install -y cargo rust rpm-build systemd-rpm-macros tar gzip
+              dnf install -y curl ca-certificates rpm-build systemd-rpm-macros tar gzip &&
+              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable &&
+              ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             target: rpm
           - distro: arch
             image: archlinux:latest
             setup: >-
-              pacman -Sy --noconfirm --needed base-devel rust cargo libarchive
+              pacman -Syu --noconfirm --needed base-devel curl libarchive &&
+              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable &&
+              ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             target: arch
     runs-on: ubuntu-latest
     container:

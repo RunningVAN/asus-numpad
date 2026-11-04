@@ -70,7 +70,10 @@ jobs:
   package:
     needs: test
     runs-on: ubuntu-latest
-    continue-on-error: true
+    # 这里刻意不写 job 级 continue-on-error：它会把 job 的 conclusion 改成 success，
+    # 下游 publish 的 needs.package.result == 'success' 就成了摆设，
+    # 「缺 arch 包也照样发版」这种事故会被直接放行。
+    # matrix 之间已用 fail-fast: false 保证互不打断，不需要额外容错。
     strategy:
       fail-fast: false
       matrix:
@@ -110,18 +113,22 @@ jobs:
             image: archlinux:latest
             deps: |
               set -eux
-              pacman -Syu --noconfirm --needed base-devel rust sudo bsdtar
+              pacman -Syu --noconfirm --needed base-devel rust sudo bsdtar libarchive
               id builder >/dev/null 2>&1 || useradd -m builder
+              mkdir -p /etc/sudoers.d
               echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+              chmod 0440 /etc/sudoers.d/builder
               chown -R builder:builder /build
             build: su builder -c 'cd /build && bash ./packaging/arch/make-arch.sh --out dist'
           - name: alpine
             image: alpine:latest
             deps: |
               set -eux
-              apk add --no-cache alpine-sdk cargo rust bash tar gzip
+              apk add --no-cache alpine-sdk cargo rust bash tar gzip sudo
               id builder >/dev/null 2>&1 || adduser -D builder
+              mkdir -p /etc/sudoers.d
               echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+              chmod 0440 /etc/sudoers.d/builder
               su builder -c 'export HOME=/home/builder; abuild-keygen -a -i -n' || true
               chown -R builder:builder /build
             # abuild 不接受 root 运行，且必须有自己的签名密钥，都放在 builder 下
@@ -196,7 +203,8 @@ jobs:
         with:
           pattern: logs-*
           path: logs
-          merge-multiple: true
+      # 不能 merge-multiple：每个 matrix 的日志文件名都一样（01-copy.log…），
+      # 合并后只会剩下最后写进去的那份，复盘时就变成拿着 fedora 的日志查 arch 的错。
       - name: 汇总
         run: |
           set -euo pipefail
@@ -284,6 +292,28 @@ jobs:
           SH
           chmod +x "$HOME/shim/repo-add" "$HOME/shim/apk"
           echo "$HOME/shim" >> "$GITHUB_PATH"
+
+      - name: 校验产物齐全（缺任何一类就不发版）
+        run: |
+          set -euo pipefail
+          missing=0
+          check() { # $1 名字  $2 匹配式
+            if compgen -G "dist/$2" >/dev/null; then
+              echo "OK   $1: $(compgen -G "dist/$2" | wc -l | tr -d ' ') 个"
+            else
+              echo "MISS $1（dist/$2）"
+              missing=1
+            fi
+          }
+          check deb  '*.deb'
+          check rpm  '*.rpm'
+          check arch '*.pkg.tar.*'
+          check apk  '*.apk'
+          check tar  '*.tar.gz'
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::产物不全，不发版（先看 ci-logs 分支里的出包日志）"
+            exit 1
+          fi
 
       - name: 生成仓库
         run: ./tools/repo-gen.sh --dist dist --out repo --keep 3
