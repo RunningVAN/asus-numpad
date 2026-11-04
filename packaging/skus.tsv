@@ -1,0 +1,16 @@
+# 机型分包清单（构建用）。列之间用 TAB 分隔。
+#
+# 这份表只描述「打哪个包」，机型是否真的带 NumberPad 的结论以官方规格页核对结果为准，
+# 详见 output/ 下的适配报告。驱动内 src/sku.rs 的 SKUS 表是运行期权威，新加机型两处都要改，
+# build-skus.sh 会校验两边 id 集合一致，防止漂移。
+#
+# 合并原则：按触摸板 HID 模组族合并，而不是逐 SKU 出包。同一模组族 = 同一套键表，
+# 天然可共用一份二进制；合并进来的旧机型写在第 5 列（merged），出包时由本包 Obsoletes
+# 旧包名，dnf 升级时自动接管，不会因为共用 /usr/bin/asus-numpad 报文件冲突。
+#
+# id	display	models	dmi_note	merged
+g533	ASUS 枪神6（G533）	G533	15.6 英寸；模组 ASUE1403/ELAN1403 → 键表 GH2XLNDZ（同族未逐键实测）	
+g614	ASUS 枪神7 / 魔霸新锐 2023、枪神7 超竞版 16 英寸（G614 / G634）	G614,G634	模组 ASUE1416 / ASUF1416 → 键表 GH3XLNDZ（真机 G634JY 已验证），G614 与 G634 是同一块触摸板	g634
+g615	ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版、ProArt P16（G615 / G635 / H7606）	G615,G635,H7606	模组 ASCP1400 / ASCF1400（PixArt 093A 系列）→ 键表 GH4XLNDZ（同族，需逐键核对）	g635,h7606
+gx550	ASUS 冰刃双屏 15 / 16 英寸（GX550 / GX551 / GX650）	GX550,GX551,GX650	上游实测两代双屏同属键位族 gx551；GX550 模组 ASUE1408 → GVM_A（未验证）	gx650
+ux582	灵耀双屏（UX582 / UX482）	UX582,UX482	模组 ASUE1406 / ELAN1406 → 键表 NVM（未验证）	

@@ -1,0 +1,100 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # 逻辑层不依赖 Linux，单测在这里跑最快
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: 生成锁文件（若仓库里还没有）
+        run: |
+          if [ ! -f Cargo.lock ]; then cargo generate-lockfile; fi
+      - name: cargo test
+        run: cargo test --all-targets
+      - name: shellcheck 打包脚本
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck -x -S warning packaging/build.sh packaging/lib/common.sh \
+              packaging/deb/make-deb.sh packaging/rpm/make-rpm.sh packaging/arch/make-arch.sh \
+              packaging/arch/PKGBUILD packaging/arch/asus-numpad.install
+      - name: shellcheck 维护脚本（POSIX sh）
+        run: shellcheck -s sh -S warning packaging/deb/postinst packaging/deb/prerm packaging/deb/postrm
+      - name: cargo clippy
+        run: |
+          rustup component add clippy
+          cargo clippy --all-targets -- -D warnings
+      - name: cargo fmt
+        run: |
+          rustup component add rustfmt
+          cargo fmt --all -- --check
+
+  # 每个发行版在自己的容器里出包，这是最贴近用户的验证方式
+  package:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: debian
+            image: debian:bookworm
+            setup: >-
+              apt-get update &&
+              apt-get install -y --no-install-recommends
+              cargo rustc dpkg-dev fakeroot ca-certificates
+            target: deb
+          - distro: ubuntu
+            image: ubuntu:24.04
+            setup: >-
+              apt-get update &&
+              apt-get install -y --no-install-recommends
+              cargo rustc dpkg-dev ca-certificates
+            target: deb
+          - distro: fedora
+            image: fedora:latest
+            setup: >-
+              dnf install -y cargo rust rpm-build systemd-rpm-macros tar gzip
+            target: rpm
+          - distro: arch
+            image: archlinux:latest
+            setup: >-
+              pacman -Sy --noconfirm --needed base-devel rust cargo libarchive
+            target: arch
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: 安装构建依赖
+        run: ${{ matrix.setup }}
+      - name: 构建 ${{ matrix.target }}
+        run: |
+          chmod +x packaging/build.sh packaging/*/make-*.sh
+          ./packaging/build.sh --out dist ${{ matrix.target }}
+      - name: 校验产物
+        run: |
+          ls -l dist/
+          case "${{ matrix.target }}" in
+            deb)  dpkg-deb --info dist/*.deb && dpkg-deb --contents dist/*.deb ;;
+            rpm)  rpm -qip dist/*.rpm && rpm -qlp dist/*.rpm ;;
+            arch) bsdtar -tvf dist/*.pkg.tar.zst | head -50 ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asus-numpad-${{ matrix.distro }}
+          path: dist/*
+          if-no-files-found: error

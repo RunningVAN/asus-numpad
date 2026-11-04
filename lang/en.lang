@@ -1,0 +1,280 @@
+# asus-numpad English language file
+# Format: key = text (# starts a comment, \n is allowed inside a value)
+# Missing keys fall back to the built-in English text; copy this file to ~/.config/asus-numpad/lang/ to override (no root needed).
+
+# ---- 启动横幅与免责声明 ----
+app.banner = ASUS touchpad numpad v{version} (Linux userspace, aligned with official AlgoParameters)
+app.notice = Note: parameters are aligned with the official INF one by one; the backlight channel is validated on real hardware (G634JY / Fedora 44, see README "Real-hardware verification"); numeric semantics conflicts are documented in README "Known differences".
+
+# ---- 命令行总览 ----
+cli.about = ASUS touchpad numpad driver (Linux, aligned with official AlgoParameters)
+cli.config.help = Path to the config file
+cli.device.help = Touchpad event device; auto-detected by default (ELAN 04F3 / PixArt 093A, layout picked from the HID module)
+cli.keyboard.help = Keyboard event device (reads the NumLock LED)
+cli.led.help = Backlight channel: hidraw / i2c / none
+cli.i2c_bus.help = i2c bus number
+cli.i2c_addr.help = i2c address (0x38 or 56)
+cli.hidraw.help = hidraw node (e.g. /dev/hidraw3)
+cli.i2c_transfer.help = i2c write tool name
+cli.key_mode.help = Key style: keypad / digits
+cli.layout.help = Layout code (only GH3XLNDZ has wireframe data so far)
+cli.numlock.help = NumLock linkage: sync / toggle / off
+cli.mixed_mode.help = Mixed mode: auto / on / off
+cli.pressure_min.help = Minimum pressure in numpad mode (0 = no filtering)
+cli.no_follow_brightness.help = Disable "numpad brightness follows keyboard backlight" and fall back to fixed 0x01
+cli.grab.help = Grab the touchpad (default)
+cli.no_grab.help = Do not grab the touchpad (numpad clicks leak to the desktop)
+cli.dump_config.help = Print the default config and exit
+cli.verbose.help = Print per-frame debug logs (run mode)
+cli.lang.help = UI language: zh-CN / zh-TW / en / auto (default auto = follow system)
+
+# ---- 子命令说明 ----
+cli.cmd.run = Take over the touchpad (default action)
+cli.cmd.check = Self-check: print official parameters, geometry conversion, key map, and run offline cases
+cli.cmd.dump = Print raw touchpad events (troubleshooting, no key output)
+cli.cmd.bright = Brightness: three manual steps / follow keyboard backlight
+cli.cmd.bright.long = e.g. `bright 1|2|3` (0 = off), `bright up|down|cycle`, `bright follow on|off`, `bright status`
+cli.cmd.bright.value = Step 0/1/2/3, or up / down / cycle / next / follow / status
+cli.cmd.bright.mode = Value for `follow`: on / off
+cli.cmd.led = Send a raw backlight command byte (bypasses every state machine; for diagnosis)
+cli.cmd.led.long = e.g. `led on` (0x01 light up), `led off` (0x00 dark), `led 0x41`..`led 0x48` (levels 1..8), `led 65` (decimal alias). Separates "the driver never sent it" from "the hardware rejects this value"
+cli.cmd.led.value = on / off / any hex level (e.g. 0x41)
+led.cmd.usage = Usage: asus-numpad led on|off|0x41 (0x01 = on, 0x00 = off, 0x41..0x48 = levels 1..8)
+led.cmd.bad_value = Unrecognized value: {v} (use on / off / 0x41 / 65)
+cli.cmd.lang = Language: show / switch the UI language (简体中文, 繁體中文, English)
+cli.cmd.lang.long = e.g. `lang` (show current language and source), `lang zh-TW`, `lang en`, `lang auto` (follow system)
+cli.cmd.lang.code = Language code: zh-CN / zh-TW / en / auto
+
+# ---- 命令行参数取值无效时的提示 ----
+note.invalid_key_mode = --key-mode={v} is invalid, ignored
+note.invalid_numlock = --numlock={v} is invalid, ignored
+note.invalid_mixed_mode = --mixed-mode={v} is invalid, ignored
+note.invalid_i2c_addr = --i2c-addr={v} cannot be parsed, ignored
+note.invalid_language = language={v} is not recognised, falling back to auto
+note.manual_step_clamped = manual_brightness_step={step} is outside 0..={max}, clamped to {max}
+note.levels_dropped = {n} entr(y/ies) in brightness_levels are outside 0x{lo}..=0x{hi} and were dropped
+note.numlock_zone = numlock_zone={v} is no longer supported, treating it as a whole cell
+note.read_failed = Failed to read {path}, using defaults: {err}
+note.config_migrated = Migrated legacy config {from} to {to} (old file kept, safe to delete)
+
+# ---- 配置摘要与官方参数 ----
+cfg.summary = layout={layout} key_mode={mode} hold {frames} frames={ms}ms idle {idle}s mixed={mixed} numlock={numlock}
+param.frame_model = Frame model
+param.cont_sendkey = {frames} frames = {ms} ms
+param.numlock = {frames} frames = {ms} ms (generic)
+param.numlock_gh3 = {frames} frames = {ms} ms (this model)
+param.led_values = off 0x{off}; on: follows keyboard backlight 0x41..0x48, falls back to 0x{on} when unreadable (hidraw FEATURE 0x0d)
+param.i2c_unlock = 0x{unlock} (i2c channel only; brightness steps 0x41..0x48)
+param.i2c_unlock_name = i2c unlock word
+param.led_values_name = LED values
+param.key_count = Virtual keyboard key count
+
+# ---- 自检输出 ----
+check.notes_title = Config notes:
+check.summary = Config summary: {summary}
+check.official_title = Official AlgoParameters (raw INF values):
+check.device.probed = Device: touchpad detected, using real resolution
+check.device.fallback = Device: no touchpad detected ({err}), estimating from configured size {w}x{h} mm
+check.device.nonlinux = Device: not on Linux, estimating from configured size {w}x{h} mm
+check.geometry_title = Geometry conversion (official unit {unit} µm):
+check.geometry_usable =   usable area x[{x0},{x1}] y[{y0},{y1}]
+check.keygrid_title = Key map ({cols} cols x {rows} rows, key_mode={mode}):
+check.keygrid_row = row {r}
+check.keygrid_col = col {c}
+check.keygrid_numlock = NumLock icon
+check.cells_title = Cell centres and hit keys:
+check.cell_line =   ({r},{c}) centre=({cx},{cy}) → {key}
+check.behavior_title = Behaviour switches:
+check.b_numlock =   NumLock linkage   {mode} (hold {frames} frames = {ms} ms)
+check.b_mixed =   Mixed mode        {mode} (GESTURE_00 support bit = 1)
+check.b_calc =   Calculator hold   {state} ({frames} frames = {ms} ms)
+check.b_grab =   Grab touchpad     {state}
+check.b_grab_yes = yes
+check.b_grab_no = no (clicks leak through)
+check.b_idle =   Idle blackout     {sec}s (keeps running, lights up on touch)
+check.b_led =   Backlight channel {kind} ({where})
+check.b_bright =   Backlight         {text}
+check.b_bright_cmd =   Dim command       asus-numpad bright 1|2|3 (0=off); asus-numpad bright follow on|off
+check.lang_line =   UI language       {name} ({code})
+check.lang_source =   Language source   {source}
+check.lang_file =   Language file     {path}
+check.tests = Offline cases: see `cargo test` (runs on Windows / Linux, no hardware needed)
+check.conclusion = Conclusion: config and geometry are self-consistent; real-hardware behaviour still needs a device check.
+common.enabled = enabled
+common.disabled = disabled
+common.auto_detect = auto-detect
+
+# ---- 亮度状态 ----
+bright.follow_switch = Follow keyboard backlight: {state}
+bright.follow_on = on (numpad brightness tracks the keyboard backlight)
+bright.follow_off = off (uses the manual fixed step)
+bright.status_dir = Keyboard backlight dir: {dir} (polling {ms} ms)
+bright.status_step = Manual fixed step: {step} (0=off, 1=dim, 2=medium, 3=bright)
+bright.status_map = Step mapping: 0→0x{off} (off); {table}
+bright.status_effective = Effective LED value: {text}
+bright.measured = Measured keyboard backlight: {kbd}/{max} → numpad 0x{cur}
+bright.measure_failed = Measured keyboard backlight: cannot read {dir} (not an ASUS model / asus-wmi not loaded)
+bright.report.follow = Follows keyboard backlight {kbd}/{max} → 0x{level} ({n} steps, {ms} ms polling, {dir})
+bright.report.follow_nodir = Follows keyboard backlight (cannot read {dir}, falling back to 0x{level})
+bright.report.static = Does not follow the keyboard backlight, fixed step {step} → 0x{level} (adjust with `bright 1|2|3`, re-enable with `bright follow on`)
+bright.report.no_levels = Cannot read backlight node ({dir}), numpad falls back to 0x{level}
+
+# ---- 亮度命令 ----
+bright.usage = Usage: asus-numpad bright 0|1|2|3     fixed step (0=off, 1=dim, 2=medium, 3=bright)\n       asus-numpad bright up|down|cycle  cycle through the three steps\n       asus-numpad bright follow on|off  follow the keyboard backlight or not\n       asus-numpad bright status         show the current state
+bright.follow_usage = Usage: asus-numpad bright follow on|off
+bright.err_unmappable = Step {step} cannot be mapped to a brightness byte (check the brightness_levels config)
+bright.sent = Sent brightness 0x{level} (channel {kind})
+bright.send_failed = Failed to send 0x{level}: channel not usable (check the --hidraw node and whether the udev uaccess rule matches it)
+bright.nonlinux = Not on Linux, no report is sent (showing conversion result only).
+bright.wrote_step = Wrote {path}: manual_brightness_step = {step}, follow_keyboard_brightness = false (backup {backup})
+bright.wrote_follow = Wrote {path}: follow_keyboard_brightness = {on} (backup {backup})
+bright.effect_off = Result: numpad is off (use bright 1|2|3 to light it again).
+bright.effect_fixed = Result: numpad fixed at 0x{level} (no longer follows the keyboard backlight).
+bright.effect_follow_on = Result: numpad brightness follows the keyboard backlight again (synced on every change).
+bright.effect_follow_off = Result: numpad uses fixed step {step} (0x{level}); keyboard backlight changes no longer affect it.
+bright.switch = Switching step: {from} → {to}
+bright.switch_up = Switching step: {from} → {to} (stays unchanged at the highest step)
+bright.switch_down = Switching step: {from} → {to} (lowest step is 1, use bright 0 to turn off)
+
+# ---- 写配置与服务重启 ----
+persist.bad_json = {path} is not valid JSON, aborted (nothing was changed)
+persist.mkdir_failed = Cannot create directory {dir}
+persist.backup_failed = Failed to back up {path}, aborted
+persist.write_failed = Failed to write {path} (check owner/permissions of the file and its directory)
+svc.not_running = Note: the asus-numpad service is not running; the new settings take effect on next start.
+svc.restarted = Restarted the asus-numpad service; new settings are active now.
+svc.restart_failed = Failed to restart the service automatically; run: systemctl --user restart asus-numpad
+
+# ---- 语言命令 ----
+lang.current = Current language: {name} ({code}), source: {source}
+lang.source.env = ASUS_NUMPAD_LANG environment variable
+lang.source.cli = command line --lang
+lang.source.config = config file language
+lang.source.locale = system locale
+lang.source.default = built-in default (English)
+lang.available = Available languages: {list}
+lang.dirs = Language file dirs: {dirs}
+lang.file = Language file: {path}
+lang.file_builtin = Language file: using text built into the binary (no external .lang found)
+lang.wrote = Wrote {path}: language = {value} (backup {backup})
+lang.usage = Usage: asus-numpad lang              show the current language and its source\n       asus-numpad lang zh-CN       Simplified Chinese\n       asus-numpad lang zh-TW       Traditional Chinese\n       asus-numpad lang en          English\n       asus-numpad lang auto        follow the system locale\nTemporary override (config untouched): asus-numpad --lang en check, or ASUS_NUMPAD_LANG=en asus-numpad check
+lang.bad_code = Unrecognised language: {v} (available: zh-CN / zh-TW / en / auto)
+lang.restart_hint = Takes effect the next time asus-numpad runs (this output keeps the current language).
+lang.effect_auto = Language will follow the system locale from now on (currently resolved to {name}).
+
+# ---- dump 与 run 模式 ----
+dump.mode = dump mode: prints raw touchpad events, no keys are emitted. Press Ctrl+C to quit.
+dump.nonlinux = evdev is unavailable on this platform; cannot dump. Run it on the target Linux machine.
+dump.header = Reading {path} ({name}), Ctrl-C to stop
+run.brightness = Backlight: {text}
+run.nonlinux = evdev / uinput are unavailable; run only works on Linux.
+run.nonlinux_hint = Use `asus-numpad check` to inspect parameters and geometry conversion.
+run.device =   device: {path} ({name})
+run.service_stop = Exit signal received, releasing the touchpad...
+
+# ---- 设备探测与底层日志 ----
+dev.open_failed = Failed to open {path}
+dev.no_touchpad = No touchpad device found. Scanned: {seen}\nSpecify one with --device /dev/input/eventX
+dev.no_permission = (no access to /dev/input)
+dev.no_abs_x = no ABS_MT_POSITION_X
+dev.no_abs_y = no ABS_MT_POSITION_Y
+dev.read_abs_x_failed = Failed to read the ABS_MT_POSITION_X range
+dev.read_abs_y_failed = Failed to read the ABS_MT_POSITION_Y range
+dev.warn.grab = [warn] EVIOCGRAB failed: {err}
+dev.warn.uinput = [warn] Cannot create the virtual touchpad ({err}); mixed mode degrades to pure numpad
+dev.report.device = device: {path} ({name})
+dev.report.vid_pid = vendor:product = {vid}:{pid}
+dev.report.touch_axes = touch axes: MT_X={x} MT_Y={y} TRACKING_ID={tid} PRESSURE={p}
+dev.report.keyboard_led = keyboard LED channel: {state}
+dev.report.keyboard_ok = available
+dev.report.keyboard_ng = unavailable (NumLock linkage degrades)
+dev.report.backlight = backlight: {kind}
+led.warn.open = [warn] Failed to open {path}: {err}
+led.warn.feature = [warn] Writing FEATURE report 0x{rid} to {path} (level 0x{level}) failed: {err}
+led.warn.tool = [warn] {tool} failed to write 0x{value}: {err}
+led.warn.exec = [warn] Cannot execute {tool}: {err}
+led.warn.no_feature = [warn] {dev} is {vid}:{pid} but has no FEATURE report 0x{rid}; trying it anyway
+led.warn.fallback_asus = [warn] No backlight node for {vid}:{pid}, falling back to the ASUS node; it may not light up
+led.warn.bad_kind = [warn] --led {v} is invalid, using auto
+led.none.explicit = explicitly disabled
+led.none.no_hidraw = no ASUS hidraw node found
+led.none.no_i2c = no i2c slave 0x38 found
+led.none.any = neither hidraw nor i2c is available, backlight unusable
+bright.warn.no_kbd_dir = [warn] Cannot read {dir}; numpad brightness falls back to 0x{level} (use --no-follow-brightness to disable following explicitly)
+
+# ---- 引擎状态日志 ----
+[warn] Failed to grab the touchpad; numpad clicks will leak to the desktop. If another instance is already running (the user service grabs the device on boot), stop it first with `systemctl --user stop asus-numpad`; two processes always contend for the device (EBUSY).
+engine.state.lit = [state] backlight on ({reason})
+engine.state.dark = [state] backlight off ({reason})
+engine.state.enter = [state] numpad on
+engine.state.exit = [state] numpad off
+engine.state.calc = [state] launching calculator
+engine.reason.enable = top-up while enabled
+engine.reason.enter = numpad turned on
+engine.reason.exit = numpad turned off
+engine.reason.idle = idle {sec}s
+engine.reason.touch = touch wake
+engine.reason.numlock_on = NumLock on
+engine.reason.numlock_off = NumLock off
+engine.bright.line = [brightness] keyboard backlight {kbd} → numpad 0x{level}
+engine.geo.range = touchpad coordinate range x[{x0},{x1}] y[{y0},{y1}]
+engine.geo.unit = 1 unit = {ux} µm (X) / {uy} µm (Y)
+engine.geo.official = Official GH3XLNDZ conversion: {text}
+engine.geo.pressure = pressure axis: {state} | pressure_numpad_min={min}
+engine.geo.pressure_yes = supported
+engine.geo.pressure_no = unsupported (pressure steps bypassed)
+cfg.err.mixed_mode = invalid mixed_mode: {v}
+cfg.err.brightness_levels = brightness_levels[{idx}] is not a value in 0..255: {item} (use 65 or "0x41")
+common.list_sep = ,\s
+
+# ---- Layouts (v8: cross-model support) ----
+cli.allow_unverified.help = Allow keys from layouts not yet verified on real hardware (blocked by default to avoid wrong keys)
+cli.allow_sku_mismatch.help = Also start when the machine model does not match (blocked by default to avoid wrong-model packages)
+cli.cmd.layout = Layout: list official layouts / auto-detect by HID hardware ID / pin a layout
+cli.cmd.layout.long = Without arguments it lists every official layout with its support level; `layout auto` restores auto-detection; `layout GH3XLNDZ` pins a layout; `layout --ids` also prints the HID hardware ID table
+cli.cmd.layout.name = Layout name (GH3XLNDZ / GH2XLNDZ / GH4XLNDZ / auto)
+cli.cmd.layout.ids = Also list the touchpad HID hardware ID -> layout table
+layout.current = Layout: configured {layout}, effective {resolved} ({support})
+layout.list_title = Layouts recorded in the official AsusNUMPADFilter.inf (* verified / ~ family unverified / - different structure):
+layout.legend = * verified: tested on real hardware, safe to use; ~ family: all 15 parameters present and same 5x4 family, not verified, needs --allow-unverified; - unsupported: key table differs, cannot be reused
+layout.ids_title = Touchpad HID hardware ID -> layout (models sharing an ID are interchangeable):
+layout.usage = Usage: asus-numpad layout                 show current layout and the table
+      asus-numpad layout --ids           also print the HID hardware ID table
+      asus-numpad layout auto            auto-detect from the touchpad HID ID (recommended)
+      asus-numpad layout GH3XLNDZ        pin a layout
+layout.wrote = Wrote {path}: layout_name = {value} (backup {backup})
+layout.effect_auto = Next start picks the layout from the touchpad HID hardware ID, falling back to GH3XLNDZ
+layout.unverified_warn = Note: layout {layout} is {support}; its key table has not been verified on real hardware
+layout.bad_name = Unknown layout name: {v}
+note.layout_unknown = layout_name={v} is not in the official layout table, using auto
+err.layout_unverified = This touchpad maps to layout {layout} ({support}), which has not been verified on real hardware; start is stopped to avoid wrong keys. Add --allow-unverified or set allow_unverified_layout=true once confirmed\nHint: {hint}
+err.layout_unverified.hint = To allow it: asus-numpad --allow-unverified run, or set "allow_unverified_layout": true in ~/.config/asus-numpad/asus-numpad.json
+err.layout_unsupported.hint = This layout's key table differs from GH3XLNDZ and would produce wrong keys; please report the `asus-numpad check` output so the key table can be added
+dev.report.layout = Layout: {layout} ({support}, source {source}, HID {hid})
+
+# 跨机型背光自检 / cross-model backlight self-check
+common.yes = yes
+common.no = no
+check.led_probe_title = Backlight candidate nodes (best first):
+check.led_probe_line =   {dev}  {vid}:{pid}  FEATURE0x0d={feature}  rank={rank}  {state}
+check.led_probe_hint = ^ "denied" above: hidraw cannot be opened, so backlight and self-check will fail. Check three things in order: (1) rule installed: `rpm -ql asus-numpad-* | grep 99-asus`; (2) rule applied: `getfacl /dev/$(ls /sys/class/hidraw | head -1)` should list an ACL entry `user:<you>:rw-`; if not, run `sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw --action=change`; (3) session inside a seat: `loginctl show-session $XDG_SESSION_ID -p Seat -p Active` — no Seat or Active=no (SSH, linger without session, tty login) means uaccess never applies, so fall back to the input group: `sudo usermod -aG input $USER`, log in again and confirm with `id`.
+check.led_probe_unknown = read-failed
+check.led_probe_noperm = denied
+check.led_probe_open_failed = [warn] cannot open {dev} (permission denied); cannot tell whether it carries FEATURE report 0x{rid}. This is a udev authorization problem, not missing hardware. Verify the rule is installed (`rpm -ql asus-numpad-* | grep 99-asus`), then `sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw --action=change`. If it still fails the current session is not inside a seat (SSH / linger / tty) and uaccess does not apply: fall back to `sudo usermod -aG input $USER` and log in again.
+check.led_probe_selected = [driver picks this]
+check.led_probe_idle = [alternative]
+check.led_probe_skip = [skip: wireless receiver]
+check.led_probe_i2c = Backlight i2c: bus={bus} addr=0x{addr}
+check.led_probe_i2c_none = Backlight i2c: no device at 0x38/0x15
+
+# ---- 机型（SKU）分包 ----
+sku.pack = This package is built for: {sku} (package {pkg})
+sku.note = Model note: {note}
+sku.dmi = Local DMI product name: {dmi}
+sku.dmi_unknown = Local DMI product name: unreadable (not Linux, or /sys/class/dmi/id is not readable)
+sku.verdict = Model check: {verdict}
+sku.verdict.match = match, continuing
+sku.verdict.mismatch = mismatch — this machine is {dmi}, wrong package
+sku.verdict.unknown = cannot tell, allowing run (unreadable DMI does not mean wrong model)
+sku.verdict.not_enforced = not enforced (the universal package skips the model check)
+err.sku_mismatch = This package only serves "{sku}" and does not match this machine, so startup was stopped to avoid a wrong-model install.\nInstall the matching package {pkg} instead; add --allow-sku-mismatch to force a run.
