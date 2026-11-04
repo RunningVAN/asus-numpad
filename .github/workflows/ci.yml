@@ -81,19 +81,16 @@ jobs:
           - distro: fedora
             image: fedora:latest
             setup: >-
-              dnf install -y curl ca-certificates git rpm-build systemd-rpm-macros tar gzip &&
+              dnf install -y curl ca-certificates git gcc gcc-c++ make rpm-build systemd-rpm-macros tar gzip &&
               curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable &&
               ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             target: rpm
-          # makepkg 明确拒绝以 root 身份运行，所以另建 builder 用户，并把 rust
-          # 装到 /usr/local/{cargo,rustup}（rust 官方镜像的做法），两个用户都能用
+          # arch 直接吃发行版自带的 rust 包：makepkg 要以 builder 身份跑，
+          # 而 rustup 的 toolchain 是按 HOME 定位的，跨用户必踩「no default toolchain」
           - distro: arch
             image: archlinux:latest
             setup: >-
-              pacman -Sy --noconfirm --needed base-devel curl git libarchive &&
-              export CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup &&
-              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path &&
-              ln -sf /usr/local/cargo/bin/* /usr/local/bin/
+              pacman -Sy --noconfirm --needed base-devel rust curl git libarchive
             target: arch
     runs-on: ubuntu-latest
     container:
@@ -112,7 +109,6 @@ jobs:
           mkdir -p /etc/sudoers.d
           printf 'builder ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/builder
           chmod 0440 /etc/sudoers.d/builder
-          chmod -R a+rwX /usr/local/cargo /usr/local/rustup
           chown -R builder:builder "$GITHUB_WORKSPACE"
       - name: 构建 ${{ matrix.target }}
         run: |
@@ -149,8 +145,47 @@ jobs:
             rpm)  rpm -qip dist/*.rpm && rpm -qlp dist/*.rpm ;;
             arch) bsdtar -tvf dist/*.pkg.tar.zst | head -50 ;;
           esac
+      # 容器里的 git push 在没装 git 的镜像上会失败，artifact 这条路不依赖 git
+      - name: 保存构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.distro }}
+          path: build.log
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: asus-numpad-${{ matrix.distro }}
           path: dist/*
           if-no-files-found: error
+
+  # 统一把各容器的构建日志推到 ci-logs 分支：Actions 日志在没有 token 时读不到，
+  # 这是事后复盘唯一可靠的通道
+  diagnose:
+    needs: [package]
+    if: always()
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: logs-*
+          path: logs
+      - name: 推到 ci-logs 分支
+        run: |
+          set -euo pipefail
+          mkdir -p ci-logs
+          cp -a logs/. ci-logs/ 2>/dev/null || true
+          find ci-logs -type f | sort
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan ci-logs-tmp
+          git add -A ci-logs
+          if git commit -m "ci: 出包日志 ${{ github.run_id }}"; then
+            git push -f origin HEAD:ci-logs
+          else
+            echo "没有日志可推"
+          fi

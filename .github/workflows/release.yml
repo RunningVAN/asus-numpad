@@ -101,13 +101,13 @@ jobs:
             image: fedora:latest
             deps: |
               set -eux
-              dnf install -y cargo rust rpm-build systemd-rpm-macros tar gzip
+              dnf install -y cargo rust gcc gcc-c++ make rpm-build systemd-rpm-macros tar gzip
             build: bash ./packaging/rpm/make-rpm.sh --out dist
           - name: rpm-opensuse
             image: opensuse/tumbleweed:latest
             deps: |
               set -eux
-              zypper --non-interactive install --no-recommends cargo rust rpm-build tar gzip
+              zypper --non-interactive install --no-recommends cargo rust gcc gcc-c++ make rpm-build tar gzip
             build: bash ./packaging/rpm/make-rpm.sh --out dist
           - name: arch
             image: archlinux:latest
