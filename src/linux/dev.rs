@@ -24,7 +24,11 @@ pub struct RawInputEvent {
 
 impl RawInputEvent {
     pub fn to_event(self) -> Event {
-        Event { etype: self.etype, code: self.code, value: self.value }
+        Event {
+            etype: self.etype,
+            code: self.code,
+            value: self.value,
+        }
     }
 }
 
@@ -97,7 +101,11 @@ pub fn eviocgbit(ev: u16, len: usize) -> u64 {
     ior(b'E' as u64, 0x20 + ev as u64, len as u64)
 }
 pub fn eviocgabs(code: u16) -> u64 {
-    ior(b'E' as u64, 0x40 + code as u64, std::mem::size_of::<AbsInfo>() as u64)
+    ior(
+        b'E' as u64,
+        0x40 + code as u64,
+        std::mem::size_of::<AbsInfo>() as u64,
+    )
 }
 
 pub const UI_SET_EVBIT: u64 = iow(b'U' as u64, 100, 4);
@@ -149,7 +157,8 @@ pub struct InputDevice {
 
 impl InputDevice {
     pub fn open(path: &str) -> io::Result<Self> {
-        let c = CString::new(path).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "bad path"))?;
+        let c = CString::new(path)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "bad path"))?;
         // O_NONBLOCK：主循环用 poll 阻塞，读时不能挂着
         let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDWR | libc::O_NONBLOCK) };
         if fd < 0 {
@@ -198,12 +207,18 @@ impl InputDevice {
     }
 
     pub fn supports(&self, etype: u16, code: u16) -> bool {
-        self.codes(etype).map(|c| c.contains(&code)).unwrap_or(false)
+        self.codes(etype)
+            .map(|c| c.contains(&code))
+            .unwrap_or(false)
     }
 
     pub fn abs_info(&self, code: u16) -> io::Result<AbsInfo> {
         let mut info = AbsInfo::default();
-        ioctl_ptr(self.fd, eviocgabs(code), &mut info as *mut AbsInfo as *mut u8)?;
+        ioctl_ptr(
+            self.fd,
+            eviocgabs(code),
+            &mut info as *mut AbsInfo as *mut u8,
+        )?;
         Ok(info)
     }
 
@@ -216,7 +231,9 @@ impl InputDevice {
     }
 
     pub fn has_event_type(&self, etype: u16) -> bool {
-        self.event_types().map(|t| t.contains(&etype)).unwrap_or(false)
+        self.event_types()
+            .map(|t| t.contains(&etype))
+            .unwrap_or(false)
     }
 
     /// 读 LED 位图，返回 NumLock 灯是否亮。
@@ -235,7 +252,8 @@ impl InputDevice {
         let sizes = std::mem::size_of::<RawInputEvent>();
         let mut buf = vec![0u8; sizes * 64];
         loop {
-            let n = unsafe { libc::read(self.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+            let n =
+                unsafe { libc::read(self.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
             if n < 0 {
                 let err = io::Error::last_os_error();
                 match err.kind() {
@@ -265,7 +283,11 @@ impl InputDevice {
 
     /// poll 等待可读，超时毫秒。
     pub fn wait_readable(&self, timeout_ms: i32) -> io::Result<bool> {
-        let mut pfd = libc::pollfd { fd: self.fd, events: libc::POLLIN, revents: 0 };
+        let mut pfd = libc::pollfd {
+            fd: self.fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
         let r = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
         if r < 0 {
             let err = io::Error::last_os_error();
@@ -351,7 +373,10 @@ impl VirtualDevice {
         if fd < 0 {
             return Err(io::Error::last_os_error());
         }
-        Ok(Self { fd, name: name.to_string() })
+        Ok(Self {
+            fd,
+            name: name.to_string(),
+        })
     }
 
     fn enable_event_type(&self, etype: u16) -> io::Result<()> {
@@ -371,23 +396,42 @@ impl VirtualDevice {
 
     fn finish(&self) -> io::Result<()> {
         let mut setup = UInputSetup {
-            id: DeviceId { bustype: 0x18, vendor: 0x0b05, product: 0x0000, version: 1 },
+            id: DeviceId {
+                bustype: 0x18,
+                vendor: 0x0b05,
+                product: 0x0000,
+                version: 1,
+            },
             name: [0u8; 80],
             ff_effects_max: 0,
         };
         let bytes = self.name.as_bytes();
         let n = bytes.len().min(79);
         setup.name[..n].copy_from_slice(&bytes[..n]);
-        ioctl_ptr(self.fd, UI_DEV_SETUP, &mut setup as *mut UInputSetup as *mut u8)?;
+        ioctl_ptr(
+            self.fd,
+            UI_DEV_SETUP,
+            &mut setup as *mut UInputSetup as *mut u8,
+        )?;
         ioctl_ptr(self.fd, UI_DEV_CREATE, std::ptr::null_mut())
     }
 
     pub fn write_event(&self, ev: &Event) -> io::Result<()> {
-        let raw = RawInputEvent { sec: 0, usec: 0, etype: ev.etype, code: ev.code, value: ev.value };
+        let raw = RawInputEvent {
+            sec: 0,
+            usec: 0,
+            etype: ev.etype,
+            code: ev.code,
+            value: ev.value,
+        };
         let bytes = std::mem::size_of::<RawInputEvent>();
         // SAFETY: raw 是 repr(C) POD，长度与内核期望的一致
         let n = unsafe {
-            libc::write(self.fd, &raw as *const RawInputEvent as *const libc::c_void, bytes)
+            libc::write(
+                self.fd,
+                &raw as *const RawInputEvent as *const libc::c_void,
+                bytes,
+            )
         };
         if n < 0 {
             return Err(io::Error::last_os_error());
@@ -396,7 +440,11 @@ impl VirtualDevice {
     }
 
     pub fn syn(&self) -> io::Result<()> {
-        self.write_event(&Event { etype: kc::EV_SYN, code: 0, value: 0 })
+        self.write_event(&Event {
+            etype: kc::EV_SYN,
+            code: 0,
+            value: 0,
+        })
     }
 }
 
@@ -419,7 +467,11 @@ struct UInputAbsSetup {
 const UI_ABS_SETUP: u64 = iow(b'U' as u64, 4, std::mem::size_of::<UInputAbsSetup>() as u64);
 
 fn ui_abs_setup(fd: RawFd, code: u16, info: &AbsInfo) -> io::Result<()> {
-    let mut arg = UInputAbsSetup { code, pad: 0, absinfo: *info };
+    let mut arg = UInputAbsSetup {
+        code,
+        pad: 0,
+        absinfo: *info,
+    };
     ioctl_ptr(fd, UI_ABS_SETUP, &mut arg as *mut UInputAbsSetup as *mut u8)
 }
 
@@ -430,7 +482,9 @@ fn ui_abs_setup(fd: RawFd, code: u16, info: &AbsInfo) -> io::Result<()> {
 /// 枚举 /dev/input/event*。
 pub fn list_event_devices() -> Vec<String> {
     let mut out = Vec::new();
-    let Ok(rd) = fs::read_dir("/dev/input") else { return out };
+    let Ok(rd) = fs::read_dir("/dev/input") else {
+        return out;
+    };
     for entry in rd.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with("event") {

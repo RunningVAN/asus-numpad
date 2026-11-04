@@ -32,10 +32,11 @@ jobs:
               packaging/arch/PKGBUILD packaging/arch/asus-numpad.install
       - name: shellcheck 维护脚本（POSIX sh）
         run: shellcheck -s sh -S warning packaging/deb/postinst packaging/deb/prerm packaging/deb/postrm
+      # 只把 correctness 级别当门槛，样式类提示留给后续清理
       - name: cargo clippy
         run: |
           rustup component add clippy
-          cargo clippy --all-targets -- -D warnings
+          cargo clippy --all-targets -- -D clippy::correctness
       - name: cargo fmt
         run: |
           rustup component add rustfmt

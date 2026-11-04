@@ -112,8 +112,7 @@ pub fn build_package_name() -> &'static str {
 
 /// 按 id 查机型（大小写不敏感）。
 pub fn by_id(id: &str) -> Option<&'static Sku> {
-    SKUS.iter()
-        .find(|s| s.id.eq_ignore_ascii_case(id.trim()))
+    SKUS.iter().find(|s| s.id.eq_ignore_ascii_case(id.trim()))
 }
 
 /// 机型校验结论。
@@ -132,7 +131,10 @@ pub enum DmiVerdict {
 impl DmiVerdict {
     /// 是否允许继续启动。
     pub fn allows_run(&self) -> bool {
-        matches!(self, DmiVerdict::Match | DmiVerdict::Unknown | DmiVerdict::NotEnforced)
+        matches!(
+            self,
+            DmiVerdict::Match | DmiVerdict::Unknown | DmiVerdict::NotEnforced
+        )
     }
 
     /// 供日志/自检输出的短标签。
@@ -155,7 +157,11 @@ pub fn verdict_for(sku: &Sku, dmi: Option<&str>) -> DmiVerdict {
         return DmiVerdict::Unknown;
     };
     let upper = dmi.to_ascii_uppercase();
-    if sku.models.iter().any(|m| upper.contains(&m.to_ascii_uppercase())) {
+    if sku
+        .models
+        .iter()
+        .any(|m| upper.contains(&m.to_ascii_uppercase()))
+    {
         DmiVerdict::Match
     } else {
         DmiVerdict::Mismatch(dmi.to_string())
@@ -203,7 +209,10 @@ mod tests {
         assert!(by_id("universal").is_some(), "必须保留 universal 兜底");
         assert!(by_id("G614").is_some(), "机型查询应忽略大小写");
         for merged in ["g634", "g635", "gx650", "h7606"] {
-            assert!(by_id(merged).is_none(), "{merged} 已并入同族包，不应再单独存在");
+            assert!(
+                by_id(merged).is_none(),
+                "{merged} 已并入同族包，不应再单独存在"
+            );
         }
         for s in SKUS {
             assert!(!s.display.is_empty(), "{} 缺少展示名", s.id);
@@ -239,7 +248,10 @@ mod tests {
     #[test]
     fn universal_pack_never_blocks() {
         let sku = by_id("universal").unwrap();
-        assert_eq!(verdict_for(sku, Some("Anything G999ZZ")), DmiVerdict::NotEnforced);
+        assert_eq!(
+            verdict_for(sku, Some("Anything G999ZZ")),
+            DmiVerdict::NotEnforced
+        );
         assert!(verdict_for(sku, Some("Anything G999ZZ")).allows_run());
     }
 
@@ -248,7 +260,11 @@ mod tests {
         let root = std::env::temp_dir().join("asus-numpad-dmi-selftest");
         let dir = root.join("class/dmi/id");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("product_name"), "ROG Strix SCAR 16 G634JY_G634JY\n").unwrap();
+        std::fs::write(
+            dir.join("product_name"),
+            "ROG Strix SCAR 16 G634JY_G634JY\n",
+        )
+        .unwrap();
 
         // 读到并去掉换行
         assert_eq!(
@@ -288,7 +304,10 @@ mod tests {
         );
         // 灵耀双屏（UX582 / UX482）
         let ux582 = by_id("ux582").unwrap();
-        for dmi in ["ASUS Zenbook Duo UX582LR_UX582LR", "ASUS Zenbook Duo UX482EG_UX482EG"] {
+        for dmi in [
+            "ASUS Zenbook Duo UX582LR_UX582LR",
+            "ASUS Zenbook Duo UX482EG_UX482EG",
+        ] {
             assert_eq!(verdict_for(ux582, Some(dmi)), DmiVerdict::Match, "{dmi}");
         }
         // ProArt P16（H7606）已并入 g615（同为 PixArt ASCP/ASCF 模组族）
@@ -302,7 +321,11 @@ mod tests {
         }
         // 跨包互不误放：冰刃双屏包不认枪神，枪神包不认冰刃
         assert!(!verdict_for(gx550, Some("ROG Strix SCAR 16 G634JY_G634JY")).allows_run());
-        assert!(!verdict_for(by_id("g614").unwrap(), Some("ROG Zephyrus Duo 16 GX650PZ_GX650PZ")).allows_run());
+        assert!(!verdict_for(
+            by_id("g614").unwrap(),
+            Some("ROG Zephyrus Duo 16 GX650PZ_GX650PZ")
+        )
+        .allows_run());
     }
 
     #[test]

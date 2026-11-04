@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
-# 按本机 DMI 型号挑对应的 asus-numpad 机型包并安装。
+# 按本机 DMI 型号挑对应的机型包并安装（只有装包要 sudo）。
 #
-#   sudo ./install-sku.sh                    # 自动识别机型，装同目录/下载目录里的包
-#   sudo ./install-sku.sh --dry-run          # 只说会装哪个，不动系统
-#   sudo ./install-sku.sh --from ~/rpm       # 指定包所在目录
+#   sudo ./install-sku.sh              # 自动识别机型，从同目录/下载目录找包
+#   sudo ./install-sku.sh --dry-run    # 只说会装哪个
+#   sudo ./install-sku.sh --from ~/rpm # 指定包目录
 #
-# 注意：只有「装包」这一步要 sudo。装完之后日常命令（check / run / bright / lang）
-# 一律以普通用户直接运行，配置写 ~/.config/asus-numpad/，服务是 systemd --user 实例。
-#
-# 判断依据：/sys/class/dmi/id/product_name（如 G634JY_G634JY）。18 英寸 Plus 机型
-# 官方是物理 Num-key，没有虚拟数字键盘，脚本会直接拒绝而不是硬装。
+# 判断依据：/sys/class/dmi/id/product_name。18 英寸 Plus 机型是物理数字键，直接拒绝。
 set -euo pipefail
 
 FROM_DIR=""

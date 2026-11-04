@@ -2,9 +2,8 @@
 # Format: key = text (# starts a comment, \n is allowed inside a value)
 # Missing keys fall back to the built-in English text; copy this file to ~/.config/asus-numpad/lang/ to override (no root needed).
 
-# ---- 启动横幅与免责声明 ----
+# ---- 启动横幅 ----
 app.banner = ASUS touchpad numpad v{version} (Linux userspace, aligned with official AlgoParameters)
-app.notice = Note: parameters are aligned with the official INF one by one; the backlight channel is validated on real hardware (G634JY / Fedora 44, see README "Real-hardware verification"); numeric semantics conflicts are documented in README "Known differences".
 
 # ---- 命令行总览 ----
 cli.about = ASUS touchpad numpad driver (Linux, aligned with official AlgoParameters)
@@ -37,7 +36,7 @@ cli.cmd.bright.long = e.g. `bright 1|2|3` (0 = off), `bright up|down|cycle`, `br
 cli.cmd.bright.value = Step 0/1/2/3, or up / down / cycle / next / follow / status
 cli.cmd.bright.mode = Value for `follow`: on / off
 cli.cmd.led = Send a raw backlight command byte (bypasses every state machine; for diagnosis)
-cli.cmd.led.long = e.g. `led on` (0x01 light up), `led off` (0x00 dark), `led 0x41`..`led 0x48` (levels 1..8), `led 65` (decimal alias). Separates "the driver never sent it" from "the hardware rejects this value"
+cli.cmd.led.long = e.g. led on | led off | led 0x41..0x48 (levels 1..8). Separates "never sent" from "hardware rejects".
 cli.cmd.led.value = on / off / any hex level (e.g. 0x41)
 led.cmd.usage = Usage: asus-numpad led on|off|0x41 (0x01 = on, 0x00 = off, 0x41..0x48 = levels 1..8)
 led.cmd.bad_value = Unrecognized value: {v} (use on / off / 0x41 / 65)
@@ -157,7 +156,7 @@ lang.dirs = Language file dirs: {dirs}
 lang.file = Language file: {path}
 lang.file_builtin = Language file: using text built into the binary (no external .lang found)
 lang.wrote = Wrote {path}: language = {value} (backup {backup})
-lang.usage = Usage: asus-numpad lang              show the current language and its source\n       asus-numpad lang zh-CN       Simplified Chinese\n       asus-numpad lang zh-TW       Traditional Chinese\n       asus-numpad lang en          English\n       asus-numpad lang auto        follow the system locale\nTemporary override (config untouched): asus-numpad --lang en check, or ASUS_NUMPAD_LANG=en asus-numpad check
+lang.usage = Usage: asus-numpad lang [zh-CN|zh-TW|en|auto]   show or switch UI language\nTemporary override: asus-numpad --lang en check
 lang.bad_code = Unrecognised language: {v} (available: zh-CN / zh-TW / en / auto)
 lang.restart_hint = Takes effect the next time asus-numpad runs (this output keeps the current language).
 lang.effect_auto = Language will follow the system locale from now on (currently resolved to {name}).
@@ -236,7 +235,7 @@ cli.cmd.layout.name = Layout name (GH3XLNDZ / GH2XLNDZ / GH4XLNDZ / auto)
 cli.cmd.layout.ids = Also list the touchpad HID hardware ID -> layout table
 layout.current = Layout: configured {layout}, effective {resolved} ({support})
 layout.list_title = Layouts recorded in the official AsusNUMPADFilter.inf (* verified / ~ family unverified / - different structure):
-layout.legend = * verified: tested on real hardware, safe to use; ~ family: all 15 parameters present and same 5x4 family, not verified, needs --allow-unverified; - unsupported: key table differs, cannot be reused
+layout.legend = * verified   ~ same family, unverified (needs --allow-unverified)   - unsupported
 layout.ids_title = Touchpad HID hardware ID -> layout (models sharing an ID are interchangeable):
 layout.usage = Usage: asus-numpad layout                 show current layout and the table
       asus-numpad layout --ids           also print the HID hardware ID table
@@ -247,7 +246,7 @@ layout.effect_auto = Next start picks the layout from the touchpad HID hardware 
 layout.unverified_warn = Note: layout {layout} is {support}; its key table has not been verified on real hardware
 layout.bad_name = Unknown layout name: {v}
 note.layout_unknown = layout_name={v} is not in the official layout table, using auto
-err.layout_unverified = This touchpad maps to layout {layout} ({support}), which has not been verified on real hardware; start is stopped to avoid wrong keys. Add --allow-unverified or set allow_unverified_layout=true once confirmed\nHint: {hint}
+err.layout_unverified = Layout {layout} ({support}) is not verified on real hardware; startup stopped to avoid wrong keys. Add --allow-unverified once confirmed.
 err.layout_unverified.hint = To allow it: asus-numpad --allow-unverified run, or set "allow_unverified_layout": true in ~/.config/asus-numpad/asus-numpad.json
 err.layout_unsupported.hint = This layout's key table differs from GH3XLNDZ and would produce wrong keys; please report the `asus-numpad check` output so the key table can be added
 dev.report.layout = Layout: {layout} ({support}, source {source}, HID {hid})
@@ -257,10 +256,10 @@ common.yes = yes
 common.no = no
 check.led_probe_title = Backlight candidate nodes (best first):
 check.led_probe_line =   {dev}  {vid}:{pid}  FEATURE0x0d={feature}  rank={rank}  {state}
-check.led_probe_hint = ^ "denied" above: hidraw cannot be opened, so backlight and self-check will fail. Check three things in order: (1) rule installed: `rpm -ql asus-numpad-* | grep 99-asus`; (2) rule applied: `getfacl /dev/$(ls /sys/class/hidraw | head -1)` should list an ACL entry `user:<you>:rw-`; if not, run `sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw --action=change`; (3) session inside a seat: `loginctl show-session $XDG_SESSION_ID -p Seat -p Active` — no Seat or Active=no (SSH, linger without session, tty login) means uaccess never applies, so fall back to the input group: `sudo usermod -aG input $USER`, log in again and confirm with `id`.
+check.led_probe_hint = ^ permission denied: verify the rule is installed (`rpm -ql asus-numpad-* | grep 99-asus`), then `sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw --action=change`. SSH/linger sessions never get uaccess; use `sudo usermod -aG input $USER` instead.
 check.led_probe_unknown = read-failed
 check.led_probe_noperm = denied
-check.led_probe_open_failed = [warn] cannot open {dev} (permission denied); cannot tell whether it carries FEATURE report 0x{rid}. This is a udev authorization problem, not missing hardware. Verify the rule is installed (`rpm -ql asus-numpad-* | grep 99-asus`), then `sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw --action=change`. If it still fails the current session is not inside a seat (SSH / linger / tty) and uaccess does not apply: fall back to `sudo usermod -aG input $USER` and log in again.
+check.led_probe_open_failed = [warn] cannot open {dev} (permission denied); cannot confirm FEATURE 0x{rid}. This is udev authorization, not missing hardware.
 check.led_probe_selected = [driver picks this]
 check.led_probe_idle = [alternative]
 check.led_probe_skip = [skip: wireless receiver]
@@ -277,4 +276,4 @@ sku.verdict.match = match, continuing
 sku.verdict.mismatch = mismatch — this machine is {dmi}, wrong package
 sku.verdict.unknown = cannot tell, allowing run (unreadable DMI does not mean wrong model)
 sku.verdict.not_enforced = not enforced (the universal package skips the model check)
-err.sku_mismatch = This package only serves "{sku}" and does not match this machine, so startup was stopped to avoid a wrong-model install.\nInstall the matching package {pkg} instead; add --allow-sku-mismatch to force a run.
+err.sku_mismatch = This package only serves "{sku}" and does not match this machine; startup stopped. Install {pkg} instead, or add --allow-sku-mismatch to force.

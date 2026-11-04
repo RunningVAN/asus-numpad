@@ -7,14 +7,14 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
-use clap::{Arg, ArgAction, ArgMatches, Command};
 use asus_numpad::config::{
     self, CalcMode, Config, MixedMode, NumLockMode, MANUAL_BRIGHTNESS_STEPS, VAL_OFF,
 };
 use asus_numpad::i18n::{self, Lang, LangSource};
 use asus_numpad::keycodes as kc;
 use asus_numpad::layout::{Geometry, KeyMode, COLS, KEY_GRID, ROWS, UM_PER_LAYOUT_UNIT};
-use asus_numpad::{banner, sku, verification_notice};
+use asus_numpad::{banner, sku};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 
 /// 本次生效语言的来源，供 `lang` 子命令交代清楚原因。
 static LANG_SOURCE: OnceLock<LangSource> = OnceLock::new();
@@ -458,7 +458,10 @@ fn parse_addr(s: &str) -> Option<u8> {
 fn render_keygrid(cfg: &Config) -> String {
     let mut out = String::new();
     for (r, row) in KEY_GRID.iter().enumerate() {
-        let mut line = format!("  {}: ", i18n::tf("check.keygrid_row", &[("r", &r.to_string())]));
+        let mut line = format!(
+            "  {}: ",
+            i18n::tf("check.keygrid_row", &[("r", &r.to_string())])
+        );
         for (c, cell) in row.iter().enumerate() {
             let text = match cell {
                 None => i18n::t("check.keygrid_numlock"),
@@ -481,13 +484,11 @@ fn fallback_geometry(cfg: &Config) -> Geometry {
     let height_um = cfg.touchpad_height_mm * 1000.0;
     let ux = 1000.0 / width_um;
     let uy = 1000.0 / height_um;
-    Geometry::new(0, 1000, 0, 1000, ux, uy, cfg.layout())
-        .with_layout_name(cfg.layout_entry().name)
+    Geometry::new(0, 1000, 0, 1000, ux, uy, cfg.layout()).with_layout_name(cfg.layout_entry().name)
 }
 
 fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     println!("{}", banner());
-    println!("{}", verification_notice());
     println!();
     println!("{}", sku_block());
     println!();
@@ -644,14 +645,19 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
             &[
                 (
                     "state",
-                    &i18n::t(if cfg.calc_gesture && cfg.calc_gesture_mode == CalcMode::Long {
-                        "common.enabled"
-                    } else {
-                        "common.disabled"
-                    }),
+                    &i18n::t(
+                        if cfg.calc_gesture && cfg.calc_gesture_mode == CalcMode::Long {
+                            "common.enabled"
+                        } else {
+                            "common.disabled"
+                        }
+                    ),
                 ),
                 ("frames", &cfg.numadv_trigger_frames.to_string()),
-                ("ms", &(cfg.numadv_trigger_frames * cfg.frame_ms).to_string()),
+                (
+                    "ms",
+                    &(cfg.numadv_trigger_frames * cfg.frame_ms).to_string()
+                ),
             ]
         )
     );
@@ -661,7 +667,11 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
             "check.b_grab",
             &[(
                 "state",
-                &i18n::t(if cfg.grab { "check.b_grab_yes" } else { "check.b_grab_no" }),
+                &i18n::t(if cfg.grab {
+                    "check.b_grab_yes"
+                } else {
+                    "check.b_grab_no"
+                }),
             )]
         )
     );
@@ -706,9 +716,7 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
                 let feature = match c.probe {
                     asus_numpad::linux::FeatureProbe::Has => i18n::t("common.yes"),
                     asus_numpad::linux::FeatureProbe::Missing => i18n::t("common.no"),
-                    asus_numpad::linux::FeatureProbe::NoAccess => {
-                        i18n::t("check.led_probe_noperm")
-                    }
+                    asus_numpad::linux::FeatureProbe::NoAccess => i18n::t("check.led_probe_noperm"),
                     asus_numpad::linux::FeatureProbe::Unknown => i18n::t("check.led_probe_unknown"),
                 };
                 println!(
@@ -760,10 +768,7 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     );
     println!(
         "{}",
-        i18n::tf(
-            "check.lang_source",
-            &[("source", &lang_source_text())]
-        )
+        i18n::tf("check.lang_source", &[("source", &lang_source_text())])
     );
     match i18n::current_source() {
         Some(p) => println!(
@@ -879,7 +884,10 @@ fn print_bright_status(cfg: &Config) {
         "{}",
         i18n::tf(
             "bright.status_map",
-            &[("off", &format!("{VAL_OFF:02x}")), ("table", &table.join(&i18n::t("common.list_sep")))]
+            &[
+                ("off", &format!("{VAL_OFF:02x}")),
+                ("table", &table.join(&i18n::t("common.list_sep")))
+            ]
         )
     );
     println!(
@@ -927,9 +935,8 @@ fn persist_config_keys(path: &Path, updates: &[(&str, serde_json::Value)]) -> Re
         // 配置文件不存在：以默认配置为底再写入差异项
         Err(_) => Config::default().to_json(),
     };
-    let mut value: serde_json::Value = serde_json::from_str(&base).with_context(|| {
-        i18n::tf("persist.bad_json", &[("path", &path.display().to_string())])
-    })?;
+    let mut value: serde_json::Value = serde_json::from_str(&base)
+        .with_context(|| i18n::tf("persist.bad_json", &[("path", &path.display().to_string())]))?;
     if !value.is_object() {
         value = serde_json::json!({});
     }
@@ -942,7 +949,10 @@ fn persist_config_keys(path: &Path, updates: &[(&str, serde_json::Value)]) -> Re
     if let Some(dir) = path.parent() {
         if !dir.as_os_str().is_empty() {
             std::fs::create_dir_all(dir).with_context(|| {
-                i18n::tf("persist.mkdir_failed", &[("dir", &dir.display().to_string())])
+                i18n::tf(
+                    "persist.mkdir_failed",
+                    &[("dir", &dir.display().to_string())],
+                )
             })?;
         }
     }
@@ -1027,7 +1037,10 @@ fn try_restart_service() {
 /// 落盘 + 立即下发 + 让服务按新档重跑（`bright 1|2|3`、`up|down|cycle` 共用）。
 fn apply_step(cfg: &Config, cfg_path: &Path, step: u8) -> Result<i32> {
     let Some(level) = cfg.level_for_step(step) else {
-        println!("{}", i18n::tf("bright.err_unmappable", &[("step", &step.to_string())]));
+        println!(
+            "{}",
+            i18n::tf("bright.err_unmappable", &[("step", &step.to_string())])
+        );
         return Ok(2);
     };
     let ok = apply_led_level(cfg, level);
@@ -1099,7 +1112,12 @@ fn cmd_led(cfg: &Config, value: Option<&str>) -> Result<i32> {
 }
 
 /// `bright`：手动三档调光 + 是否跟随键盘背光。
-fn cmd_bright(cfg: &Config, cfg_path: &Path, value: Option<&str>, mode: Option<&str>) -> Result<i32> {
+fn cmd_bright(
+    cfg: &Config,
+    cfg_path: &Path,
+    value: Option<&str>,
+    mode: Option<&str>,
+) -> Result<i32> {
     let value = value.map(|v| v.trim().to_ascii_lowercase());
     match value.as_deref() {
         None | Some("status") => {
@@ -1230,8 +1248,7 @@ fn cmd_lang(cfg_path: &Path, code: Option<&str>) -> Result<i32> {
     };
     let raw = raw.trim();
     if raw.eq_ignore_ascii_case("auto") {
-        let backup =
-            persist_config_keys(cfg_path, &[("language", serde_json::json!("auto"))])?;
+        let backup = persist_config_keys(cfg_path, &[("language", serde_json::json!("auto"))])?;
         println!();
         println!(
             "{}",
@@ -1257,10 +1274,8 @@ fn cmd_lang(cfg_path: &Path, code: Option<&str>) -> Result<i32> {
     }
     match Lang::parse(raw) {
         Some(lang) => {
-            let backup = persist_config_keys(
-                cfg_path,
-                &[("language", serde_json::json!(lang.code()))],
-            )?;
+            let backup =
+                persist_config_keys(cfg_path, &[("language", serde_json::json!(lang.code()))])?;
             println!();
             println!(
                 "{}",
@@ -1295,11 +1310,14 @@ fn cmd_layout(cfg: &Config, cfg_path: &Path, name: Option<&str>, ids: bool) -> R
 
     println!(
         "{}",
-        i18n::tf("layout.current", &[
-            ("layout", &cfg.layout_name),
-            ("resolved", cfg.layout_entry().name),
-            ("support", cfg.layout_entry().support.as_str()),
-        ])
+        i18n::tf(
+            "layout.current",
+            &[
+                ("layout", &cfg.layout_name),
+                ("resolved", cfg.layout_entry().name),
+                ("support", cfg.layout_entry().support.as_str()),
+            ]
+        )
     );
     println!();
     println!("{}", i18n::t("layout.list_title"));
@@ -1351,11 +1369,14 @@ fn cmd_layout(cfg: &Config, cfg_path: &Path, name: Option<&str>, ids: bool) -> R
         println!();
         println!(
             "{}",
-            i18n::tf("layout.wrote", &[
-                ("path", &cfg_path.display().to_string()),
-                ("value", "auto"),
-                ("backup", &backup.display().to_string()),
-            ])
+            i18n::tf(
+                "layout.wrote",
+                &[
+                    ("path", &cfg_path.display().to_string()),
+                    ("value", "auto"),
+                    ("backup", &backup.display().to_string()),
+                ]
+            )
         );
         println!("{}", i18n::t("layout.effect_auto"));
         try_restart_service();
@@ -1363,26 +1384,27 @@ fn cmd_layout(cfg: &Config, cfg_path: &Path, name: Option<&str>, ids: bool) -> R
     }
     match layout::by_name(raw) {
         Some(entry) => {
-            let backup = persist_config_keys(
-                cfg_path,
-                &[("layout_name", serde_json::json!(entry.name))],
-            )?;
+            let backup =
+                persist_config_keys(cfg_path, &[("layout_name", serde_json::json!(entry.name))])?;
             println!();
             println!(
                 "{}",
-                i18n::tf("layout.wrote", &[
-                    ("path", &cfg_path.display().to_string()),
-                    ("value", entry.name),
-                    ("backup", &backup.display().to_string()),
-                ])
+                i18n::tf(
+                    "layout.wrote",
+                    &[
+                        ("path", &cfg_path.display().to_string()),
+                        ("value", entry.name),
+                        ("backup", &backup.display().to_string()),
+                    ]
+                )
             );
             if entry.support.needs_confirm() {
                 println!(
                     "{}",
-                    i18n::tf("layout.unverified_warn", &[
-                        ("layout", entry.name),
-                        ("support", entry.support.as_str()),
-                    ])
+                    i18n::tf(
+                        "layout.unverified_warn",
+                        &[("layout", entry.name), ("support", entry.support.as_str()),]
+                    )
                 );
                 println!("{}", i18n::t("err.layout_unverified.hint"));
             }
@@ -1400,7 +1422,6 @@ fn cmd_layout(cfg: &Config, cfg_path: &Path, name: Option<&str>, ids: bool) -> R
 
 fn cmd_dump(cfg: &Config) -> Result<i32> {
     println!("{}", banner());
-    println!("{}", verification_notice());
     println!("{}", i18n::t("dump.mode"));
     println!("{}", cfg.summary());
 
@@ -1430,10 +1451,10 @@ fn sku_gate(allow_mismatch: bool) -> Option<i32> {
     println!();
     println!(
         "{}",
-        i18n::tf("err.sku_mismatch", &[
-            ("sku", pack.display),
-            ("pkg", sku::build_package_name()),
-        ])
+        i18n::tf(
+            "err.sku_mismatch",
+            &[("sku", pack.display), ("pkg", sku::build_package_name()),]
+        )
     );
     Some(3)
 }
@@ -1443,7 +1464,10 @@ fn sku_block() -> String {
     let pack = sku::build_sku();
     let dmi = sku::dmi_product_name();
     let verdict = sku::verdict_for(pack, dmi.as_deref());
-    let mut out = i18n::tf("sku.pack", &[("sku", pack.display), ("pkg", sku::build_package_name())]);
+    let mut out = i18n::tf(
+        "sku.pack",
+        &[("sku", pack.display), ("pkg", sku::build_package_name())],
+    );
     out.push('\n');
     out.push_str(&i18n::tf("sku.note", &[("note", pack.note)]));
     out.push('\n');
@@ -1467,7 +1491,6 @@ fn cmd_run(cfg: Config, verbose: bool, allow_sku_mismatch: bool) -> Result<i32> 
         return Ok(code);
     }
     println!("{}", banner());
-    println!("{}", verification_notice());
     println!("{}", cfg.summary());
     println!(
         "{}",

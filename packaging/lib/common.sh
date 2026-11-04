@@ -8,11 +8,9 @@ set -euo pipefail
 PKG_NAME="asus-numpad"
 BIN_NAME="asus-numpad"
 PKG_LICENSE="MIT"
-PKG_URL="https://github.com/asus-numpad/asus-numpad"
+PKG_URL="https://github.com/RunningVAN/asus-numpad"
 PKG_SUMMARY="ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动"
-PKG_DESC="在 ASUS 笔记本的触摸板上模拟数字小键盘。参数取自官方 AsusNUMPADFilter.inf
-的 AlgoParameters 原值（帧长 8ms、0.1mm 单位、手势 4838µm 等），通过 evdev/uinput
-在用户态实现，无需替换内核模块。"
+PKG_DESC="ASUS 触摸板数字小键盘用户态驱动，参数取自官方 AsusNUMPADFilter.inf。"
 
 # --------------------------------------------------------------------------- #
 # 输出

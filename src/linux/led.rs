@@ -44,7 +44,8 @@ use crate::config::{Config, VAL_UNLOCK};
 use crate::engine::LedSink;
 
 fn open_rw(path: &str) -> io::Result<RawFd> {
-    let c = CString::new(path).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "bad path"))?;
+    let c =
+        CString::new(path).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "bad path"))?;
     let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDWR) };
     if fd < 0 {
         Err(io::Error::last_os_error())
@@ -54,7 +55,8 @@ fn open_rw(path: &str) -> io::Result<RawFd> {
 }
 
 fn open_ro(path: &str) -> io::Result<RawFd> {
-    let c = CString::new(path).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "bad path"))?;
+    let c =
+        CString::new(path).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "bad path"))?;
     let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDONLY) };
     if fd < 0 {
         Err(io::Error::last_os_error())
@@ -79,7 +81,12 @@ const IOC_READ_WRITE: u64 = 3;
 const HID_TYPE: u64 = b'H' as u64;
 
 /// `HIDIOCGRDESCSIZE`：读报告描述符长度。
-const HIDIOCGRDESCSIZE: libc::c_ulong = ioc(IOC_READ, HID_TYPE, 0x01, std::mem::size_of::<libc::c_int>() as u64);
+const HIDIOCGRDESCSIZE: libc::c_ulong = ioc(
+    IOC_READ,
+    HID_TYPE,
+    0x01,
+    std::mem::size_of::<libc::c_int>() as u64,
+);
 /// `HIDIOCGRDESC`：读报告描述符本体。
 const HIDIOCGRDESC: libc::c_ulong = ioc(
     IOC_READ,
@@ -130,7 +137,10 @@ pub struct HidrawLed {
 
 impl HidrawLed {
     pub fn new(path: &str) -> Self {
-        Self { path: path.to_string(), history: Vec::new() }
+        Self {
+            path: path.to_string(),
+            history: Vec::new(),
+        }
     }
 }
 
@@ -140,7 +150,13 @@ impl LedSink for HidrawLed {
             // 0x60 是 i2c 的解锁字，hidraw FEATURE 通道没有这个前置动作，静默跳过
             return true;
         };
-        let mut buf = [LED_FEATURE_REPORT_ID, LED_FEATURE_BODY[0], LED_FEATURE_BODY[1], level, LED_FEATURE_TAIL];
+        let mut buf = [
+            LED_FEATURE_REPORT_ID,
+            LED_FEATURE_BODY[0],
+            LED_FEATURE_BODY[1],
+            level,
+            LED_FEATURE_TAIL,
+        ];
         debug_assert_eq!(buf.len(), LED_FEATURE_LEN);
 
         // 每次写都重新 open/close：驱动占着 hidraw 句柄会让 EC 通路在其他工具里不可用
@@ -185,7 +201,10 @@ impl LedSink for HidrawLed {
     }
 
     fn channel(&self) -> String {
-        format!("hidraw:{}（FEATURE 0x{LED_FEATURE_REPORT_ID:02x}）", self.path)
+        format!(
+            "hidraw:{}（FEATURE 0x{LED_FEATURE_REPORT_ID:02x}）",
+            self.path
+        )
     }
 
     fn history(&self) -> Vec<u8> {
@@ -213,7 +232,13 @@ pub struct I2cLed {
 
 impl I2cLed {
     pub fn new(tool: &str, bus: i32, addr: u8, payload: String) -> Self {
-        Self { tool: tool.to_string(), bus, addr, payload, history: Vec::new() }
+        Self {
+            tool: tool.to_string(),
+            bus,
+            addr,
+            payload,
+            history: Vec::new(),
+        }
     }
 
     fn write_byte(&mut self, value: u8) -> bool {
@@ -265,7 +290,10 @@ impl LedSink for I2cLed {
     }
 
     fn channel(&self) -> String {
-        format!("i2c:bus={} addr=0x{:02x} via {}", self.bus, self.addr, self.tool)
+        format!(
+            "i2c:bus={} addr=0x{:02x} via {}",
+            self.bus, self.addr, self.tool
+        )
     }
 
     fn history(&self) -> Vec<u8> {
@@ -284,7 +312,10 @@ pub struct NullLed {
 
 impl NullLed {
     pub fn new(reason: &str) -> Self {
-        Self { reason: reason.to_string(), history: Vec::new() }
+        Self {
+            reason: reason.to_string(),
+            history: Vec::new(),
+        }
     }
 }
 
@@ -308,13 +339,13 @@ impl LedSink for NullLed {
 // 探测
 // --------------------------------------------------------------------------- //
 
+use crate::led_policy::OMNI_PID;
 /// ELAN / ASUS vendor 与候选打分统一由跨平台模块 [`crate::led_policy`] 提供，
 /// 避免 Linux 侧与测试侧出现两套逻辑。
 pub use crate::led_policy::{
     candidate_rank, pick_best, ASUS_VID, ELAN_VID, KNOWN_NUMPAD_PIDS, PIXART_VID,
     RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE,
 };
-use crate::led_policy::OMNI_PID;
 /// OMNI RECEIVER 无线接收器 vendor。
 const OMNI_VID: u32 = ASUS_VID;
 
@@ -322,7 +353,9 @@ const OMNI_VID: u32 = ASUS_VID;
 fn hid_id(entry: &Path) -> Option<(u32, u32)> {
     let text = std::fs::read_to_string(entry.join("device/uevent")).ok()?;
     for line in text.lines() {
-        let Some(rest) = line.strip_prefix("HID_ID=") else { continue };
+        let Some(rest) = line.strip_prefix("HID_ID=") else {
+            continue;
+        };
         let mut it = rest.trim().split(':');
         let _bus = it.next()?;
         let vid = u32::from_str_radix(it.next()?, 16).ok()?;
@@ -372,12 +405,19 @@ pub fn probe_feature_report(path: &str, report_id: u8) -> FeatureProbe {
         Err(_) => return FeatureProbe::Unknown,
     };
     let mut size: libc::c_int = 0;
-    let rc = do_ioctl(fd, HIDIOCGRDESCSIZE, &mut size as *mut libc::c_int as *mut libc::c_void);
+    let rc = do_ioctl(
+        fd,
+        HIDIOCGRDESCSIZE,
+        &mut size as *mut libc::c_int as *mut libc::c_void,
+    );
     if rc < 0 || size <= 0 {
         unsafe { libc::close(fd) };
         return FeatureProbe::Unknown;
     }
-    let mut desc = Box::new(HidrawReportDescriptor { size: size as u32, value: [0u8; HID_MAX_DESCRIPTOR_SIZE] });
+    let mut desc = Box::new(HidrawReportDescriptor {
+        size: size as u32,
+        value: [0u8; HID_MAX_DESCRIPTOR_SIZE],
+    });
     let rc = do_ioctl(
         fd,
         HIDIOCGRDESC,
@@ -444,14 +484,18 @@ impl LedCandidate {
 /// 一眼看出“到底哪个节点带 FEATURE 0x0d、驱动会选谁”。
 pub fn probe_candidates() -> Vec<LedCandidate> {
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir("/sys/class/hidraw") else { return out };
+    let Ok(rd) = std::fs::read_dir("/sys/class/hidraw") else {
+        return out;
+    };
     for entry in rd.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         let dev = format!("/dev/{name}");
         if !Path::new(&dev).exists() {
             continue;
         }
-        let Some((vid, pid)) = hid_id(&entry.path()) else { continue };
+        let Some((vid, pid)) = hid_id(&entry.path()) else {
+            continue;
+        };
         if vid != ELAN_VID && vid != PIXART_VID && vid != ASUS_VID {
             continue;
         }
@@ -469,8 +513,17 @@ pub fn probe_candidates() -> Vec<LedCandidate> {
         }
         let probe = probe_feature_report(&dev, LED_FEATURE_REPORT_ID);
         let has_feature = probe.has();
-        let Some(rank) = candidate_rank(vid, pid, has_feature) else { continue };
-        out.push(LedCandidate { dev, vid, pid, has_feature, probe, rank });
+        let Some(rank) = candidate_rank(vid, pid, has_feature) else {
+            continue;
+        };
+        out.push(LedCandidate {
+            dev,
+            vid,
+            pid,
+            has_feature,
+            probe,
+            rank,
+        });
     }
     out.sort_by_key(|c| c.rank);
     out
@@ -501,7 +554,9 @@ pub fn find_hidraw() -> Option<String> {
         if !Path::new(&dev).exists() {
             continue;
         }
-        let Some((vid, pid)) = hid_id(&entry.path()) else { continue };
+        let Some((vid, pid)) = hid_id(&entry.path()) else {
+            continue;
+        };
 
         // 先按 vid 粗筛，避免对无关节点做 ioctl
         if vid != ELAN_VID && vid != PIXART_VID && vid != ASUS_VID {
@@ -520,7 +575,9 @@ pub fn find_hidraw() -> Option<String> {
         probes.push(probe);
     }
 
-    let Some(idx) = pick_best(&cands) else { return None };
+    let Some(idx) = pick_best(&cands) else {
+        return None;
+    };
     let (vid, pid, _) = cands[idx];
     let dev = devs[idx].clone();
     let probe = probes[idx];
@@ -559,7 +616,10 @@ pub fn find_hidraw() -> Option<String> {
             "{}",
             crate::i18n::tf(
                 "led.warn.fallback_asus",
-                &[("vid", &format!("{vid:04x}")), ("pid", &format!("{pid:04x}"))]
+                &[
+                    ("vid", &format!("{vid:04x}")),
+                    ("pid", &format!("{pid:04x}"))
+                ]
             )
         );
     }
@@ -577,8 +637,13 @@ pub fn find_i2c() -> Option<(i32, u8)> {
         let name = entry.file_name().to_string_lossy().to_string();
         // 形如 i2c-3-0038
         if let Some((bus_part, addr_part)) = name.rsplit_once('-') {
-            let Ok(addr) = u8::from_str_radix(addr_part, 16) else { continue };
-            let bus = bus_part.trim_start_matches("i2c-").parse::<i32>().unwrap_or(0);
+            let Ok(addr) = u8::from_str_radix(addr_part, 16) else {
+                continue;
+            };
+            let bus = bus_part
+                .trim_start_matches("i2c-")
+                .parse::<i32>()
+                .unwrap_or(0);
             if addr == 0x38 {
                 hit_38.get_or_insert((bus, addr));
             } else if addr == 0x15 {
@@ -608,21 +673,28 @@ pub fn build_led(cfg: &Config) -> Box<dyn LedSink> {
             if bus == 0 {
                 return Box::new(NullLed::new(&crate::i18n::t("led.none.no_i2c")));
             }
-            Box::new(I2cLed::new(&cfg.i2c_transfer, bus, addr, cfg.i2c_payload.clone()))
+            Box::new(I2cLed::new(
+                &cfg.i2c_transfer,
+                bus,
+                addr,
+                cfg.i2c_payload.clone(),
+            ))
         }
         other => {
             // auto 或未知值：先 hidraw 再 i2c
             if other != "auto" {
-                eprintln!(
-                    "{}",
-                    crate::i18n::tf("led.warn.bad_kind", &[("v", other)])
-                );
+                eprintln!("{}", crate::i18n::tf("led.warn.bad_kind", &[("v", other)]));
             }
             if let Some(p) = cfg.hidraw.clone().or_else(find_hidraw) {
                 return Box::new(HidrawLed::new(&p));
             }
             if let Some((bus, addr)) = find_i2c() {
-                return Box::new(I2cLed::new(&cfg.i2c_transfer, bus, addr, cfg.i2c_payload.clone()));
+                return Box::new(I2cLed::new(
+                    &cfg.i2c_transfer,
+                    bus,
+                    addr,
+                    cfg.i2c_payload.clone(),
+                ));
             }
             Box::new(NullLed::new(&crate::i18n::t("led.none.any")))
         }

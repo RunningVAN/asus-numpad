@@ -2,7 +2,9 @@
 
 pub mod dev;
 pub mod led;
-pub use self::led::{probe_candidates, probe_feature_report, probe_i2c, FeatureProbe, LedCandidate};
+pub use self::led::{
+    probe_candidates, probe_feature_report, probe_i2c, FeatureProbe, LedCandidate,
+};
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -11,9 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{anyhow, Context, Result};
 
 use crate::config::Config;
-use crate::engine::{
-    Clock, Deps, Engine, Event, GrabSink, KeySink, NumLockSource, PointerSink,
-};
+use crate::engine::{Clock, Deps, Engine, Event, GrabSink, KeySink, NumLockSource, PointerSink};
 use crate::keycodes as kc;
 use crate::layout::Geometry;
 
@@ -27,7 +27,10 @@ pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn now_ms(&self) -> f64 {
-        let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+        let mut ts = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
         unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
         ts.tv_sec as f64 * 1000.0 + ts.tv_nsec as f64 / 1_000_000.0
     }
@@ -162,21 +165,36 @@ pub fn resolve_layout(cfg: &Config, device_name: &str) -> ResolvedLayout {
     let hid = layout::hid_id_of(device_name);
     if !cfg.layout_name.eq_ignore_ascii_case("auto") {
         if let Some(entry) = layout::by_name(&cfg.layout_name) {
-            return ResolvedLayout { entry, hid, source: "fixed" };
+            return ResolvedLayout {
+                entry,
+                hid,
+                source: "fixed",
+            };
         }
     }
     if let Some(entry) = layout::for_device_name(device_name) {
-        return ResolvedLayout { entry, hid, source: "auto" };
+        return ResolvedLayout {
+            entry,
+            hid,
+            source: "auto",
+        };
     }
     // 认出了 NumberPad 模组 ID 但官方表里没有对应布局：绝不静默套用 GH3XLNDZ，
     // 否则其它机型会按错键。交给闸门拦下并要求反馈 `check` 输出。
     if hid.is_some() {
         let entry = layout::by_name("UNKNOWN").expect("内置布局表必须包含 UNKNOWN 占位");
-        return ResolvedLayout { entry, hid, source: "unknown-hid" };
+        return ResolvedLayout {
+            entry,
+            hid,
+            source: "unknown-hid",
+        };
     }
-    let entry = layout::by_name(layout::DEFAULT_LAYOUT_NAME)
-        .expect("内置布局表必须包含默认布局");
-    ResolvedLayout { entry, hid, source: "fallback" }
+    let entry = layout::by_name(layout::DEFAULT_LAYOUT_NAME).expect("内置布局表必须包含默认布局");
+    ResolvedLayout {
+        entry,
+        hid,
+        source: "fallback",
+    }
 }
 
 /// 未验证布局闸门：返回 Some(说明) 表示应停止，不再往触摸板上套键表。
@@ -199,7 +217,11 @@ pub fn layout_gate(cfg: &Config, rl: &ResolvedLayout) -> Option<String> {
     });
     Some(crate::i18n::tf(
         "err.layout_unverified",
-        &[("layout", rl.entry.name), ("support", support), ("hint", &hint)],
+        &[
+            ("layout", rl.entry.name),
+            ("support", support),
+            ("hint", &hint),
+        ],
     ))
 }
 
@@ -211,7 +233,9 @@ pub fn find_touchpad(cfg: &Config) -> Result<InputDevice> {
     }
     let mut seen = Vec::new();
     for path in dev::list_event_devices() {
-        let Ok(d) = InputDevice::open(&path) else { continue };
+        let Ok(d) = InputDevice::open(&path) else {
+            continue;
+        };
         seen.push(format!("{} ({})", path, d.name));
         if is_numpad_candidate(&d) {
             return Ok(d);
@@ -234,7 +258,9 @@ pub fn find_keyboard(cfg: &Config) -> Option<InputDevice> {
         return InputDevice::open(path).ok();
     }
     for path in dev::list_event_devices() {
-        let Ok(d) = InputDevice::open(&path) else { continue };
+        let Ok(d) = InputDevice::open(&path) else {
+            continue;
+        };
         if d.has_event_type(kc::EV_LED) && d.read_led_numl().is_ok() {
             return Some(d);
         }
@@ -313,16 +339,37 @@ pub fn probe_report(cfg: &Config) -> Result<(Geometry, Vec<String>)> {
             "dev.report.device",
             &[("path", &dev.path), ("name", &dev.name)],
         ),
-        format!("vendor:product = {:04x}:{:04x}", dev.id.vendor, dev.id.product),
-        format!("x: {}..{} res={} fuzz={}", xi.minimum, xi.maximum, xi.resolution, xi.fuzz),
-        format!("y: {}..{} res={} fuzz={}", yi.minimum, yi.maximum, yi.resolution, yi.fuzz),
+        format!(
+            "vendor:product = {:04x}:{:04x}",
+            dev.id.vendor, dev.id.product
+        ),
+        format!(
+            "x: {}..{} res={} fuzz={}",
+            xi.minimum, xi.maximum, xi.resolution, xi.fuzz
+        ),
+        format!(
+            "y: {}..{} res={} fuzz={}",
+            yi.minimum, yi.maximum, yi.resolution, yi.fuzz
+        ),
         crate::i18n::tf(
             "dev.report.touch_axes",
             &[
-                ("x", &dev.supports(kc::EV_ABS, kc::ABS_MT_POSITION_X).to_string()),
-                ("y", &dev.supports(kc::EV_ABS, kc::ABS_MT_POSITION_Y).to_string()),
-                ("tid", &dev.supports(kc::EV_ABS, kc::ABS_MT_TRACKING_ID).to_string()),
-                ("p", &dev.supports(kc::EV_ABS, kc::ABS_MT_PRESSURE).to_string()),
+                (
+                    "x",
+                    &dev.supports(kc::EV_ABS, kc::ABS_MT_POSITION_X).to_string(),
+                ),
+                (
+                    "y",
+                    &dev.supports(kc::EV_ABS, kc::ABS_MT_POSITION_Y).to_string(),
+                ),
+                (
+                    "tid",
+                    &dev.supports(kc::EV_ABS, kc::ABS_MT_TRACKING_ID).to_string(),
+                ),
+                (
+                    "p",
+                    &dev.supports(kc::EV_ABS, kc::ABS_MT_PRESSURE).to_string(),
+                ),
             ],
         ),
         crate::i18n::tf(
@@ -436,8 +483,22 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
     // 混合模式需要把未吞掉的触点转发回去，否则开数字键盘后光标就没了
     let pointer_dev = if cfg.mixed_mode.is_enabled() && has_mt {
         let ranges = vec![
-            (kc::ABS_MT_SLOT, AbsInfo { minimum: 0, maximum: 4, ..Default::default() }),
-            (kc::ABS_MT_TRACKING_ID, AbsInfo { minimum: -1, maximum: 65535, ..Default::default() }),
+            (
+                kc::ABS_MT_SLOT,
+                AbsInfo {
+                    minimum: 0,
+                    maximum: 4,
+                    ..Default::default()
+                },
+            ),
+            (
+                kc::ABS_MT_TRACKING_ID,
+                AbsInfo {
+                    minimum: -1,
+                    maximum: 65535,
+                    ..Default::default()
+                },
+            ),
             (kc::ABS_MT_POSITION_X, xi),
             (kc::ABS_MT_POSITION_Y, yi),
             (kc::ABS_X, xi),
@@ -475,7 +536,6 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
     let mut engine = Engine::new(cfg.clone(), geometry, deps, has_mt, has_pressure);
     if verbose {
         println!("{}", crate::banner());
-        println!("{}", crate::verification_notice());
         for line in engine.geometry_report() {
             println!("  {line}");
         }
@@ -506,7 +566,8 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
             let events = kb_dev.borrow().read_events().unwrap_or_default();
             for raw in events {
                 let ev = raw.to_event();
-                if ev.etype == kc::EV_LED || (ev.etype == kc::EV_KEY && ev.code == kc::KEY_NUMLOCK) {
+                if ev.etype == kc::EV_LED || (ev.etype == kc::EV_KEY && ev.code == kc::KEY_NUMLOCK)
+                {
                     engine.handle_kb_event(&ev);
                 }
             }

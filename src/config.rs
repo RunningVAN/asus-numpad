@@ -282,7 +282,10 @@ pub struct Config {
     /// 接受三种写法：整数（`65`）、十六进制字符串（`"0x41"`）、十进制字符串（`"65"`）；
     /// 写回时统一成整数数组——早期版本写的是 `0x41` 字符串，读不回来会让整份配置
     /// 悄悄退回默认值（跟随开关、手动档一起丢失），这里必须兼容。
-    #[serde(default = "default_brightness_levels", deserialize_with = "de_brightness_levels")]
+    #[serde(
+        default = "default_brightness_levels",
+        deserialize_with = "de_brightness_levels"
+    )]
     pub brightness_levels: Vec<u8>,
     /// 键盘背光轮询间隔（ms）
     pub brightness_poll_ms: u32,
@@ -377,7 +380,9 @@ where
     let mut out = Vec::with_capacity(raw.len());
     for (idx, item) in raw.iter().enumerate() {
         let parsed = match item {
-            serde_json::Value::Number(n) => n.as_u64().filter(|v| *v <= u8::MAX as u64).map(|v| v as u8),
+            serde_json::Value::Number(n) => {
+                n.as_u64().filter(|v| *v <= u8::MAX as u64).map(|v| v as u8)
+            }
             serde_json::Value::String(text) => {
                 let t = text.trim();
                 match t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
@@ -475,7 +480,10 @@ impl Config {
             match crate::i18n::Lang::parse(&lang_raw) {
                 Some(l) => self.language = l.code().to_string(),
                 None => {
-                    notes.push(crate::i18n::tf("note.invalid_language", &[("v", &lang_raw)]));
+                    notes.push(crate::i18n::tf(
+                        "note.invalid_language",
+                        &[("v", &lang_raw)],
+                    ));
                     self.language = "auto".to_string();
                 }
             }
@@ -507,7 +515,11 @@ impl Config {
             let dropped = (before - self.brightness_levels.len()).to_string();
             notes.push(crate::i18n::tf(
                 "note.levels_dropped",
-                &[("n", &dropped), ("lo", &format!("{lo:02x}")), ("hi", &format!("{hi:02x}"))],
+                &[
+                    ("n", &dropped),
+                    ("lo", &format!("{lo:02x}")),
+                    ("hi", &format!("{hi:02x}")),
+                ],
             ));
         }
         if self.numlock_zone != "cell" {
@@ -526,7 +538,10 @@ impl Config {
             match crate::layout::by_name(&layout_raw) {
                 Some(e) => self.layout_name = e.name.to_string(),
                 None => {
-                    notes.push(crate::i18n::tf("note.layout_unknown", &[("v", &layout_raw)]));
+                    notes.push(crate::i18n::tf(
+                        "note.layout_unknown",
+                        &[("v", &layout_raw)],
+                    ));
                     self.layout_name = "auto".to_string();
                 }
             }
@@ -545,7 +560,10 @@ impl Config {
                 Err(err) => {
                     notes.push(crate::i18n::tf(
                         "note.read_failed",
-                        &[("path", &path.display().to_string()), ("err", &err.to_string())],
+                        &[
+                            ("path", &path.display().to_string()),
+                            ("err", &err.to_string()),
+                        ],
                     ));
                     Config::default()
                 }
@@ -554,7 +572,10 @@ impl Config {
                 if err.kind() != std::io::ErrorKind::NotFound {
                     notes.push(crate::i18n::tf(
                         "note.read_failed",
-                        &[("path", &path.display().to_string()), ("err", &err.to_string())],
+                        &[
+                            ("path", &path.display().to_string()),
+                            ("err", &err.to_string()),
+                        ],
                     ));
                 }
                 Config::default()
@@ -763,7 +784,10 @@ pub fn official_parameters() -> Vec<(String, String)> {
     let frames = |n: u32, ms_key: &str| {
         crate::i18n::tf(
             ms_key,
-            &[("frames", &n.to_string()), ("ms", &(n * FRAME_MS).to_string())],
+            &[
+                ("frames", &n.to_string()),
+                ("ms", &(n * FRAME_MS).to_string()),
+            ],
         )
     };
     vec![
@@ -803,7 +827,10 @@ pub fn official_parameters() -> Vec<(String, String)> {
             "GESTURE_01 TouchSendKey_Trig_FC".to_string(),
             frames(GESTURE_TOUCH_SENDKEY_FRAMES, "param.cont_sendkey"),
         ),
-        ("GESTURE_05 Gesture_Trig_UM".to_string(), format!("{GESTURE_TRIG_UM:.0} µm")),
+        (
+            "GESTURE_05 Gesture_Trig_UM".to_string(),
+            format!("{GESTURE_TRIG_UM:.0} µm"),
+        ),
         (
             "GESTURE_06 iTAPPING_THRESHOLD_MM".to_string(),
             format!("{TAP_THRESHOLD_MM:.0} mm"),
@@ -844,7 +871,11 @@ mod tests {
     fn user_config_path_uses_xdg_layout() {
         // 不论 HOME/XDG 是否设置，末尾必须是 <dir>/asus-numpad/asus-numpad.json
         let p = Config::user_config_path();
-        assert!(p.ends_with("asus-numpad/asus-numpad.json"), "got {}", p.display());
+        assert!(
+            p.ends_with("asus-numpad/asus-numpad.json"),
+            "got {}",
+            p.display()
+        );
     }
 
     #[test]
@@ -932,8 +963,7 @@ mod tests {
 
     #[test]
     fn manual_step_clamped_on_load() {
-        let mut c: Config =
-            serde_json::from_str(r#"{"manual_brightness_step":9}"#).unwrap();
+        let mut c: Config = serde_json::from_str(r#"{"manual_brightness_step":9}"#).unwrap();
         let notes = c.sanitize();
         assert_eq!(c.manual_brightness_step, MANUAL_BRIGHTNESS_STEPS);
         assert!(notes.iter().any(|n| n.contains("manual_brightness_step")));
@@ -998,7 +1028,8 @@ mod tests {
         let ints: Config = serde_json::from_str(r#"{"brightness_levels":[65,72]}"#).unwrap();
         assert_eq!(ints.brightness_levels, vec![0x41, 0x48]);
         // 旧版本写出的 "0x41" 字符串必须还能读（否则整份配置会悄悄退回默认）
-        let hex: Config = serde_json::from_str(r#"{"brightness_levels":["0x41","0x45","0x48"]}"#).unwrap();
+        let hex: Config =
+            serde_json::from_str(r#"{"brightness_levels":["0x41","0x45","0x48"]}"#).unwrap();
         assert_eq!(hex.brightness_levels, vec![0x41, 0x45, 0x48]);
         let dec: Config = serde_json::from_str(r#"{"brightness_levels":["65"]}"#).unwrap();
         assert_eq!(dec.brightness_levels, vec![0x41]);
@@ -1030,13 +1061,15 @@ mod tests {
 
     #[test]
     fn bad_brightness_levels_reports_index() {
-        let err = serde_json::from_str::<Config>(r#"{"brightness_levels":[65,"oops"]}"#).unwrap_err();
+        let err =
+            serde_json::from_str::<Config>(r#"{"brightness_levels":[65,"oops"]}"#).unwrap_err();
         assert!(err.to_string().contains("brightness_levels[1]"), "{err}");
     }
 
     #[test]
     fn zero_frame_ms_is_clamped() {
-        let mut c: Config = serde_json::from_str(r#"{"frame_ms":0,"numlock_trigger_frames":0}"#).unwrap();
+        let mut c: Config =
+            serde_json::from_str(r#"{"frame_ms":0,"numlock_trigger_frames":0}"#).unwrap();
         c.sanitize();
         assert_eq!(c.frame_ms, 1);
         assert_eq!(c.numlock_trigger_frames, 1);

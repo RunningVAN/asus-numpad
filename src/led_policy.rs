@@ -56,7 +56,9 @@ pub fn candidate_rank(vid: u32, pid: u32, has_feature: bool) -> Option<u8> {
 pub fn pick_best(candidates: &[(u32, u32, bool)]) -> Option<usize> {
     let mut best: Option<(u8, usize)> = None;
     for (idx, &(vid, pid, has_feature)) in candidates.iter().enumerate() {
-        let Some(rank) = candidate_rank(vid, pid, has_feature) else { continue };
+        let Some(rank) = candidate_rank(vid, pid, has_feature) else {
+            continue;
+        };
         let better = match best {
             None => true,
             Some((r, _)) => rank < r,
@@ -104,7 +106,10 @@ mod tests {
     fn unknown_pid_without_feature_is_below_known_pid() {
         let known = candidate_rank(0x04f3, 0x3275, false).unwrap();
         let unknown = candidate_rank(0x04f3, 0x3286, false).unwrap();
-        assert!(known < unknown, "已知 PID 应优先于未知 PID（同为无描述符证据）");
+        assert!(
+            known < unknown,
+            "已知 PID 应优先于未知 PID（同为无描述符证据）"
+        );
         assert!(unknown < candidate_rank(0x0b05, 0x1866, false).unwrap());
     }
 

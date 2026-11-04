@@ -987,7 +987,6 @@ pub const HID_LAYOUTS: &[(&str, &str)] = &[
     ("ELAN1407", "NHXL"),
 ];
 
-
 /// 默认布局名（真机验证过的 GH3XLNDZ）。
 pub const DEFAULT_LAYOUT_NAME: &str = "GH3XLNDZ";
 
@@ -1095,13 +1094,28 @@ mod tests {
     #[test]
     fn hid_ids_map_to_expected_layouts() {
         // 本机（SCAR 16 G634JY）：ASUE1416 -> GH3XLNDZ
-        assert_eq!(hid_id_of("ASUE1416:00 04F3:3275 Touchpad").as_deref(), Some("ASUE1416"));
-        assert_eq!(for_device_name("ASUE1416:00 04F3:3275 Touchpad").map(|e| e.name), Some("GH3XLNDZ"));
+        assert_eq!(
+            hid_id_of("ASUE1416:00 04F3:3275 Touchpad").as_deref(),
+            Some("ASUE1416")
+        );
+        assert_eq!(
+            for_device_name("ASUE1416:00 04F3:3275 Touchpad").map(|e| e.name),
+            Some("GH3XLNDZ")
+        );
         // 同族不同机型
-        assert_eq!(for_device_name("ASUE1403:00 04F3:3288 Touchpad").map(|e| e.name), Some("GH2XLNDZ"));
-        assert_eq!(for_device_name("ASCP1400:00 28A9:0100 Touchpad").map(|e| e.name), Some("GH4XLNDZ"));
+        assert_eq!(
+            for_device_name("ASUE1403:00 04F3:3288 Touchpad").map(|e| e.name),
+            Some("GH2XLNDZ")
+        );
+        assert_eq!(
+            for_device_name("ASCP1400:00 28A9:0100 Touchpad").map(|e| e.name),
+            Some("GH4XLNDZ")
+        );
         // 老式 NH 系列
-        assert_eq!(for_device_name("ASUE1400:00 04F3:3083 Touchpad").map(|e| e.name), Some("NHL"));
+        assert_eq!(
+            for_device_name("ASUE1400:00 04F3:3083 Touchpad").map(|e| e.name),
+            Some("NHL")
+        );
         // 无线接收器 / 键盘不应被当成触摸板，也解析不出 HID
         assert_eq!(hid_id_of("ASUS ROG WIRELESS RECEIVER 0B05:1ACE"), None);
         assert_eq!(hid_id_of("ASUSTeK Computer Inc. N-KEY Device"), None);
@@ -1110,7 +1124,10 @@ mod tests {
     /// 只有 GH3XLNDZ 是已验证；同族 GH2/GH4 需确认；其余不可套用。
     #[test]
     fn support_levels_are_conservative() {
-        assert_eq!(by_name("GH3XLNDZ").unwrap().support, LayoutSupport::Verified);
+        assert_eq!(
+            by_name("GH3XLNDZ").unwrap().support,
+            LayoutSupport::Verified
+        );
         assert_eq!(by_name("GH2XLNDZ").unwrap().support, LayoutSupport::Family);
         assert_eq!(by_name("GH4XLNDZ").unwrap().support, LayoutSupport::Family);
         assert_eq!(by_name("NHL").unwrap().support, LayoutSupport::Unsupported);
@@ -1131,7 +1148,10 @@ mod tests {
     #[test]
     fn every_hid_entry_resolves() {
         for (hid, name) in HID_LAYOUTS {
-            assert!(by_name(name).is_some(), "{hid} -> {name} 未在 LAYOUTS 中定义");
+            assert!(
+                by_name(name).is_some(),
+                "{hid} -> {name} 未在 LAYOUTS 中定义"
+            );
         }
     }
 
@@ -1143,8 +1163,14 @@ mod tests {
             let l = by_name(name).unwrap().layout;
             assert_eq!(l.columns, g3.columns, "{name} 列数不同");
             // 同族布局的键表几何必须落在同一量级（0.1mm 单位，误差不超过 1 格）
-            assert!((l.index0 as i32 - g3.index0 as i32).abs() <= 10, "{name} index0 差异过大");
-            assert!((l.index4 as i32 - g3.index4 as i32).abs() <= 10, "{name} index4 差异过大");
+            assert!(
+                (l.index0 as i32 - g3.index0 as i32).abs() <= 10,
+                "{name} index0 差异过大"
+            );
+            assert!(
+                (l.index4 as i32 - g3.index4 as i32).abs() <= 10,
+                "{name} index4 差异过大"
+            );
         }
     }
 
@@ -1158,8 +1184,10 @@ mod tests {
         let mut official: Vec<String> = (0x00..=0x18).map(|i| format!("ASUE14{i:02X}")).collect();
         official.extend(["ASUF1411", "ASUF1415", "ASUF1416"].map(String::from));
         official.extend(
-            ["ASUP1411", "ASUP1412", "ASUP1413", "ASUP1414", "ASUP1415", "ASUP1416"]
-                .map(String::from),
+            [
+                "ASUP1411", "ASUP1412", "ASUP1413", "ASUP1414", "ASUP1415", "ASUP1416",
+            ]
+            .map(String::from),
         );
         official.extend(["ASCF1400", "ASCP1400"].map(String::from));
         official.extend((0x00..=0x07).map(|i| format!("ELAN14{i:02X}")));

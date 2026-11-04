@@ -16,8 +16,8 @@ fn main() {
     let sku = raw.trim();
     let sku = if sku.is_empty() { "universal" } else { sku };
 
-    let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR 必须由 cargo 提供"))
-        .join("build_sku.rs");
+    let out =
+        PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR 必须由 cargo 提供")).join("build_sku.rs");
     let body = format!(
         "// 由 build.rs 生成，勿手改。\n\
          pub const BUILD_SKU_ID: &str = \"{sku}\";\n\

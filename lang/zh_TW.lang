@@ -2,9 +2,8 @@
 # 鍵值格式：key = 文案（# 開頭為註解，值內可用 \n 換行）
 # 缺少鍵值會回落到英文內建文案；可複製整份檔案到 ~/.config/asus-numpad/lang/ 做在地化覆蓋（免 root）。
 
-# ---- 启动横幅与免责声明 ----
+# ---- 启动横幅 ----
 app.banner = ASUS 觸控板數字小鍵盤 v{version}（Linux 使用者態，官方 AlgoParameters 對齊版）
-app.notice = 提示：本實作依官方 INF 逐參數對齊，背光已在 G634JY / Fedora 44 實機驗證（見 README「實機驗證記錄」）；數值語意衝突處已在 README「已知差異」中如實標註。
 
 # ---- 命令行总览 ----
 cli.about = ASUS 觸控板數字小鍵盤驅動（Linux，官方 AlgoParameters 對齊版）
@@ -37,7 +36,7 @@ cli.cmd.bright.long = 例：`bright 1|2|3`（0 = 熄滅）、`bright up|down|cyc
 cli.cmd.bright.value = 段位 0/1/2/3，或 up / down / cycle / next / follow / status
 cli.cmd.bright.mode = `follow` 的取值：on / off
 cli.cmd.led = 直發背光命令字（排障用，繞過所有狀態機）
-cli.cmd.led.long = 例：`led on`（0x01 點亮）、`led off`（0x00 熄滅）、`led 0x41`..`led 0x48`（1..8 段）、`led 65`（十進位同義）。用來把「驅動沒發」和「硬體不認這個值」分開
+cli.cmd.led.long = 例：led on | led off | led 0x41..0x48（1..8 段）。用來區分「驅動沒發」與「硬體不認這個值」。
 cli.cmd.led.value = on / off / 任意十六進位段位（如 0x41）
 led.cmd.usage = 用法：asus-numpad led on|off|0x41（0x01 亮 / 0x00 滅 / 0x41..0x48 為 1..8 段）
 led.cmd.bad_value = 無法辨識的取值：{v}（可用 on / off / 0x41 / 65）
@@ -157,7 +156,7 @@ lang.dirs = 語言檔案目錄：{dirs}
 lang.file = 語言檔案：{path}
 lang.file_builtin = 語言檔案：使用二進位內建文案（未找到外部 .lang 檔案）
 lang.wrote = 已寫入 {path}：language = {value}（備份 {backup}）
-lang.usage = 用法：asus-numpad lang              檢視目前語言與來源\n      asus-numpad lang zh-CN       简体中文\n      asus-numpad lang zh-TW       繁體中文\n      asus-numpad lang en          English\n      asus-numpad lang auto        跟隨系統 locale\n臨時覆蓋（不改設定）：asus-numpad --lang en check，或 ASUS_NUMPAD_LANG=en asus-numpad check
+lang.usage = 用法：asus-numpad lang [zh-CN|zh-TW|en|auto]   檢視或切換介面語言\n臨時覆蓋：asus-numpad --lang en check
 lang.bad_code = 無法辨識的語言：{v}（可用：zh-CN / zh-TW / en / auto）
 lang.restart_hint = 下次執行 asus-numpad 時生效（本次輸出仍為目前語言）。
 lang.effect_auto = 之後依系統 locale 自動選擇語言（目前判定為 {name}）。
@@ -236,7 +235,7 @@ cli.cmd.layout.name = 佈局名（GH3XLNDZ / GH2XLNDZ / GH4XLNDZ / auto）
 cli.cmd.layout.ids = 同時列出觸控板 HID 硬體 ID → 佈局的對照表
 layout.current = 目前佈局：設定 {layout}，實際生效 {resolved}（{support}）
 layout.list_title = 官方 AsusNUMPADFilter.inf 收錄的佈局（* 已驗證 / ~ 同族未驗證 / - 結構不同）：
-layout.legend = * verified：已實機驗證，可直接使用；~ family：15 參數齊全、5x4 同族，未實機驗證，需 --allow-unverified；- unsupported：鍵表結構不同，不能套用
+layout.legend = * 已驗證   ~ 同族未驗證（需 --allow-unverified）   - 不支援
 layout.ids_title = 觸控板 HID 硬體 ID → 佈局（同 ID 的機型可直接通用）：
 layout.usage = 用法：asus-numpad layout                 檢視目前佈局與佈局表
       asus-numpad layout --ids           附帶 HID 硬體 ID 對照表
@@ -247,7 +246,7 @@ layout.effect_auto = 下次啟動依觸控板 HID 硬體 ID 自動選佈局，�
 layout.unverified_warn = 注意：佈局 {layout} 為 {support} 等級，鍵位表未經實機驗證
 layout.bad_name = 未知佈局名：{v}
 note.layout_unknown = layout_name={v} 不在官方佈局表內，按 auto 處理
-err.layout_unverified = 本機觸控板辨識為佈局 {layout}（{support}），該佈局尚未實機驗證，為避免按錯鍵已停止啟動。確認可用後加 --allow-unverified 或在設定裡設 allow_unverified_layout=true\n提示：{hint}
+err.layout_unverified = 佈局 {layout}（{support}）尚未實機驗證，已停止啟動以免按錯鍵。確認可用後加 --allow-unverified。
 err.layout_unverified.hint = 放行方式：asus-numpad --allow-unverified run，或在 ~/.config/asus-numpad/asus-numpad.json 裡設 "allow_unverified_layout": true
 err.layout_unsupported.hint = 該佈局的鍵表結構與 GH3XLNDZ 不同，直接套用會按錯鍵；請把 `asus-numpad check` 的輸出回報給維護者以補充鍵表
 dev.report.layout = 佈局：{layout}（{support}，來源 {source}，HID {hid}）
@@ -257,10 +256,10 @@ common.yes = 是
 common.no = 否
 check.led_probe_title = 背光候選節點（依優先序排列）:
 check.led_probe_line =   {dev}  {vid}:{pid}  FEATURE0x0d={feature}  rank={rank}  {state}
-check.led_probe_hint = ↑ 出現「權限不足」：hidraw 打不開，背光與自檢會失敗。按順序排三步：① 規則裝了沒：`rpm -ql asus-numpad-* | grep 99-asus` 有輸出；② 生效了沒：`getfacl /dev/$(ls /sys/class/hidraw | head -1)` 看有沒有 `user:<你>:rw-` 的 ACL，沒有就 `sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw --action=change`；③ 工作階段在不在 seat 內：`loginctl show-session $XDG_SESSION_ID -p Seat -p Active` 無 Seat 或 Active=no（SSH、linger 無工作階段、tty 登入）時 uaccess 永不生效，改走 input 群組：`sudo usermod -aG input $USER`，重新登入後用 `id` 確認 groups 裡有 input。
+check.led_probe_hint = ↑ 權限不足：先 `rpm -ql asus-numpad-* | grep 99-asus` 確認規則已裝，再 `sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw --action=change`。SSH/linger 工作階段 uaccess 不生效，改用 `sudo usermod -aG input $USER` 重新登入。
 check.led_probe_unknown = 讀取失敗
 check.led_probe_noperm = 權限不足
-check.led_probe_open_failed = [警告] 打不開 {dev}（權限不足），無法確認是否帶 FEATURE 報告 0x{rid}：這是 udev 授權未生效，不是硬體缺失。先確認規則已安裝（`rpm -ql asus-numpad-* | grep 99-asus`），再 `sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw --action=change`。若仍失敗表示目前工作階段不在 seat 內（SSH／linger／tty），uaccess 不適用，改用 input 群組兜底：`sudo usermod -aG input $USER` 後重新登入。
+check.led_probe_open_failed = [警告] 打不開 {dev}（權限不足），無法確認 FEATURE 0x{rid}：這是 udev 授權未生效，不是硬體缺失。
 check.led_probe_selected = [驅動會選中]
 check.led_probe_idle = [備選]
 check.led_probe_skip = [跳過：無線接收器]
@@ -277,4 +276,4 @@ sku.verdict.match = 相符，繼續
 sku.verdict.mismatch = 不相符——本機是 {dmi}，裝錯套件了
 sku.verdict.unknown = 無法判定，按放行處理（讀不到 DMI 不等於機型不對）
 sku.verdict.not_enforced = 未啟用（相容套件不校驗機型）
-err.sku_mismatch = 本安裝套件只服務「{sku}」，與這台機器對不上，已停止啟動以免裝錯套件。\n請改裝對應機型的套件 {pkg}；確認要強制執行時加 --allow-sku-mismatch。
+err.sku_mismatch = 本套件只服務「{sku}」，與本機不符，已停止啟動。請改裝 {pkg}；強制執行加 --allow-sku-mismatch。

@@ -14,3 +14,6 @@ packaging/**/*.pkg.tar.*
 .idea/
 *.swp
 .DS_Store
+
+# 本地交叉编译链接器路径
+.zigcc-linker

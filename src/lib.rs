@@ -41,8 +41,3 @@ pub use layout::{Geometry, KeyMode, Layout, GH3XLNDZ};
 pub fn banner() -> String {
     i18n::tf("app.banner", &[("version", VERSION)])
 }
-
-/// 真机验证免责声明（`--check` / `--dump` 启动时输出）。
-pub fn verification_notice() -> String {
-    i18n::t("app.notice")
-}

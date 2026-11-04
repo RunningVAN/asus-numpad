@@ -23,7 +23,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use crate::brightness::BrightnessFollower;
 use crate::config::{
-    Config, CalcMode, MixedMode, NumLockMode, CALCULATOR_FEATURE, NUMLOCK_MAX_FAIL_DELTA_RATIO,
+    CalcMode, Config, MixedMode, NumLockMode, CALCULATOR_FEATURE, NUMLOCK_MAX_FAIL_DELTA_RATIO,
     VAL_OFF, VAL_ON, VAL_UNLOCK,
 };
 use crate::keycodes as kc;
@@ -39,13 +39,25 @@ pub struct Event {
 
 impl Event {
     pub fn abs(code: u16, value: i32) -> Self {
-        Self { etype: kc::EV_ABS, code, value }
+        Self {
+            etype: kc::EV_ABS,
+            code,
+            value,
+        }
     }
     pub fn key(code: u16, value: i32) -> Self {
-        Self { etype: kc::EV_KEY, code, value }
+        Self {
+            etype: kc::EV_KEY,
+            code,
+            value,
+        }
     }
     pub fn led(code: u16, value: i32) -> Self {
-        Self { etype: kc::EV_LED, code, value }
+        Self {
+            etype: kc::EV_LED,
+            code,
+            value,
+        }
     }
 }
 
@@ -135,7 +147,10 @@ impl Mode {
     }
 
     fn is_gesture_family(self) -> bool {
-        matches!(self, Mode::Gesture | Mode::Scroll | Mode::Pinch | Mode::AppGesture)
+        matches!(
+            self,
+            Mode::Gesture | Mode::Scroll | Mode::Pinch | Mode::AppGesture
+        )
     }
 }
 
@@ -216,7 +231,13 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new(cfg: Config, geometry: Geometry, deps: Deps, has_mt_tracking: bool, has_pressure: bool) -> Self {
+    pub fn new(
+        cfg: Config,
+        geometry: Geometry,
+        deps: Deps,
+        has_mt_tracking: bool,
+        has_pressure: bool,
+    ) -> Self {
         let tol_ux = cfg.tap_threshold_mm * 1000.0 * geometry.ux;
         let tol_uy = cfg.tap_threshold_mm * 1000.0 * geometry.uy;
         let now = deps.clock.now_ms();
@@ -804,8 +825,8 @@ impl Engine {
         let now = self.now();
         self.last_tap.insert(code, now);
         self.press(code);
-        self.repeat_next = now
-            + self.cfg.cont_sendkey_trigger_frames as f64 * self.cfg.frame_ms as f64;
+        self.repeat_next =
+            now + self.cfg.cont_sendkey_trigger_frames as f64 * self.cfg.frame_ms as f64;
     }
 
     fn end_contact(&mut self) {
@@ -1045,7 +1066,11 @@ impl Engine {
                 self.release(k);
             }
             self.armed_key = None;
-            self.mode = if n == 2 { Mode::Scroll } else { Mode::AppGesture };
+            self.mode = if n == 2 {
+                Mode::Scroll
+            } else {
+                Mode::AppGesture
+            };
             self.forwarding = self.mixed_active();
             if self.forwarding {
                 // 让位给桌面时，起步那段得补发，否则光标会从第二个手指开始跳
@@ -1092,7 +1117,10 @@ impl Engine {
         match ev.etype {
             kc::EV_ABS => {
                 if ev.code == kc::ABS_PRESSURE || ev.code == kc::ABS_MT_PRESSURE {
-                    if self.has_mt_tracking && self.primary.is_some() && self.slot != self.primary.unwrap() {
+                    if self.has_mt_tracking
+                        && self.primary.is_some()
+                        && self.slot != self.primary.unwrap()
+                    {
                         return;
                     }
                     self.pressure = Some(ev.value);
@@ -1142,7 +1170,10 @@ impl Engine {
                     return;
                 }
                 if ev.code == kc::ABS_MT_POSITION_X || ev.code == kc::ABS_X {
-                    if self.has_mt_tracking && self.primary.is_some() && self.slot != self.primary.unwrap() {
+                    if self.has_mt_tracking
+                        && self.primary.is_some()
+                        && self.slot != self.primary.unwrap()
+                    {
                         return;
                     }
                     self.cur_x = ev.value;
@@ -1153,7 +1184,10 @@ impl Engine {
                         self.moved();
                     }
                 } else if ev.code == kc::ABS_MT_POSITION_Y || ev.code == kc::ABS_Y {
-                    if self.has_mt_tracking && self.primary.is_some() && self.slot != self.primary.unwrap() {
+                    if self.has_mt_tracking
+                        && self.primary.is_some()
+                        && self.slot != self.primary.unwrap()
+                    {
                         return;
                     }
                     self.cur_y = ev.value;
@@ -1305,14 +1339,22 @@ impl Engine {
                     "ux",
                     &format!(
                         "{:.1}",
-                        if self.geometry.ux > 0.0 { 1.0 / self.geometry.ux } else { 0.0 }
+                        if self.geometry.ux > 0.0 {
+                            1.0 / self.geometry.ux
+                        } else {
+                            0.0
+                        }
                     ),
                 ),
                 (
                     "uy",
                     &format!(
                         "{:.1}",
-                        if self.geometry.uy > 0.0 { 1.0 / self.geometry.uy } else { 0.0 }
+                        if self.geometry.uy > 0.0 {
+                            1.0 / self.geometry.uy
+                        } else {
+                            0.0
+                        }
                     ),
                 ),
             ],

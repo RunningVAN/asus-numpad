@@ -297,7 +297,9 @@ pub fn current() -> Lang {
 
 /// 当前语言文件来自哪个路径（None = 用内置文案）。
 pub fn current_source() -> Option<PathBuf> {
-    GLOBAL.get().and_then(|c| c.source().map(|p| p.to_path_buf()))
+    GLOBAL
+        .get()
+        .and_then(|c| c.source().map(|p| p.to_path_buf()))
 }
 
 fn catalog() -> &'static Catalog {
@@ -412,7 +414,10 @@ mod tests {
         let c = Catalog::from_text(Lang::ZhTw, "only.here = 只有這一條\n");
         assert_eq!(c.get("only.here"), "只有這一條");
         // 英文内置里有 bright.follow.on，繁体缺失时应回落到英文
-        assert_eq!(c.get("bright.follow.on"), Catalog::from_text(Lang::En, "").get("bright.follow.on"));
+        assert_eq!(
+            c.get("bright.follow.on"),
+            Catalog::from_text(Lang::En, "").get("bright.follow.on")
+        );
         assert_eq!(c.get("no.such.key.at.all"), "no.such.key.at.all");
     }
 

@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# 按机型分别出 RPM：每个机型一份二进制 + 一份包，包之间互斥。
+# 按机型分别出 RPM：每个机型一份二进制 + 一份包，包之间互斥。macOS/Linux 均可跑。
 #
-# 用法（在 macOS 或 Linux 上都能跑；macOS 走 zig 交叉编译）：
-#   ./packaging/build-skus.sh                 # 出 skus.tsv 里全部机型
-#   ./packaging/build-skus.sh g634 g615       # 只出指定机型
-#   ./packaging/build-skus.sh --universal     # 额外出一个不做机型校验的兼容包
-#   ASUS_OUT=/tmp/out ./packaging/build-skus.sh
+#   ./packaging/build-skus.sh                 # skus.tsv 里全部机型
+#   ./packaging/build-skus.sh g614 g615       # 只出指定机型
+#   ./packaging/build-skus.sh --universal     # 额外出不校验机型的兼容包
 #
-# 前置：cargo（x86_64-unknown-linux-gnu target 已装）、python3；
-#       macOS 另需 zig 交叉链接器，通过 ASUS_ZIGCC 指定（默认找 ../zigcc.sh 或 $HOME/zig/zigcc.sh）。
+# 前置：cargo（含 x86_64-unknown-linux-gnu target）、python3；macOS 另需 zig（ASUS_ZIGCC）。
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -122,7 +122,9 @@ impl BrightnessFollower {
     fn read_kbd(&mut self) -> Option<u32> {
         if let Some(v) = read_u32(&self.dir.join("brightness")) {
             if self.max_kbd == 0 {
-                self.max_kbd = read_u32(&self.dir.join("max_brightness")).unwrap_or(3).max(1);
+                self.max_kbd = read_u32(&self.dir.join("max_brightness"))
+                    .unwrap_or(3)
+                    .max(1);
             }
             return Some(v);
         }
