@@ -112,19 +112,15 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// 背光与系统 NumLock 的联动方式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum NumLockMode {
     /// 只在 NumLock 已开时点灯；关闭时补按一次 NumLock
+    #[default]
     Sync,
     /// 无条件切换 NumLock
     Toggle,
     /// 不动 NumLock
     Off,
-}
-
-impl Default for NumLockMode {
-    fn default() -> Self {
-        NumLockMode::Sync
-    }
 }
 
 impl NumLockMode {
@@ -140,34 +136,25 @@ impl NumLockMode {
 /// 计算器联动模式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum CalcMode {
     /// 长按左上图标区（NUMADV_Trigger_FC = 40 帧）
+    #[default]
     Long,
     /// 关闭
     Off,
 }
 
-impl Default for CalcMode {
-    fn default() -> Self {
-        CalcMode::Long
-    }
-}
-
 /// 混合模式开关：官方 dwSupport_MixedMode = 1 的落地开关。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MixedMode {
     /// 有虚拟触摸板就开启（等同官方默认）
+    #[default]
     Auto,
     /// 强制开启
     On,
     /// 纯数字键盘（光标不可用）
     Off,
-}
-
-impl Default for MixedMode {
-    fn default() -> Self {
-        MixedMode::Auto
-    }
 }
 
 impl MixedMode {
@@ -1058,8 +1045,10 @@ mod tests {
 
     #[test]
     fn manual_step_ignored_when_following() {
-        let mut c = Config::default();
-        c.manual_brightness_step = 1;
+        let mut c = Config {
+            manual_brightness_step: 1,
+            ..Config::default()
+        };
         assert!(c.follow_keyboard_brightness);
         // 跟随开：effective_levels 用整表，固定档不参与点灯
         assert_eq!(c.effective_levels().len(), 8);
@@ -1085,9 +1074,11 @@ mod tests {
 
     #[test]
     fn manual_levels_use_custom_table() {
-        let mut c = Config::default();
-        // 自定义档表：档数由长度决定（这里 3 档），亮度逐档照写，不做等分
-        c.manual_brightness_levels = Some(vec![0x41, 0x44, 0x48]);
+        let mut c = Config {
+            // 自定义档表：档数由长度决定（这里 3 档），亮度逐档照写，不做等分
+            manual_brightness_levels: Some(vec![0x41, 0x44, 0x48]),
+            ..Config::default()
+        };
         c.sanitize();
         assert_eq!(c.manual_steps(), 3);
         assert_eq!(c.level_for_step(0), Some(VAL_OFF));
@@ -1203,9 +1194,11 @@ mod tests {
         // 导致 bright 命令写入后 follow/手动档全部丢失，退回默认值）
         let dir = std::env::temp_dir();
         let path = dir.join(format!("asus-numpad-roundtrip-{}.json", std::process::id()));
-        let mut c = Config::default();
-        c.follow_keyboard_brightness = false;
-        c.manual_brightness_step = 2;
+        let c = Config {
+            follow_keyboard_brightness: false,
+            manual_brightness_step: 2,
+            ..Config::default()
+        };
         std::fs::write(&path, c.to_json()).unwrap();
 
         let (back, notes) = Config::load(&path);

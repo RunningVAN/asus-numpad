@@ -365,7 +365,7 @@ pub fn suggest_all_for(identity: &DmiIdentity) -> Vec<&'static Sku> {
         }
     }
     // 权重降序；同权重保持 SKUS 表顺序（代次先后），结果稳定可测
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
+    scored.sort_by_key(|&(_, weight)| std::cmp::Reverse(weight));
     let mut out: Vec<&'static Sku> = Vec::new();
     for (sku, _) in scored {
         if !out.iter().any(|s| s.id == sku.id) {

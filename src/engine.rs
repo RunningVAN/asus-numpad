@@ -491,7 +491,7 @@ impl Engine {
 
     fn numlock_enable(&mut self) {
         match self.cfg.numlock {
-            NumLockMode::Off => return,
+            NumLockMode::Off => (),
             NumLockMode::Sync => {
                 if self.numlock_on() == Some(false) {
                     self.click(kc::KEY_NUMLOCK);
@@ -869,11 +869,9 @@ impl Engine {
                 if dist >= self.cfg.gesture_trig_um {
                     self.promote_gesture();
                 }
-                return;
             }
             Mode::Scroll | Mode::Pinch | Mode::AppGesture => {
                 // 滚动/缩放/应用手势整体交给桌面输入栈，驱动只做拦截不做合成
-                return;
             }
             Mode::Numlock => {
                 // 官方 NUMPAD_09/10：长按期间漂移 > 2741 µm 计一次失败，累计 3 次判废；
@@ -890,23 +888,20 @@ impl Engine {
                 } else {
                     self.fail_count = 0;
                 }
-                return;
             }
             Mode::Numadv => {
                 if dist > self.cfg.gesture_trig_um {
                     self.mode = Mode::None;
                 }
-                return;
             }
-            Mode::Key => {
+            Mode::Key
                 // 官方 GESTURE_05：移动 ≥ 4838µm 由点击转手势，取消按键
-                if dist >= self.cfg.gesture_trig_um {
+                if dist >= self.cfg.gesture_trig_um => {
                     if let Some(k) = self.pressed_key.take() {
                         self.release(k);
                     }
                     self.mode = Mode::Gesture;
                 }
-            }
             _ => {}
         }
     }
@@ -968,12 +963,12 @@ impl Engine {
 
         // NumLock 长按（官方 62 帧 = 496 ms）
         if self.mode == Mode::Numlock && !self.fired {
-            if self.frames_since(self.t0) >= self.numlock_frames() as f64 {
-                if self.geometry.in_numlock(self.cur_x, self.cur_y) {
-                    self.fired = true;
-                    self.mode = Mode::Fired;
-                    self.toggle();
-                }
+            if self.frames_since(self.t0) >= self.numlock_frames() as f64
+                && self.geometry.in_numlock(self.cur_x, self.cur_y)
+            {
+                self.fired = true;
+                self.mode = Mode::Fired;
+                self.toggle();
             }
             return;
         }
@@ -1199,19 +1194,16 @@ impl Engine {
                     }
                 }
             }
-            kc::EV_KEY => {
-                if ev.code == kc::BTN_TOOL_FINGER && !self.has_mt_tracking {
-                    if ev.value == 1 && !self.down {
-                        self.begin_contact();
-                    } else if ev.value == 0 && self.down {
-                        self.end_contact();
-                    }
-                } else if ev.code == kc::BTN_TOUCH && !self.has_mt_tracking {
-                    if ev.value == 1 && !self.down {
-                        self.begin_contact();
-                    } else if ev.value == 0 && self.down {
-                        self.end_contact();
-                    }
+            // 没有 MT 跟踪时，手指按下/抬起只能靠 BTN_TOOL_FINGER 或 BTN_TOUCH，
+            // 两者语义一致，合并成同一个 arm
+            kc::EV_KEY
+                if (ev.code == kc::BTN_TOOL_FINGER || ev.code == kc::BTN_TOUCH)
+                    && !self.has_mt_tracking =>
+            {
+                if ev.value == 1 && !self.down {
+                    self.begin_contact();
+                } else if ev.value == 0 && self.down {
+                    self.end_contact();
                 }
             }
             _ => {}

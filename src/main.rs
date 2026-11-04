@@ -1103,7 +1103,7 @@ fn cmd_led(cfg: &Config, value: Option<&str>) -> Result<i32> {
         Some(v) => {
             let parsed = match v.strip_prefix("0x") {
                 Some(hex) => u8::from_str_radix(hex, 16).ok(),
-                None => u8::from_str_radix(v, 10).ok(),
+                None => v.parse::<u8>().ok(),
             };
             match parsed {
                 Some(b) => b,
@@ -1335,23 +1335,20 @@ fn cmd_layout(cfg: &Config, cfg_path: &Path, name: Option<&str>, ids: bool) -> R
             _ => "-",
         };
         println!(
-            "  {mark} {:<12} {:<12} {}",
+            "  {mark} {:<12} {:<12} cols={} i0={} i4={} l0={} l3={} nl={}/{} edges={}/{}/{}/{}",
             e.name,
             e.support.as_str(),
-            format!(
-                "cols={} i0={} i4={} l0={} l3={} nl={}/{} edges={}/{}/{}/{}",
-                e.layout.columns,
-                e.layout.index0,
-                e.layout.index4,
-                e.layout.level0,
-                e.layout.level3,
-                e.layout.numlock_index,
-                e.layout.numlock_level,
-                e.layout.left,
-                e.layout.right,
-                e.layout.up,
-                e.layout.down
-            )
+            e.layout.columns,
+            e.layout.index0,
+            e.layout.index4,
+            e.layout.level0,
+            e.layout.level3,
+            e.layout.numlock_index,
+            e.layout.numlock_level,
+            e.layout.left,
+            e.layout.right,
+            e.layout.up,
+            e.layout.down
         );
     }
     println!();

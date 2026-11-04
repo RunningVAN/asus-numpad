@@ -41,7 +41,7 @@ jobs:
       - name: cargo clippy
         run: |
           rustup component add clippy
-          cargo clippy --all-targets -- -D clippy::correctness
+          cargo clippy --all-targets -- -D warnings
       - name: cargo fmt
         run: |
           rustup component add rustfmt

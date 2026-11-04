@@ -1163,14 +1163,8 @@ mod tests {
             let l = by_name(name).unwrap().layout;
             assert_eq!(l.columns, g3.columns, "{name} 列数不同");
             // 同族布局的键表几何必须落在同一量级（0.1mm 单位，误差不超过 1 格）
-            assert!(
-                (l.index0 as i32 - g3.index0 as i32).abs() <= 10,
-                "{name} index0 差异过大"
-            );
-            assert!(
-                (l.index4 as i32 - g3.index4 as i32).abs() <= 10,
-                "{name} index4 差异过大"
-            );
+            assert!((l.index0 - g3.index0).abs() <= 10, "{name} index0 差异过大");
+            assert!((l.index4 - g3.index4).abs() <= 10, "{name} index4 差异过大");
         }
     }
 

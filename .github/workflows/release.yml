@@ -38,10 +38,10 @@ jobs:
         run: if [ ! -f Cargo.lock ]; then cargo generate-lockfile; fi
       - name: cargo test
         run: cargo test --all-targets
-      - name: cargo clippy（correctness 门槛）
+      - name: cargo clippy（-D warnings）
         run: |
           rustup component add clippy
-          cargo clippy --all-targets -- -D clippy::correctness
+          cargo clippy --all-targets -- -D warnings
       - name: cargo fmt
         run: |
           rustup component add rustfmt
@@ -83,7 +83,7 @@ jobs:
               apt-get install -y --no-install-recommends curl ca-certificates dpkg-dev fakeroot build-essential
               curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
               ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
-            build: ./packaging/deb/make-deb.sh --out dist
+            build: bash ./packaging/deb/make-deb.sh --out dist
           - name: deb-ubuntu
             image: ubuntu:24.04
             deps: |
@@ -92,20 +92,20 @@ jobs:
               apt-get install -y --no-install-recommends curl ca-certificates dpkg-dev build-essential
               curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
               ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
-            build: ./packaging/deb/make-deb.sh --out dist
+            build: bash ./packaging/deb/make-deb.sh --out dist
           # 一套 spec 同时覆盖 Fedora 与 openSUSE：不依赖发行版私有宏
           - name: rpm-fedora
             image: fedora:latest
             deps: |
               set -eux
               dnf install -y cargo rust rpm-build systemd-rpm-macros tar gzip
-            build: ./packaging/rpm/make-rpm.sh --out dist
+            build: bash ./packaging/rpm/make-rpm.sh --out dist
           - name: rpm-opensuse
             image: opensuse/tumbleweed:latest
             deps: |
               set -eux
               zypper --non-interactive install --no-recommends cargo rust rpm-build tar gzip
-            build: ./packaging/rpm/make-rpm.sh --out dist
+            build: bash ./packaging/rpm/make-rpm.sh --out dist
           - name: arch
             image: archlinux:latest
             deps: |
@@ -114,7 +114,7 @@ jobs:
               id builder >/dev/null 2>&1 || useradd -m builder
               echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
               chown -R builder:builder /build
-            build: su builder -c 'cd /build && ./packaging/arch/make-arch.sh --out dist'
+            build: su builder -c 'cd /build && bash ./packaging/arch/make-arch.sh --out dist'
           - name: alpine
             image: alpine:latest
             deps: |
@@ -125,7 +125,7 @@ jobs:
               su builder -c 'export HOME=/home/builder; abuild-keygen -a -i -n' || true
               chown -R builder:builder /build
             # abuild 不接受 root 运行，且必须有自己的签名密钥，都放在 builder 下
-            build: su builder -c 'export HOME=/home/builder; cd /build && ./packaging/alpine/make-alpine.sh --out dist'
+            build: su builder -c 'export HOME=/home/builder; cd /build && bash ./packaging/alpine/make-alpine.sh --out dist'
 
     steps:
       - uses: actions/checkout@v4
