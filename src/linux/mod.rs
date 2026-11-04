@@ -291,14 +291,14 @@ fn geometry_from_abs(
     let ux = if xi.resolution > 0 {
         xi.resolution as f64 / 1000.0
     } else {
-        let width_um = (xi.maximum - xi.minimum) as f64 * (cfg.touchpad_width_mm as f64) * 1000.0
+        let width_um = (xi.maximum - xi.minimum) as f64 * cfg.touchpad_width_mm * 1000.0
             / (xi.maximum - xi.minimum).max(1) as f64;
         (xi.maximum - xi.minimum) as f64 / width_um
     };
     let uy = if yi.resolution > 0 {
         yi.resolution as f64 / 1000.0
     } else {
-        let height_um = (yi.maximum - yi.minimum) as f64 * (cfg.touchpad_height_mm as f64) * 1000.0
+        let height_um = (yi.maximum - yi.minimum) as f64 * cfg.touchpad_height_mm * 1000.0
             / (yi.maximum - yi.minimum).max(1) as f64;
         (yi.maximum - yi.minimum) as f64 / height_um
     };

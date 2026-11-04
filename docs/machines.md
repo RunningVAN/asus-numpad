@@ -1,14 +1,3 @@
----
-AIGC:
-    Label: "1"
-    ContentProducer: 001191440300708461136T1XGW3
-    ProduceID: 4a51877c63f78dcbd7bc8ccffcc1ce58_0545717bd87611f19280525400393706
-    ReservedCode1: VNVEhjMnEXqftYnbxTgR/X4jIEe4rpefj7NMzKzu+/8XHZ7NqoYXrdxHM9R8n9hONNnVSGKUzc/2RqWM6TpIp5jpXH+GPlAd2o8MIvssqWGijcRNxyGu+BtysHTCF20KkIxIMp9EMy9q/oyQSSSj3Iq+KjgiU4/y49412QqaR6VBA+tEglGWpn8dbkI=
-    ContentPropagator: 001191440300708461136T1XGW3
-    PropagateID: 4a51877c63f78dcbd7bc8ccffcc1ce58_0545717bd87611f19280525400393706
-    ReservedCode2: VNVEhjMnEXqftYnbxTgR/X4jIEe4rpefj7NMzKzu+/8XHZ7NqoYXrdxHM9R8n9hONNnVSGKUzc/2RqWM6TpIp5jpXH+GPlAd2o8MIvssqWGijcRNxyGu+BtysHTCF20KkIxIMp9EMy9q/oyQSSSj3Iq+KjgiU4/y49412QqaR6VBA+tEglGWpn8dbkI=
----
-
 # 跨机型支持
 
 ## 为什么同模组天然通用

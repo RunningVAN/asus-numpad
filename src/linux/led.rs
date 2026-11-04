@@ -393,11 +393,9 @@ impl FeatureProbe {
 ///
 /// 触摸板一次会导出多个 hidraw 接口，只有带 `0x0d` Feature 的那个能点灯；
 /// 选错接口时 ioctl 会返回 EINVAL/ENOENT，所以这里先按描述符筛一遍。
-fn has_feature_report(path: &str, report_id: u8) -> bool {
-    probe_feature_report(path, report_id).has()
-}
-
-/// 同 [`has_feature_report`]，但区分失败原因（权限 / 缺失 / 未知）。
+///
+/// 返回值区分「有 / 确实没有 / 打不开」三种情况：权限不足被打包成「没有」，
+/// 会把排查方向带偏到「机型不对」，所以这里不用 bool。
 pub fn probe_feature_report(path: &str, report_id: u8) -> FeatureProbe {
     let fd = match open_ro(path) {
         Ok(fd) => fd,
@@ -575,9 +573,7 @@ pub fn find_hidraw() -> Option<String> {
         probes.push(probe);
     }
 
-    let Some(idx) = pick_best(&cands) else {
-        return None;
-    };
+    let idx = pick_best(&cands)?;
     let (vid, pid, _) = cands[idx];
     let dev = devs[idx].clone();
     let probe = probes[idx];
