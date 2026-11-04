@@ -2,7 +2,7 @@
 
 版本号跟包版本一致；`-N` 后缀是发版前的构建号。
 
-## 未发布
+## 1.1.1
 
 ### 亮度
 
@@ -10,6 +10,16 @@
   即可「从全灭到最亮」四档。此前 0 会被当成越界值剔除，导致四档变三档。
 - 自定义档表增加**严格递增校验**：倒序或并列档位会整表丢弃并给出提示，回落线性等分，
   避免 `bright 2` 反而比 `bright 1` 更暗。
+
+### 出包与持续集成
+
+- Arch 包在 CI 容器里真正出得来了：makepkg 拒绝 `root`，改由 `builder` 用户构建，
+  并改用发行版自带的 `rust` 包（rustup 的默认 toolchain 绑在 `HOME` 上，跨用户即失效）。
+- Arch 包产物路径修正：`--out` 统一规范成绝对路径，makepkg 在 `archbuild/` 子目录里跑完
+  不再把包丢在子目录。
+- RPM 构建容器补 `gcc`：`rpm-build` 不带编译器，链接阶段报 `linker cc not found`。
+- 出包日志改为 artifact 上传 + `diagnose` job 汇总推 `ci-logs` 分支，不再依赖容器内 `git`。
+- `packaging/build.sh` 补 `alpine` / `tarball` 两条分支，未知目标直接报错，避免静默少产物。
 
 ## 1.1.0
 
