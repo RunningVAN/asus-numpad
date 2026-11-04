@@ -7,9 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
-use asus_numpad::config::{
-    self, CalcMode, Config, MixedMode, NumLockMode, MANUAL_BRIGHTNESS_STEPS, VAL_OFF,
-};
+use asus_numpad::config::{self, CalcMode, Config, MixedMode, NumLockMode, VAL_OFF};
 use asus_numpad::i18n::{self, Lang, LangSource};
 use asus_numpad::keycodes as kc;
 use asus_numpad::layout::{Geometry, KeyMode, COLS, KEY_GRID, ROWS, UM_PER_LAYOUT_UNIT};
@@ -757,7 +755,13 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
         "{}",
         i18n::tf("check.b_bright", &[("text", &brightness_report(cfg))])
     );
-    println!("{}", i18n::t("check.b_bright_cmd"));
+    println!(
+        "{}",
+        i18n::tf(
+            "check.b_bright_cmd",
+            &[("steps", &cfg.manual_steps().to_string())]
+        )
+    );
     let cur = i18n::current();
     println!(
         "{}",
@@ -871,12 +875,15 @@ fn print_bright_status(cfg: &Config) {
         "{}",
         i18n::tf(
             "bright.status_step",
-            &[("step", &cfg.manual_brightness_step.to_string())]
+            &[
+                ("step", &cfg.manual_brightness_step.to_string()),
+                ("steps", &cfg.manual_steps().to_string()),
+            ]
         )
     );
 
     let mut table = Vec::new();
-    for step in 1..=MANUAL_BRIGHTNESS_STEPS {
+    for step in 1..=cfg.manual_steps() {
         let v = cfg.level_for_step(step).unwrap_or(VAL_OFF);
         table.push(format!("{step}→0x{v:02x}"));
     }
@@ -1167,11 +1174,8 @@ fn cmd_bright(
         }
         Some("cycle") | Some("next") => {
             let cur = cfg.manual_brightness_step;
-            let next = if cur == 0 || cur >= MANUAL_BRIGHTNESS_STEPS {
-                1
-            } else {
-                cur + 1
-            };
+            let steps = cfg.manual_steps();
+            let next = if cur == 0 || cur >= steps { 1 } else { cur + 1 };
             println!(
                 "{}",
                 i18n::tf(
@@ -1182,8 +1186,9 @@ fn cmd_bright(
             apply_step(cfg, cfg_path, next)
         }
         Some("up") | Some("+") => {
-            let cur = cfg.manual_brightness_step.clamp(1, MANUAL_BRIGHTNESS_STEPS);
-            let next = (cur + 1).min(MANUAL_BRIGHTNESS_STEPS);
+            let steps = cfg.manual_steps();
+            let cur = cfg.manual_brightness_step.clamp(1, steps);
+            let next = (cur + 1).min(steps);
             println!(
                 "{}",
                 i18n::tf(
@@ -1194,7 +1199,8 @@ fn cmd_bright(
             apply_step(cfg, cfg_path, next)
         }
         Some("down") | Some("-") => {
-            let cur = cfg.manual_brightness_step.clamp(1, MANUAL_BRIGHTNESS_STEPS);
+            let steps = cfg.manual_steps();
+            let cur = cfg.manual_brightness_step.clamp(1, steps);
             let next = cur.saturating_sub(1).max(1);
             println!(
                 "{}",
@@ -1206,8 +1212,9 @@ fn cmd_bright(
             apply_step(cfg, cfg_path, next)
         }
         Some(other) => {
+            let steps = cfg.manual_steps();
             let step: u8 = match other.parse::<u8>() {
-                Ok(v) if v <= MANUAL_BRIGHTNESS_STEPS => v,
+                Ok(v) if v <= steps => v,
                 _ => {
                     println!("{}", i18n::t("bright.usage"));
                     return Ok(2);
@@ -1462,8 +1469,8 @@ fn sku_gate(allow_mismatch: bool) -> Option<i32> {
 /// 输出本安装包的机型与本机 DMI 的比对结果。
 fn sku_block() -> String {
     let pack = sku::build_sku();
-    let dmi = sku::dmi_product_name();
-    let verdict = sku::verdict_for(pack, dmi.as_deref());
+    let identity = sku::dmi_identity();
+    let verdict = sku::verdict_for_identity(pack, &identity);
     let mut out = i18n::tf(
         "sku.pack",
         &[("sku", pack.display), ("pkg", sku::build_package_name())],
@@ -1471,18 +1478,46 @@ fn sku_block() -> String {
     out.push('\n');
     out.push_str(&i18n::tf("sku.note", &[("note", pack.note)]));
     out.push('\n');
-    match &dmi {
-        Some(d) => out.push_str(&i18n::tf("sku.dmi", &[("dmi", d)])),
-        None => out.push_str(&i18n::t("sku.dmi_unknown")),
+    if identity.haystacks().is_empty() {
+        out.push_str(&i18n::t("sku.dmi_unknown"));
+    } else {
+        out.push_str(&i18n::tf("sku.dmi", &[("dmi", &identity.label())]));
     }
     out.push('\n');
     let verdict_text = match &verdict {
         sku::DmiVerdict::Match => i18n::t("sku.verdict.match"),
         sku::DmiVerdict::Mismatch(d) => i18n::tf("sku.verdict.mismatch", &[("dmi", d)]),
+        sku::DmiVerdict::NonAsus(v) => i18n::tf("sku.verdict.non_asus", &[("vendor", v)]),
         sku::DmiVerdict::Unknown => i18n::t("sku.verdict.unknown"),
         sku::DmiVerdict::NotEnforced => i18n::t("sku.verdict.not_enforced"),
     };
     out.push_str(&i18n::tf("sku.verdict", &[("verdict", &verdict_text)]));
+    // 装错包时直接给出该装的包，省掉用户自己翻机型表
+    if matches!(
+        verdict,
+        sku::DmiVerdict::Mismatch(_) | sku::DmiVerdict::NonAsus(_)
+    ) {
+        // 同一代机型常常只差一位，候选全列出来让用户按自己机器的完整型号挑
+        let cands: Vec<&sku::Sku> = sku::suggest_all_for(&identity)
+            .into_iter()
+            .filter(|s| s.id != pack.id)
+            .take(3)
+            .collect();
+        if !cands.is_empty() {
+            let names = cands
+                .iter()
+                .map(|s| s.display)
+                .collect::<Vec<_>>()
+                .join(" / ");
+            let pkgs = cands
+                .iter()
+                .map(|s| format!("asus-numpad-{}", s.id))
+                .collect::<Vec<_>>()
+                .join(" / ");
+            out.push('\n');
+            out.push_str(&i18n::tf("sku.suggest", &[("sku", &names), ("pkg", &pkgs)]));
+        }
+    }
     out
 }
 

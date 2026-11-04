@@ -31,9 +31,9 @@ cli.lang.help = 介面語言：zh-CN / zh-TW / en / auto（預設 auto = 跟隨�
 cli.cmd.run = 接管觸控板（預設動作）
 cli.cmd.check = 自我檢查：印出官方參數、幾何換算、鍵位圖，並執行離線測項
 cli.cmd.dump = 原樣印出觸控板事件（排障用，不產生按鍵）
-cli.cmd.bright = 亮度調節：三段手動調光 / 是否跟隨鍵盤背光
-cli.cmd.bright.long = 例：`bright 1|2|3`（0 = 熄滅）、`bright up|down|cycle`（逐段/循環）、`bright follow on|off`、`bright status`
-cli.cmd.bright.value = 段位 0/1/2/3，或 up / down / cycle / next / follow / status
+cli.cmd.bright = 亮度調節：四段手動調光（0~最大線性可調、可自訂）/ 是否跟隨鍵盤背光
+cli.cmd.bright.long = 例：`bright 0|1|2|3|4`（0 = 熄滅，1 = 最暗，4 = 最亮，預設線性等分）、`bright up|down|cycle`（逐段/循環）、`bright follow on|off`、`bright status`；段位可用設定項 `manual_brightness_levels` 自行定義
+cli.cmd.bright.value = 段位 0/1/2/3/4（自訂段表時以表長為準），或 up / down / cycle / next / follow / status
 cli.cmd.bright.mode = `follow` 的取值：on / off
 cli.cmd.led = 直發背光命令字（排障用，繞過所有狀態機）
 cli.cmd.led.long = 例：led on | led off | led 0x41..0x48（1..8 段）。用來區分「驅動沒發」與「硬體不認這個值」。
@@ -52,6 +52,9 @@ note.invalid_i2c_addr = --i2c-addr={v} 無法解析，已忽略
 note.invalid_language = language={v} 無法辨識，改以 auto 處理
 note.manual_step_clamped = manual_brightness_step={step} 超出 0..={max}，已收斂至 {max}
 note.levels_dropped = brightness_levels 中有 {n} 項超出 0x{lo}..=0x{hi}，已剔除
+note.manual_levels_dropped = manual_brightness_levels 中有 {n} 項超出 0x{lo}..=0x{hi}，已剔除
+note.manual_levels_truncated = manual_brightness_levels 有 {n} 段，超過硬體上限 {max} 段，已截斷
+note.manual_levels_reset = manual_brightness_levels 剔除越界值後為空，已放棄自訂、回落到線性等分
 note.numlock_zone = numlock_zone={v} 已不再支援，改以整格 cell 處理
 note.read_failed = 讀取 {path} 失敗，改用預設值: {err}
 note.config_migrated = 已將舊設定檔 {from} 遷移到 {to}（舊檔案保留，可自行刪除）
@@ -93,7 +96,7 @@ check.b_grab_no = 否（點擊會穿透）
 check.b_idle =   閒置熄燈          {sec}s（熄燈不結束，觸碰復亮）
 check.b_led =   背光通道          {kind}（{where}）
 check.b_bright =   背光亮度          {text}
-check.b_bright_cmd =   調光命令          asus-numpad bright 1|2|3（0=滅）；asus-numpad bright follow on|off
+check.b_bright_cmd =   調光命令          asus-numpad bright 1..4（0=滅，共 {steps} 段）；asus-numpad bright follow on|off
 check.lang_line =   介面語言          {name}（{code}）
 check.lang_source =   語言來源          {source}
 check.lang_file =   語言檔案          {path}
@@ -108,18 +111,18 @@ bright.follow_switch = 跟隨鍵盤背光：{state}
 bright.follow_on = 開（數字區亮度隨鍵盤背光自動變化）
 bright.follow_off = 關（使用手動固定檔）
 bright.status_dir = 鍵盤背光目錄：{dir}（輪詢 {ms} ms）
-bright.status_step = 手動固定檔：{step}（0=滅，1=暗，2=中，3=亮）
-bright.status_map = 三段對應：0→0x{off}（滅）；{table}
+bright.status_step = 手動固定檔：{step}/{steps}（0=滅，1=最暗，{steps}=最亮）
+bright.status_map = 段位對應：0→0x{off}（滅）；{table}
 bright.status_effective = 生效點燈值：{text}
 bright.measured = 鍵盤背光實測：{kbd}/{max} → 數字區 0x{cur}
 bright.measure_failed = 鍵盤背光實測：讀不到 {dir}（非 ASUS 機型 / asus-wmi 未載入）
 bright.report.follow = 跟隨鍵盤背光 {kbd}/{max} → 0x{level}（{n} 段，{ms} ms 輪詢，{dir}）
 bright.report.follow_nodir = 跟隨鍵盤背光（讀不到 {dir}，退回 0x{level} 點亮）
-bright.report.static = 不跟隨鍵盤背光，固定檔 {step} → 0x{level}（`bright 1|2|3` 調整，`bright follow on` 恢復跟隨）
+bright.report.static = 不跟隨鍵盤背光，固定檔 {step} → 0x{level}（`bright 1..N` 調整，`bright follow on` 恢復跟隨）
 bright.report.no_levels = 讀不到鍵盤背光節點（{dir}），數字區退回 0x{level} 點亮
 
 # ---- 亮度命令 ----
-bright.usage = 用法：asus-numpad bright 0|1|2|3     固定檔（0=滅，1=暗，2=中，3=亮）\n      asus-numpad bright up|down|cycle  三段循環切換\n      asus-numpad bright follow on|off  是否跟隨鍵盤背光\n      asus-numpad bright status         檢視目前狀態
+bright.usage = 用法：asus-numpad bright 0|1..N    固定檔（0=滅；1=最暗；N=最亮，預設 N=4，線性等分）\n      asus-numpad bright up|down|cycle  逐段 / 循環切換\n      asus-numpad bright follow on|off  是否跟隨鍵盤背光\n      asus-numpad bright status         檢視目前狀態與段位對應表
 bright.follow_usage = 用法：asus-numpad bright follow on|off
 bright.err_unmappable = 段位 {step} 無法換算成亮度位元組（請檢查 brightness_levels 設定）
 bright.sent = 已下發亮度 0x{level}（通道 {kind}）
@@ -127,7 +130,7 @@ bright.send_failed = 下發 0x{level} 失敗：通道不通（請檢查 --hidraw
 bright.nonlinux = 目前平台非 Linux，不下發報文（僅顯示換算結果）。
 bright.wrote_step = 已寫入 {path}：manual_brightness_step = {step}，follow_keyboard_brightness = false（備份 {backup}）
 bright.wrote_follow = 已寫入 {path}：follow_keyboard_brightness = {on}（備份 {backup}）
-bright.effect_off = 效果：數字區熄滅（bright 1|2|3 可重新點亮）。
+bright.effect_off = 效果：數字區熄滅（bright 1..N 可重新點亮）。
 bright.effect_fixed = 效果：數字區固定 0x{level}（不再隨鍵盤背光變化）。
 bright.effect_follow_on = 效果：數字區亮度重新跟隨鍵盤背光（鍵盤背光一變化即同步）。
 bright.effect_follow_off = 效果：數字區改用固定檔 {step}（0x{level}），鍵盤背光變化不再影響數字區。
@@ -269,11 +272,13 @@ check.led_probe_i2c_none = 背光 i2c: 未發現 0x38/0x15 裝置
 # ---- 机型（SKU）分包 ----
 sku.pack = 本安裝套件機型：{sku}（套件名 {pkg}）
 sku.note = 機型備註：{note}
-sku.dmi = 本機 DMI 型號：{dmi}
-sku.dmi_unknown = 本機 DMI 型號：讀不到（非 Linux 或 /sys/class/dmi/id 不可讀）
+sku.dmi = 本機 DMI 身分：{dmi}
+sku.dmi_unknown = 本機 DMI 身分：讀不到（非 Linux 或 /sys/class/dmi/id 不可讀）
+sku.verdict.non_asus = 不匹配——本機廠商是 {vendor}，不是 ASUS，裝錯包了
 sku.verdict = 機型校驗：{verdict}
 sku.verdict.match = 相符，繼續
 sku.verdict.mismatch = 不相符——本機是 {dmi}，裝錯套件了
 sku.verdict.unknown = 無法判定，按放行處理（讀不到 DMI 不等於機型不對）
 sku.verdict.not_enforced = 未啟用（相容套件不校驗機型）
+sku.suggest = 建議改裝：{sku}（{pkg}）
 err.sku_mismatch = 本套件只服務「{sku}」，與本機不符，已停止啟動。請改裝 {pkg}；強制執行加 --allow-sku-mismatch。

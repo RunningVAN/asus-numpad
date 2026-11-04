@@ -1,4 +1,4 @@
-.TH ASUS-NUMPAD 1 "2026-11-04" "asus-numpad 1.0.0" "用户命令"
+.TH ASUS-NUMPAD 1 "2026-11-04" "asus-numpad 1.1.0" "用户命令"
 .SH 名称
 asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .SH 概要
@@ -13,7 +13,7 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .br
 .B asus-numpad
 .RI [ 选项 ] " " bright
-.RI [ 0|1|2|3|up|down|cycle|status ]
+.RI [ 0|1..4|up|down|cycle|status ]
 .br
 .B asus-numpad
 .RI [ 选项 ] " " bright " follow " on|off
@@ -43,18 +43,21 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .B dump
 打印触摸板原始事件流（排查手势识别问题用）。Ctrl-C 结束。
 .TP
-.BI bright " 0|1|2|3"
-手动固定档：0 熄灭、1 暗、2 中、3 亮。写入配置文件后立即下发一次，
-服务在跑时自动重启让新档常驻。手动选档等价于关闭「跟随键盘背光」。
+.BI bright " 0|1..N"
+手动固定档：0 熄灭，1 最暗，N 最亮（默认 N=4）。档位由硬件全档表线性等分得到，
+默认 8 档取 4 个等分点（0x41 / 0x43 / 0x46 / 0x48），可用配置项
+\fImanual_brightness_levels\fP 自定义档表（上限为 \fIbrightness_levels\fP 的长度）。
+写入配置文件后立即下发一次，服务在跑时自动重启让新档常驻。
+手动选档等价于关闭「跟随键盘背光」。
 .TP
 .BI bright " up|down|cycle"
-逐档变亮 / 变暗 / 三档循环（1→2→3→1）。\fIup\fP 封顶 3，\fIdown\fP 最低 1。
+逐档变亮 / 变暗 / 全部档位循环（1→…→N→1）。\fIup\fP 封顶 N，\fIdown\fP 最低 1。
 .TP
 .BI bright " follow " on|off
 是否跟随键盘背光：\fIon\fP 恢复跟随，\fIoff\fP 固定在当前手动档。
 .TP
 .B bright status
-打印当前模式、手动档、三档映射与键盘背光实测值，只读。
+打印当前模式、手动档、档位映射与键盘背光实测值，只读。
 .TP
 .B lang
 不带参数时打印当前语言、语言来源、可用语言与语言文件所在目录。
@@ -102,7 +105,7 @@ NumLock 联动策略，默认 toggle。
 布局代号，目前仅有 GH3XLNDZ 的有线框数据。
 .TP
 .B \-\-allow\-unverified
-放行「未真机验证的布局」。默认情况下布局支持级别为 family（同结构未验证）
+放行「未收录键表的同族布局」。默认情况下布局支持级别为 family（同结构未收录）
 或 unsupported（键表结构不同、套用会按错键）时驱动拒绝启动；加本开关可强行运行，
 仅建议对 family 使用，并配合 \fBcheck\fP 逐键核对。
 .TP

@@ -59,6 +59,30 @@ pub fn map_kbd_level(kbd: u32, max_kbd: u32, levels: &[u8]) -> u8 {
     levels[idx.min(last)]
 }
 
+/// 从全档表里线性取 `n` 个点（含首尾两端），用于生成手动档位表。
+///
+/// 语义是「从最暗到最亮等分」：`levels.len() == 8`、`n == 4` 时取
+/// 索引 `0 / 2.33 / 4.67 / 7` 四舍五入 → `0x41 / 0x43 / 0x46 / 0x48`。
+///
+/// 与 [`map_kbd_level`] 的区别：那边是「键盘有 max 档、按比例换算」，
+/// 首档从 `1/max` 起算；这里首档固定落在最暗档、末档固定落在最亮档，
+/// 更适合「手动四档从 0（最暗）线性拉到最大」的直觉。
+pub fn linear_levels(levels: &[u8], n: usize) -> Vec<u8> {
+    if levels.is_empty() || n == 0 {
+        return Vec::new();
+    }
+    if n == 1 {
+        return vec![levels[levels.len() - 1]];
+    }
+    let last = levels.len() - 1;
+    (0..n)
+        .map(|i| {
+            let pos = (i as f64 / (n - 1) as f64) * last as f64;
+            levels[(pos.round() as usize).min(last)]
+        })
+        .collect()
+}
+
 /// 跟随器：持有 sysfs 路径、档位表与上一次读到的值。
 pub struct BrightnessFollower {
     /// 配置里给的原始路径，重解析时用它做起点（不能拿已解析结果去解析）

@@ -1,13 +1,14 @@
 [package]
 name = "asus-numpad"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 rust-version = "1.75"
 description = "ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动，官方 AlgoParameters 对齐"
-license = "MIT"
-repository = "https://example.invalid/asus-numpad"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/RunningVAN/asus-numpad"
 keywords = ["asus", "numpad", "touchpad", "numberpad"]
 categories = ["hardware-support"]
+readme = "README.md"
 
 [[bin]]
 name = "asus-numpad"

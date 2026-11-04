@@ -1,6 +1,5 @@
 //! 配置：默认值即官方 AlgoParameters 原值，改动即偏离官方。
 
-use crate::brightness::map_kbd_level;
 use crate::keycodes as kc;
 use crate::layout::KeyMode;
 use serde::de::{self, Deserializer, Visitor};
@@ -72,9 +71,9 @@ pub const FORCE_LEVEL_NUMPAD: u8 = 2;
 
 /// 点灯命令取值（官方仅两态，另加一个解锁值）
 ///
-/// - `0x01` / `0x00`：亮 / 灭，hidraw FEATURE 0x0d 与 i2c 两条通道通用（真机已验证）
+/// - `0x01` / `0x00`：亮 / 灭，hidraw FEATURE 0x0d 与 i2c 两条通道通用
 /// - `0x60`：i2c 直写 EC 的解锁前置字，hidraw FEATURE 通道**不需要**；
-///   亮度档 `0x41..=0x48` 对应 1..8 档，同样已在真机实测通过
+///   亮度档 `0x41..=0x48` 对应 1..8 档
 pub const VAL_UNLOCK: u8 = 0x60;
 pub const VAL_ON: u8 = 0x01;
 pub const VAL_OFF: u8 = 0x00;
@@ -82,9 +81,17 @@ pub const VAL_OFF: u8 = 0x00;
 pub const VAL_BRIGHTNESS_BASE: u8 = 0x40;
 pub const VAL_BRIGHTNESS_MAX: u8 = 8;
 
-/// 手动调光的档数（`asus-numpad bright 1|2|3`）：
-/// 三档在 `brightness_levels` 上均匀取值（默认 8 档表 → 0x41 / 0x45 / 0x48）。
-pub const MANUAL_BRIGHTNESS_STEPS: u8 = 3;
+/// 手动调光的默认档数（`asus-numpad bright 1|2|3|4`，另有 0 = 熄灭）。
+///
+/// 四档在 `brightness_levels` 上**线性等分**（含最暗与最亮两端）：
+/// 默认 8 档表 → `0x41 / 0x43 / 0x46 / 0x48`。
+///
+/// 这只是默认值：`manual_brightness_levels` 给了自定义表时，档数以该表长度为准，
+/// 亮度直接取表内写死的值（见 [`Config::manual_steps`]）。
+pub const MANUAL_BRIGHTNESS_STEPS: u8 = 4;
+
+/// 自定义手动档位表的长度上限（受硬件 0x41..=0x48 八个物理档限制）。
+pub const MANUAL_BRIGHTNESS_MAX_STEPS: usize = 8;
 
 pub const PROC_INPUT_DEVICES: &str = "/proc/bus/input/devices";
 /// 配置文件正式路径（与 rpm 包内安装路径一致）。
@@ -248,7 +255,7 @@ pub struct Config {
     /// 官方布局名：`auto` = 按触摸板 HID 硬件 ID 自动识别（推荐）；
     /// 也可写死某套布局（`GH3XLNDZ` / `GH2XLNDZ` / `GH4XLNDZ` 等，见 `asus-numpad layout`）。
     pub layout_name: String,
-    /// 允许使用「尚未真机验证」的布局出键。
+    /// 允许使用「尚未收录键表」的同族布局出键。
     ///
     /// 默认 `false`：`auto` 识别到非 GH3XLNDZ 布局时只报告不跑，避免键位表不同
     /// 导致按错键；确认可用后再置 `true`（或命令行加 `--allow-unverified`）。
@@ -289,9 +296,21 @@ pub struct Config {
     pub brightness_levels: Vec<u8>,
     /// 键盘背光轮询间隔（ms）
     pub brightness_poll_ms: u32,
-    /// 手动三档调光的固定档（0 = 熄灭；1 暗 / 2 中 / 3 亮）。
+    /// 手动调光的固定档（0 = 熄灭；1..= [`Config::manual_steps`] 从最暗到最亮）。
     /// 仅在「不跟随键盘背光」时作为常亮档使用；`asus-numpad bright N` 会写入这里。
     pub manual_brightness_step: u8,
+    /// 自定义手动档位表（从暗到亮），留空 = 按 `manual_brightness_steps` 在
+    /// `brightness_levels` 上线性等分。
+    ///
+    /// 允许的取值只有硬件的 `0x41..=0x48` 八档，长度 1..=8；档数由长度决定，
+    /// 例如 `[65, 68, 72]` → `bright 1|2|3`。这一项让「四档」不必是等分——
+    /// 想把 90% 亮度压在最后一档，直接写 `[65, 66, 67, 72]` 即可。
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "de_opt_brightness_levels"
+    )]
+    pub manual_brightness_levels: Option<Vec<u8>>,
     // ---- 通道 ----
     pub i2c_transfer: String,
     pub i2c_bus: Option<i32>,
@@ -349,6 +368,7 @@ impl Default for Config {
             brightness_levels: default_brightness_levels(),
             brightness_poll_ms: 500,
             manual_brightness_step: MANUAL_BRIGHTNESS_STEPS,
+            manual_brightness_levels: None,
             i2c_transfer: "i2ctransfer".to_string(),
             i2c_bus: None,
             i2c_addr: None,
@@ -377,6 +397,23 @@ where
     D: Deserializer<'de>,
 {
     let raw = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    parse_level_list::<D::Error>(&raw)
+}
+
+/// 同上，但允许整项缺失 / 显式 `null`（`manual_brightness_levels` 用）。
+fn de_opt_brightness_levels<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = Option::<Vec<serde_json::Value>>::deserialize(deserializer)?;
+    match raw {
+        None => Ok(None),
+        Some(list) => parse_level_list::<D::Error>(&list).map(Some),
+    }
+}
+
+/// 档位数组解析的共用实现（与 serde 解耦，方便两处复用）。
+fn parse_level_list<E: de::Error>(raw: &[serde_json::Value]) -> Result<Vec<u8>, E> {
     let mut out = Vec::with_capacity(raw.len());
     for (idx, item) in raw.iter().enumerate() {
         let parsed = match item {
@@ -415,38 +452,55 @@ impl Config {
         }
     }
 
-    /// 手动调光用的档位表：与「是否跟随键盘背光」无关，
-    /// 关掉跟随之后 `bright 1|2|3` 依然可用。
+    /// 手动调光档数：有自定义表时以表长为准，否则用默认 [`MANUAL_BRIGHTNESS_STEPS`]。
+    pub fn manual_steps(&self) -> u8 {
+        match &self.manual_brightness_levels {
+            Some(v) if !v.is_empty() => v.len().min(MANUAL_BRIGHTNESS_MAX_STEPS) as u8,
+            _ => MANUAL_BRIGHTNESS_STEPS,
+        }
+    }
+
+    /// 手动调光用的档位表（从暗到亮）。
+    ///
+    /// * 配了 `manual_brightness_levels` → 原样使用（就是用户写的「自定义」）；
+    /// * 没配 → 在 `brightness_levels`（硬件全档表）上按 `manual_steps()` **线性等分**，
+    ///   首档落最暗、末档落最亮。默认 8 档表 + 4 档 → `0x41 / 0x43 / 0x46 / 0x48`。
+    ///
+    /// 与「是否跟随键盘背光」无关：关掉跟随之后 `bright N` 依然可用。
     pub fn manual_levels(&self) -> Vec<u8> {
-        self.brightness_levels.clone()
+        if let Some(v) = &self.manual_brightness_levels {
+            if !v.is_empty() {
+                return v
+                    .iter()
+                    .take(MANUAL_BRIGHTNESS_MAX_STEPS)
+                    .copied()
+                    .collect();
+            }
+        }
+        crate::brightness::linear_levels(&self.brightness_levels, MANUAL_BRIGHTNESS_STEPS as usize)
     }
 
     /// 手动档位 → 报文亮度字节。
     ///
     /// - `step = 0` → `0x00`（熄灭）
-    /// - `step = 1..=MANUAL_BRIGHTNESS_STEPS` → **与「跟随键盘背光」同一套换算**：
-    ///   等价于键盘有 `MANUAL_BRIGHTNESS_STEPS` 档时的第 `step` 档
-    ///   （默认 8 档表 + 3 档键盘：1 → 0x43，2 → 0x46，3 → 0x48）。
-    ///   两处共用 `map_kbd_level`，`bright follow on|off` 切换时不会出现亮度跳变。
-    /// - 越界 / 档位表为空时返回 `None` / `VAL_ON`
+    /// - `step = 1..=manual_steps()` → 自定义 / 线性表里对应那一档（1 = 最暗，N = 最亮）
+    /// - 越界返回 `None`；档位表为空时退化为 `VAL_ON`
+    ///
+    /// 线性档表默认与「键盘背光恰好有 N 档时的跟随目标」接近但不完全相等
+    /// （跟随按 `step/max` 起算，首档从 `1/max` 起；线性档首档直接落最暗档）。
+    /// 想让两者完全对齐，直接写 `manual_brightness_levels`。
     pub fn level_for_step(&self, step: u8) -> Option<u8> {
         if step == 0 {
             return Some(VAL_OFF);
-        }
-        if step > MANUAL_BRIGHTNESS_STEPS {
-            return None;
         }
         let levels = self.manual_levels();
         if levels.is_empty() {
             return Some(VAL_ON);
         }
-        // 手动三档 ≡ 三档键盘的第 1/2/3 档，直接复用跟随模式的换算，
-        // 避免「手动 1 档比跟随 1 档暗两级」的跳变（0x41 vs 0x43）。
-        Some(map_kbd_level(
-            step as u32,
-            MANUAL_BRIGHTNESS_STEPS as u32,
-            &levels,
-        ))
+        if step as usize > levels.len() {
+            return None;
+        }
+        Some(levels[step as usize - 1])
     }
 
     /// 不跟随键盘背光时点灯用的常亮值：取手动档，0 档视为「用 0x01 点亮」。
@@ -461,7 +515,7 @@ impl Config {
     /// 本机布局对应的 NumLock 长按帧数（NUMPAD_GH3XLNDZ_01 = 62）。
     pub fn numlock_frames(&self) -> u32 {
         // 按「实际生效的布局」取长按帧数：auto 会解析成具体布局名，
-        // 解析不到时回落 GH3XLNDZ（真机验证过的 62 帧 ≈ 496 ms）。
+        // 解析不到时回落 GH3XLNDZ 的 62 帧（≈ 496 ms）。
         match self.layout_entry().name {
             "GH3XLNDZ" => NUMLOCK_TRIGGER_FRAMES_GH3XLNDZ,
             "GH2XLNDZ" | "GH4XLNDZ" => NUMLOCK_TRIGGER_FRAMES_GH2XLNDZ,
@@ -494,15 +548,6 @@ impl Config {
         self.numlock_trigger_frames = self.numlock_trigger_frames.max(1);
         self.poll_interval_ms = self.poll_interval_ms.max(2);
         self.brightness_poll_ms = self.brightness_poll_ms.max(50);
-        if self.manual_brightness_step > MANUAL_BRIGHTNESS_STEPS {
-            let step = self.manual_brightness_step.to_string();
-            let max = MANUAL_BRIGHTNESS_STEPS.to_string();
-            notes.push(crate::i18n::tf(
-                "note.manual_step_clamped",
-                &[("step", &step), ("max", &max)],
-            ));
-            self.manual_brightness_step = MANUAL_BRIGHTNESS_STEPS;
-        }
         if self.keyboard_brightness_dir.is_empty() {
             self.keyboard_brightness_dir = crate::brightness::DEFAULT_DIR.to_string();
         }
@@ -521,6 +566,51 @@ impl Config {
                     ("hi", &format!("{hi:02x}")),
                 ],
             ));
+        }
+        // 自定义手动档表：越界值剔除、空表/超长表直接放弃自定义（回落到线性等分），
+        // 免得手改配置写成 `[0, 255]` 把灯发到哨位上，或写 20 档却没那么多物理档。
+        if let Some(custom) = self.manual_brightness_levels.take() {
+            let mut kept: Vec<u8> = custom
+                .iter()
+                .copied()
+                .filter(|v| (lo..=hi).contains(v))
+                .collect();
+            if kept.len() != custom.len() {
+                let dropped = (custom.len() - kept.len()).to_string();
+                notes.push(crate::i18n::tf(
+                    "note.manual_levels_dropped",
+                    &[
+                        ("n", &dropped),
+                        ("lo", &format!("{lo:02x}")),
+                        ("hi", &format!("{hi:02x}")),
+                    ],
+                ));
+            }
+            if kept.len() > MANUAL_BRIGHTNESS_MAX_STEPS {
+                let n = kept.len().to_string();
+                let max = MANUAL_BRIGHTNESS_MAX_STEPS.to_string();
+                notes.push(crate::i18n::tf(
+                    "note.manual_levels_truncated",
+                    &[("n", &n), ("max", &max)],
+                ));
+                kept.truncate(MANUAL_BRIGHTNESS_MAX_STEPS);
+            }
+            if kept.is_empty() {
+                notes.push(crate::i18n::t("note.manual_levels_reset"));
+            } else {
+                self.manual_brightness_levels = Some(kept);
+            }
+        }
+        // 手动档上限取决于实际档数（自定义表长度可能不是 4）
+        let steps = self.manual_steps();
+        if self.manual_brightness_step > steps {
+            let step = self.manual_brightness_step.to_string();
+            let max = steps.to_string();
+            notes.push(crate::i18n::tf(
+                "note.manual_step_clamped",
+                &[("step", &step), ("max", &max)],
+            ));
+            self.manual_brightness_step = steps;
         }
         if self.numlock_zone != "cell" {
             let value = self.numlock_zone.clone();
@@ -739,6 +829,7 @@ impl Config {
             "brightness_levels": self.brightness_levels,
             "brightness_poll_ms": self.brightness_poll_ms,
             "manual_brightness_step": self.manual_brightness_step,
+            "manual_brightness_levels": self.manual_brightness_levels,
             "led_kind": self.led_kind,
         });
 
@@ -763,7 +854,7 @@ impl Config {
         )
     }
 
-    /// 布局记录：`auto` 或未知名字都回落到 GH3XLNDZ（真机验证过的那套）。
+    /// 布局记录：`auto` 或未知名字都回落到 GH3XLNDZ（键表基准）。
     ///
     /// 实际识别发生在运行时：`linux` 模块会先用触摸板设备名里的 HID 硬件 ID
     /// 查官方映射表，命中后把 `layout_name` 定成具体布局名再调用本函数。
@@ -916,32 +1007,53 @@ mod tests {
     }
 
     #[test]
-    fn manual_three_steps_match_follow_mapping() {
+    fn manual_four_steps_span_dark_to_brightest() {
         let c = Config::default();
-        // 默认 8 档表 0x41..=0x48 + 3 档键盘：手动档必须与跟随映射同值
+        // 默认 8 档表线性四等分（含两端）：0x41 / 0x43 / 0x46 / 0x48
         assert_eq!(c.level_for_step(0), Some(VAL_OFF));
-        assert_eq!(c.level_for_step(1), Some(0x43));
-        assert_eq!(c.level_for_step(2), Some(0x46));
-        assert_eq!(c.level_for_step(3), Some(0x48));
+        assert_eq!(c.level_for_step(1), Some(0x41));
+        assert_eq!(c.level_for_step(2), Some(0x43));
+        assert_eq!(c.level_for_step(3), Some(0x46));
+        assert_eq!(c.level_for_step(4), Some(0x48));
         // 越界档位不接受（由 CLI 拦成用法提示）
-        assert_eq!(c.level_for_step(4), None);
+        assert_eq!(c.level_for_step(5), None);
     }
 
     #[test]
-    fn manual_step_equals_follow_at_same_kbd_level() {
-        // 同一套换算的核心保证：bright N ≡ 3 档键盘调到第 N 档
+    fn linear_steps_are_monotonic_and_cover_ends() {
         let c = Config::default();
-        for step in 1..=MANUAL_BRIGHTNESS_STEPS {
-            assert_eq!(
-                c.level_for_step(step),
-                Some(map_kbd_level(
-                    step as u32,
-                    MANUAL_BRIGHTNESS_STEPS as u32,
-                    &c.brightness_levels
-                )),
-                "step {step} 与跟随映射不一致"
-            );
+        let levels = c.manual_levels();
+        assert_eq!(levels.len(), MANUAL_BRIGHTNESS_STEPS as usize);
+        // 首档 = 最暗档，末档 = 最亮档（「从 0 到最大」的直觉）
+        assert_eq!(
+            levels.first().copied(),
+            c.brightness_levels.first().copied()
+        );
+        assert_eq!(levels.last().copied(), c.brightness_levels.last().copied());
+        // 单调不减，且严格递增（8 档表取 4 点不会撞档）
+        for w in levels.windows(2) {
+            assert!(w[0] < w[1], "档位必须从暗到亮严格递增: {levels:?}");
         }
+    }
+
+    #[test]
+    fn linear_levels_helper_handles_edge_cases() {
+        use crate::brightness::linear_levels;
+        // 空表 / 0 档 → 空
+        assert!(linear_levels(&[], 4).is_empty());
+        assert!(linear_levels(&[0x41, 0x48], 0).is_empty());
+        // 单档恒定把最亮当唯一档（不会因为「只有一档」变暗）
+        assert_eq!(linear_levels(&[0x41, 0x48], 1), vec![0x48]);
+        // 档数与表长相同 → 原样返回
+        assert_eq!(
+            linear_levels(&[0x41, 0x44, 0x48], 3),
+            vec![0x41, 0x44, 0x48]
+        );
+        // 8 档取 2 点 → 两端
+        assert_eq!(
+            linear_levels(&default_brightness_levels(), 2),
+            vec![0x41, 0x48]
+        );
     }
 
     #[test]
@@ -953,9 +1065,11 @@ mod tests {
         assert_eq!(c.effective_levels().len(), 8);
         c.follow_keyboard_brightness = false;
         assert!(c.effective_levels().is_empty());
-        // 跟随关：按手动档常亮
-        assert_eq!(c.static_on_value(), 0x43);
+        // 跟随关：按手动档常亮（1 档 = 最暗 0x41，3 档 = 0x46）
+        assert_eq!(c.static_on_value(), 0x41);
         c.manual_brightness_step = 3;
+        assert_eq!(c.static_on_value(), 0x46);
+        c.manual_brightness_step = 4;
         assert_eq!(c.static_on_value(), 0x48);
         c.manual_brightness_step = 0;
         assert_eq!(c.static_on_value(), VAL_OFF);
@@ -970,16 +1084,62 @@ mod tests {
     }
 
     #[test]
-    fn manual_levels_uses_custom_table() {
+    fn manual_levels_use_custom_table() {
         let mut c = Config::default();
-        c.brightness_levels = vec![0x41, 0x44, 0x46, 0x48];
-        // 4 档表 + 3 档键盘：1 → 索引 1，2 → 索引 2，3 → 索引 3
-        assert_eq!(c.level_for_step(1), Some(0x44));
-        assert_eq!(c.level_for_step(2), Some(0x46));
+        // 自定义档表：档数由长度决定（这里 3 档），亮度逐档照写，不做等分
+        c.manual_brightness_levels = Some(vec![0x41, 0x44, 0x48]);
+        c.sanitize();
+        assert_eq!(c.manual_steps(), 3);
+        assert_eq!(c.level_for_step(0), Some(VAL_OFF));
+        assert_eq!(c.level_for_step(1), Some(0x41));
+        assert_eq!(c.level_for_step(2), Some(0x44));
         assert_eq!(c.level_for_step(3), Some(0x48));
-        // 空表：退化为 0x01 点亮
+        assert_eq!(c.level_for_step(4), None);
+        // 空档表：退化为 0x01 点亮
+        c.manual_brightness_levels = None;
         c.brightness_levels.clear();
         assert_eq!(c.level_for_step(2), Some(VAL_ON));
+    }
+
+    #[test]
+    fn custom_levels_are_sanitized() {
+        // 越界值剔除 → 表变短，档数跟着变
+        let mut c: Config =
+            serde_json::from_str(r#"{"manual_brightness_levels":["0x41",0,"0x30","0x48"]}"#)
+                .unwrap();
+        let notes = c.sanitize();
+        assert_eq!(c.manual_brightness_levels, Some(vec![0x41, 0x48]));
+        // 提示文案随语言变化，这里只要求「有提示」且指向该配置项
+        assert!(
+            notes.iter().any(|n| n.contains("manual_brightness_levels")),
+            "notes={notes:?}"
+        );
+        // 全越界 → 放弃自定义，回落线性等分
+        let mut c: Config =
+            serde_json::from_str(r#"{"manual_brightness_levels":[0,"0xff"]}"#).unwrap();
+        let notes = c.sanitize();
+        assert_eq!(c.manual_brightness_levels, None);
+        assert_eq!(c.manual_levels().len(), MANUAL_BRIGHTNESS_STEPS as usize);
+        assert_eq!(notes.len(), 2, "越界剔除 + 回落各一条提示: {notes:?}");
+        // 超长表截断到 8 档
+        let mut c: Config =
+            serde_json::from_str(r#"{"manual_brightness_levels":[65,65,65,65,65,65,65,65,65,65]}"#)
+                .unwrap();
+        let notes = c.sanitize();
+        assert_eq!(c.manual_levels().len(), MANUAL_BRIGHTNESS_MAX_STEPS);
+        assert_eq!(notes.len(), 1, "只有截断一条提示: {notes:?}");
+    }
+
+    #[test]
+    fn custom_table_len_drives_step_clamp() {
+        let mut c: Config = serde_json::from_str(
+            r#"{"manual_brightness_levels":[65,68],"manual_brightness_step":4}"#,
+        )
+        .unwrap();
+        let notes = c.sanitize();
+        assert_eq!(c.manual_steps(), 2);
+        assert_eq!(c.manual_brightness_step, 2);
+        assert!(notes.iter().any(|n| n.contains("manual_brightness_step")));
     }
 
     #[test]
@@ -1054,9 +1214,9 @@ mod tests {
         assert!(!back.follow_keyboard_brightness);
         assert_eq!(back.manual_brightness_step, 2);
         assert_eq!(back.brightness_levels, c.brightness_levels);
-        assert_eq!(back.level_for_step(1), Some(0x43));
-        assert_eq!(back.level_for_step(2), Some(0x46));
-        assert_eq!(back.level_for_step(3), Some(0x48));
+        assert_eq!(back.level_for_step(1), Some(0x41));
+        assert_eq!(back.level_for_step(2), Some(0x43));
+        assert_eq!(back.level_for_step(4), Some(0x48));
     }
 
     #[test]

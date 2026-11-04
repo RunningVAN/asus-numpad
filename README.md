@@ -77,18 +77,41 @@ ELAN `04f3:*` 且带 FEATURE `0x0d` 最优先，其次 ASUS `0b05:*`，最后 i2
 | `src/i18n.rs` | 三语文案，支持外部 `.lang` 覆盖 |
 | `src/linux/` | evdev / uinput / hidraw / i2c 后端 |
 | `lang/` | 简中、繁中、英文文案 |
-| `packaging/` | deb / rpm / Arch 打包脚本 |
+| `packaging/` | deb / rpm / Arch / Alpine / Gentoo / Nix / tarball 打包脚本与仓库工具 |
 
 ## 安装
 
+走官方软件源，装一次以后跟着系统升级：
+
 ```bash
-# Fedora / RHEL
-sudo dnf install ./asus-numpad-g614-1.0.0-22.fc44.x86_64.rpm
 # Debian / Ubuntu
-sudo apt install ./asus-numpad-g614_1.0.0-22_amd64.deb
+echo "deb [trusted=yes] https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
+sudo apt update && sudo apt install asus-numpad
+
+# Fedora / RHEL / openSUSE
+sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
+[asus-numpad]
+name=asus-numpad
+baseurl=https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$basearch
+enabled=1
+gpgcheck=0
+EOF
+sudo dnf install asus-numpad
+
 # Arch / Manjaro
-sudo pacman -U asus-numpad-g614-1.0.0-22-1-x86_64.pkg.tar.zst
+sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
+
+[asus-numpad]
+SigLevel = Optional TrustAll
+Server = https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/arch/$arch
+EOF
+sudo pacman -Sy asus-numpad
 ```
+
+也可以从 [Releases](https://github.com/RunningVAN/asus-numpad/releases) 直接下本机格式的包
+（deb / rpm / pkg.tar.zst / apk / 静态 tarball）。Alpine、Gentoo、Nix/NixOS、tarball
+手工安装、升级卸载，见 **[docs/install.md](docs/install.md)**。
 
 包按机型拆分，装错会拒启动（退出码 3）。先看机型：
 
@@ -96,16 +119,7 @@ sudo pacman -U asus-numpad-g614-1.0.0-22-1-x86_64.pkg.tar.zst
 cat /sys/class/dmi/id/product_name      # 例如 G634JY → 装 g614 包
 ```
 
-源码安装：
-
-```bash
-cargo build --release --locked
-sudo install -Dm755 target/release/asus-numpad /usr/bin/asus-numpad
-sudo install -Dm644 packaging/common/asus-numpad.service /usr/lib/systemd/user/
-sudo install -Dm644 packaging/common/99-asus-numpad.rules /usr/lib/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=hidraw
-systemctl --user enable --now asus-numpad
-```
+拿不准就装 `asus-numpad`（兼容包，不校验机型）。
 
 ## 用法
 
@@ -147,10 +161,11 @@ asus-numpad --lang en check     # 仅本次生效
 | `grab` | `true` / `false` | 抓取触摸板；关掉后点击会穿透到桌面 |
 | `led_kind` | `auto` / `hidraw` / `i2c` / `none` | 背光通道 |
 | `follow_keyboard_brightness` | `true` / `false` | 是否跟随键盘背光，默认 `true` |
-| `manual_brightness_step` | `0`..`3` | 手动档，仅跟随关闭时生效 |
-| `brightness_levels` | 数组 | 1..8 档下发值，默认 `0x41`..`0x48` |
+| `manual_brightness_step` | `0`..`4` | 手动档（0=灭，1..4 线性递增），仅跟随关闭时生效 |
+| `manual_brightness_levels` | 数组 | 自定义四档下发值，默认按 `brightness_levels` 线性等分 |
+| `brightness_levels` | 数组 | 硬件全档下发值，默认 `0x41`..`0x48`（1..8 档） |
 | `brightness_poll_ms` | 毫秒 | 轮询间隔，默认 `500` |
-| `allow_unverified_layout` | `true` / `false` | 放行未真机验证的同族布局 |
+| `allow_unverified_layout` | `true` / `false` | 放行未收录键表的同族布局 |
 
 未写入的键按官方默认值生效。
 
@@ -159,7 +174,7 @@ asus-numpad --lang en check     # 仅本次生效
 | 包 | 机型 |
 | --- | --- |
 | `g533` | 枪神6（G533） |
-| `g614` | 枪神7 / 魔霸新锐 2023 / 超竞版 16"（G614、G634）—— 真机验证基准 |
+| `g614` | 枪神7 / 魔霸新锐 2023 / 超竞版 16"（G614、G634） |
 | `g615` | 枪神9/10 16"、魔霸新锐 2025、ProArt P16（G615、G635、H7606） |
 | `gx550` | 冰刃双屏 15/16"（GX550、GX551、GX650） |
 | `ux582` | 灵耀双屏（UX582、UX482） |
@@ -167,17 +182,19 @@ asus-numpad --lang en check     # 仅本次生效
 一个包 = 一个触控板模组族，不是一个整机 SKU；被合并的旧包名保留在 `Obsoletes` 里，
 升级自动接管。机型包之间互相 `Conflicts`。
 
-未真机验证的机型（`gx550`、`ux582`、`g615` 的 H7606）按「探测不到就拒启动」处理，
-不会误按键。想推进就在机器上跑 `asus-numpad check` 把模组名反馈回来。
+机型号判定用 DMI 的多字段并集（`product_name` / `board_name` / `product_family`），
+BIOS 占位串按「读不到」处理、不拦启动；厂商字段（`sys_vendor` / `board_vendor`）明确不是
+ASUS 时直接拒绝。装错包时 `check` 会按机型编号最长公共前缀给出该装的包名。
 
-跨机型细节、验证方法与证据见 [docs/machines.md](docs/machines.md)。
+各机型模组与键表的对应关系见 [docs/machines.md](docs/machines.md)。
 
 ## 构建
 
 ```bash
-./packaging/build.sh                # 按当前发行版自动出包
-./packaging/build.sh deb rpm        # 指定目标
-./packaging/build-skus.sh g614   # 只出指定机型
+./packaging/build.sh                        # 按当前发行版自动出包
+./packaging/build.sh deb rpm tarball        # 指定目标（deb/rpm/arch/alpine/tarball）
+./packaging/build-skus.sh g614              # 只出指定机型
+./tools/repo-gen.sh                         # dist/ → 本地仓库 repo/（apt/rpm/pacman/apk）
 ```
 
 静态链接构建（跨发行版分发）：
@@ -187,13 +204,17 @@ ASUS_NUMPAD_SKU=g614 RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
   cargo build --target x86_64-unknown-linux-musl --release
 ```
 
-打包细节见 [packaging/README.md](packaging/README.md)。
+打包细节见 [packaging/README.md](packaging/README.md)。推 `v*` 标签会触发
+`.github/workflows/release.yml`：各发行版容器里出包 → 生成四套仓库索引 → 发 Release →
+把 `repo/` 提交回 `main`。
 
 ## 已知差异
 
-1. **亮度映射是实测近似**：键盘 3 档线性归一到数字区 `0x43`/`0x46`/`0x48`（3/6/8 档），
-   数字区实际档数取决于面板，可用 `brightness_levels` 裁剪。键盘关到 0 时固定取最低档，
-   亮度只降不升。
+1. **亮度档位由硬件全档表线性等分**：`brightness_levels` 是面板的完整档表
+   （默认 `0x41`..`0x48`，8 档），手动档位取其中的等分点——默认 4 档即
+   `0x41`/`0x43`/`0x46`/`0x48`（0 档熄灭）。档数与具体下发值都可用
+   `manual_brightness_levels` 覆写（上限 `brightness_levels` 的长度）；跟随模式下
+   键盘背光档位同样归一到这张表上，键盘关到 0 时取最低档，亮度只降不升。
 2. **NumLock 长按阈值**：官方 `iNumLockMaxVaildDist = 2741` 在 0.1 mm 单位下仅 0.27 mm，
    与「长按不动」的物理语义矛盾。本实现按字面值使用，若长按被判成滑动，先查这里。
 3. **图标子区边界未闭合**：官方布局里 icon 区与计算器热区有重叠描述，本实现按整格归入
@@ -202,4 +223,4 @@ ASUS_NUMPAD_SKU=g614 RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
 
 ## 许可
 
-MIT，见 [LICENSE](LICENSE)。
+GPL-3.0-or-later（GPLv3 或更高版本），见 [LICENSE](LICENSE)。

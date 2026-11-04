@@ -11,14 +11,13 @@
 //! | `linux` | — | evdev 抓取、uinput 虚拟设备、hidraw/i2c 点灯、热插拔 |
 //!
 //! 纯逻辑部分（`layout` / `engine`）不依赖 Linux，可在任意平台跑单测；
-//! 硬件相关代码全部用 trait 注入，真机接上即用。
+//! 硬件相关代码全部用 trait 注入，接入设备只需实现对应 trait。
 //!
-//! ## 真机验证状态
+//! ## 一处来源差异
 //!
-//! 逻辑层已通过完整离线用例，但**尚未在真机（ROG Strix SCAR 16 G634JY）上验证**。
-//! 其中一处来源差异必须如实说明：官方 INF 的 `NUMPAD_09 iNumLockMaxVaildDist = 2741`
-//! 在 `iUnit = 100 µm` 下只有 0.27 mm，与「长按按住不动」的物理语义不符，
-//! 本实现按字面值使用，真机上若出现长按被判为滑动、NumLock 切不动，请先排查此处。
+//! 官方 INF 的 `NUMPAD_09 iNumLockMaxVaildDist = 2741` 在 `iUnit = 100 µm` 下只有
+//! 0.27 mm，与「长按按住不动」的物理语义不符。本实现按字面值使用；若长按被判定成
+//! 滑动、NumLock 切不动，先排查此处。
 
 pub mod brightness;
 pub mod config;

@@ -14,7 +14,7 @@ pub const ASUS_VID: u32 = 0x0b05;
 /// OMNI RECEIVER 无线接收器 PID：绝不能往里写背光报文。
 pub const OMNI_PID: u32 = 0x1ace;
 
-/// 已确认带 NumberPad 背光的 ELAN 触摸板 PID（真机 G634JY = 0x3275）。
+/// 已知带 NumberPad 背光的 ELAN 触摸板 PID（`04F3:3275`）。
 ///
 /// **只用于排序与日志，不用于排除**：其它机型 PID 各不相同
 /// （甚至同机型不同批次也会变），排除逻辑一律走报告描述符判定。

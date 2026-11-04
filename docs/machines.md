@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 4a51877c63f78dcbd7bc8ccffcc1ce58_0545717bd87611f19280525400393706
+    ReservedCode1: VNVEhjMnEXqftYnbxTgR/X4jIEe4rpefj7NMzKzu+/8XHZ7NqoYXrdxHM9R8n9hONNnVSGKUzc/2RqWM6TpIp5jpXH+GPlAd2o8MIvssqWGijcRNxyGu+BtysHTCF20KkIxIMp9EMy9q/oyQSSSj3Iq+KjgiU4/y49412QqaR6VBA+tEglGWpn8dbkI=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 4a51877c63f78dcbd7bc8ccffcc1ce58_0545717bd87611f19280525400393706
+    ReservedCode2: VNVEhjMnEXqftYnbxTgR/X4jIEe4rpefj7NMzKzu+/8XHZ7NqoYXrdxHM9R8n9hONNnVSGKUzc/2RqWM6TpIp5jpXH+GPlAd2o8MIvssqWGijcRNxyGu+BtysHTCF20KkIxIMp9EMy9q/oyQSSSj3Iq+KjgiU4/y49412QqaR6VBA+tEglGWpn8dbkI=
+---
+
 # 跨机型支持
 
 ## 为什么同模组天然通用
@@ -15,10 +26,10 @@ NumberPad 的键位按**触摸板模组 + HID 命名**区分，与整机型号�
 
 | HID 名 | 键表 | 支持级别 | 说明 |
 | --- | --- | --- | --- |
-| `ASUE1416` | `GH3XLNDZ` | 已验证 | 本项目真机（G634JY，ELAN 04F3:3275） |
-| `ASUF1416` | `GH3XLNDZ` | 已验证 | 同上，同一模组几何 |
-| `ASUE1403` / `ELAN1403` | `GH2XLNDZ` | 同族（需放行） | 结构相同、几何微差，未逐键实测 |
-| `ASCP1400` / `ASCF1400` | `GH4XLNDZ` | 同族（需放行） | 同上 |
+| `ASUE1416` | `GH3XLNDZ` | 已收录 | ELAN 04F3:3275，`GH3XLNDZ` 键表基准 |
+| `ASUF1416` | `GH3XLNDZ` | 已收录 | 与 `ASUE1416` 同一模组几何 |
+| `ASUE1403` / `ELAN1403` | `GH2XLNDZ` | 同族（需放行） | 结构相同、几何微差 |
+| `ASCP1400` / `ASCF1400` | `GH4XLNDZ` | 同族（需放行） | 结构相同、几何微差 |
 
 其余 38 条 HID（映射到 `CH*` / `NH*` / `GV*` 等 21 张键表）与 `GH3XLNDZ` 结构不同，
 直接套用会按错键，驱动选择拒绝启动而不是乱按。
@@ -41,7 +52,7 @@ NumberPad 的键位按**触摸板模组 + HID 命名**区分，与整机型号�
 
 | 级别 | 行为 |
 | --- | --- |
-| `verified` | 直接启动 |
+| `verified` | 直接启动（模组名在 `HID_LAYOUTS` 中且键表已收录） |
 | `family` | 默认拒绝，提示加 `--allow-unverified` |
 | `unsupported` | 默认拒绝，提示反馈 `check` 输出 |
 
@@ -69,3 +80,4 @@ asus-numpad check
 新 PID 加进 `src/led_policy.rs` 的 `KNOWN_NUMPAD_PIDS`；新模组在
 `evidence/drivers/*_unpacked/**/AsusNUMPADFilter.inf` 里查 `HID_DEVICE_NAME`
 补一条 `HID_LAYOUTS`，再按上游布局文件补键表。
+*（内容由AI生成，仅供参考）*

@@ -24,7 +24,7 @@ Conflicts:      asus-numpad-%{s}
 
 Version:        %{version}
 Release:        12%{?dist}
-License:        MIT
+License:        GPL-3.0-or-later
 URL:            https://github.com/RunningVAN/asus-numpad
 Source0:        asus-numpad-%{version}.tar.gz
 BuildRequires:  rust >= 1.75

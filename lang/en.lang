@@ -31,9 +31,9 @@ cli.lang.help = UI language: zh-CN / zh-TW / en / auto (default auto = follow sy
 cli.cmd.run = Take over the touchpad (default action)
 cli.cmd.check = Self-check: print official parameters, geometry conversion, key map, and run offline cases
 cli.cmd.dump = Print raw touchpad events (troubleshooting, no key output)
-cli.cmd.bright = Brightness: three manual steps / follow keyboard backlight
-cli.cmd.bright.long = e.g. `bright 1|2|3` (0 = off), `bright up|down|cycle`, `bright follow on|off`, `bright status`
-cli.cmd.bright.value = Step 0/1/2/3, or up / down / cycle / next / follow / status
+cli.cmd.bright = Brightness: four manual steps (0..max, linear or custom) / follow keyboard backlight
+cli.cmd.bright.long = e.g. `bright 0|1|2|3|4` (0 = off, 1 = darkest, 4 = brightest, linearly spaced by default), `bright up|down|cycle`, `bright follow on|off`, `bright status`; define your own steps with the `manual_brightness_levels` config key
+cli.cmd.bright.value = Step 0/1/2/3/4 (bounded by a custom step table), or up / down / cycle / next / follow / status
 cli.cmd.bright.mode = Value for `follow`: on / off
 cli.cmd.led = Send a raw backlight command byte (bypasses every state machine; for diagnosis)
 cli.cmd.led.long = e.g. led on | led off | led 0x41..0x48 (levels 1..8). Separates "never sent" from "hardware rejects".
@@ -52,6 +52,9 @@ note.invalid_i2c_addr = --i2c-addr={v} cannot be parsed, ignored
 note.invalid_language = language={v} is not recognised, falling back to auto
 note.manual_step_clamped = manual_brightness_step={step} is outside 0..={max}, clamped to {max}
 note.levels_dropped = {n} entr(y/ies) in brightness_levels are outside 0x{lo}..=0x{hi} and were dropped
+note.manual_levels_dropped = {n} entr(y/ies) in manual_brightness_levels are outside 0x{lo}..=0x{hi} and were dropped
+note.manual_levels_truncated = manual_brightness_levels has {n} steps, above the hardware limit of {max}; truncated
+note.manual_levels_reset = manual_brightness_levels is empty after dropping out-of-range values; falling back to linear spacing
 note.numlock_zone = numlock_zone={v} is no longer supported, treating it as a whole cell
 note.read_failed = Failed to read {path}, using defaults: {err}
 note.config_migrated = Migrated legacy config {from} to {to} (old file kept, safe to delete)
@@ -93,7 +96,7 @@ check.b_grab_no = no (clicks leak through)
 check.b_idle =   Idle blackout     {sec}s (keeps running, lights up on touch)
 check.b_led =   Backlight channel {kind} ({where})
 check.b_bright =   Backlight         {text}
-check.b_bright_cmd =   Dim command       asus-numpad bright 1|2|3 (0=off); asus-numpad bright follow on|off
+check.b_bright_cmd =   Dim command       asus-numpad bright 1..4 (0=off, {steps} steps); asus-numpad bright follow on|off
 check.lang_line =   UI language       {name} ({code})
 check.lang_source =   Language source   {source}
 check.lang_file =   Language file     {path}
@@ -108,18 +111,18 @@ bright.follow_switch = Follow keyboard backlight: {state}
 bright.follow_on = on (numpad brightness tracks the keyboard backlight)
 bright.follow_off = off (uses the manual fixed step)
 bright.status_dir = Keyboard backlight dir: {dir} (polling {ms} ms)
-bright.status_step = Manual fixed step: {step} (0=off, 1=dim, 2=medium, 3=bright)
+bright.status_step = Manual fixed step: {step}/{steps} (0=off, 1=darkest, {steps}=brightest)
 bright.status_map = Step mapping: 0→0x{off} (off); {table}
 bright.status_effective = Effective LED value: {text}
 bright.measured = Measured keyboard backlight: {kbd}/{max} → numpad 0x{cur}
 bright.measure_failed = Measured keyboard backlight: cannot read {dir} (not an ASUS model / asus-wmi not loaded)
 bright.report.follow = Follows keyboard backlight {kbd}/{max} → 0x{level} ({n} steps, {ms} ms polling, {dir})
 bright.report.follow_nodir = Follows keyboard backlight (cannot read {dir}, falling back to 0x{level})
-bright.report.static = Does not follow the keyboard backlight, fixed step {step} → 0x{level} (adjust with `bright 1|2|3`, re-enable with `bright follow on`)
+bright.report.static = Does not follow the keyboard backlight, fixed step {step} → 0x{level} (adjust with `bright 1..N`, re-enable with `bright follow on`)
 bright.report.no_levels = Cannot read backlight node ({dir}), numpad falls back to 0x{level}
 
 # ---- 亮度命令 ----
-bright.usage = Usage: asus-numpad bright 0|1|2|3     fixed step (0=off, 1=dim, 2=medium, 3=bright)\n       asus-numpad bright up|down|cycle  cycle through the three steps\n       asus-numpad bright follow on|off  follow the keyboard backlight or not\n       asus-numpad bright status         show the current state
+bright.usage = Usage: asus-numpad bright 0|1..N    fixed step (0=off; 1=darkest; N=brightest, N=4 by default, linearly spaced)\n       asus-numpad bright up|down|cycle  step up/down or cycle through all steps\n       asus-numpad bright follow on|off  follow the keyboard backlight or not\n       asus-numpad bright status         show the current state and step table
 bright.follow_usage = Usage: asus-numpad bright follow on|off
 bright.err_unmappable = Step {step} cannot be mapped to a brightness byte (check the brightness_levels config)
 bright.sent = Sent brightness 0x{level} (channel {kind})
@@ -127,7 +130,7 @@ bright.send_failed = Failed to send 0x{level}: channel not usable (check the --h
 bright.nonlinux = Not on Linux, no report is sent (showing conversion result only).
 bright.wrote_step = Wrote {path}: manual_brightness_step = {step}, follow_keyboard_brightness = false (backup {backup})
 bright.wrote_follow = Wrote {path}: follow_keyboard_brightness = {on} (backup {backup})
-bright.effect_off = Result: numpad is off (use bright 1|2|3 to light it again).
+bright.effect_off = Result: numpad is off (use bright 1..N to light it again).
 bright.effect_fixed = Result: numpad fixed at 0x{level} (no longer follows the keyboard backlight).
 bright.effect_follow_on = Result: numpad brightness follows the keyboard backlight again (synced on every change).
 bright.effect_follow_off = Result: numpad uses fixed step {step} (0x{level}); keyboard backlight changes no longer affect it.
@@ -269,11 +272,13 @@ check.led_probe_i2c_none = Backlight i2c: no device at 0x38/0x15
 # ---- 机型（SKU）分包 ----
 sku.pack = This package is built for: {sku} (package {pkg})
 sku.note = Model note: {note}
-sku.dmi = Local DMI product name: {dmi}
-sku.dmi_unknown = Local DMI product name: unreadable (not Linux, or /sys/class/dmi/id is not readable)
+sku.dmi = Local DMI identity: {dmi}
+sku.dmi_unknown = Local DMI identity: unavailable (not Linux or /sys/class/dmi/id unreadable)
+sku.verdict.non_asus = Mismatch: this machine's vendor is {vendor}, not ASUS - wrong package
 sku.verdict = Model check: {verdict}
 sku.verdict.match = match, continuing
 sku.verdict.mismatch = mismatch — this machine is {dmi}, wrong package
 sku.verdict.unknown = cannot tell, allowing run (unreadable DMI does not mean wrong model)
 sku.verdict.not_enforced = not enforced (the universal package skips the model check)
+sku.suggest = Suggested package: {sku} ({pkg})
 err.sku_mismatch = This package only serves "{sku}" and does not match this machine; startup stopped. Install {pkg} instead, or add --allow-sku-mismatch to force.

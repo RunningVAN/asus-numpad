@@ -4,7 +4,9 @@
 #   ./packaging/build.sh                 # 按当前发行版自动出包
 #   ./packaging/build.sh deb             # 只出 .deb
 #   ./packaging/build.sh rpm arch        # 出 rpm + Arch 包
-#   ./packaging/build.sh all             # 三种全出（交叉打包需要对应工具）
+#   ./packaging/build.sh all             # deb + rpm + arch + tarball 全出
+#   ./packaging/build.sh tarball         # 通用 tarball（任何发行版都能装）
+#   ./packaging/build.sh alpine          # Alpine .apk（需 abuild）
 #   ./packaging/build.sh --version 5.0.1 deb
 #
 # 选项:
@@ -31,8 +33,8 @@ while (($#)); do
         --no-build) DO_BUILD=0; shift ;;
         --check)    CHECK_ONLY=1; shift ;;
         -h|--help)  sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
-        deb|rpm|arch|all) TARGETS+=("$1"); shift ;;
-        *) die "未知参数: $1（可用: deb rpm arch all）" ;;
+        deb|rpm|arch|tarball|alpine|all) TARGETS+=("$1"); shift ;;
+        *) die "未知参数: $1（可用: deb rpm arch tarball alpine all）" ;;
     esac
 done
 
@@ -62,7 +64,7 @@ fi
 # all 展开
 EXPANDED=()
 for t in "${TARGETS[@]}"; do
-    if [[ "$t" == all ]]; then EXPANDED+=(deb rpm arch); else EXPANDED+=("$t"); fi
+    if [[ "$t" == all ]]; then EXPANDED+=(deb rpm arch tarball); else EXPANDED+=("$t"); fi
 done
 # 去重且保序
 mapfile -t EXPANDED < <(printf '%s\n' "${EXPANDED[@]}" | awk '!seen[$0]++')
@@ -107,6 +109,8 @@ check_inputs() {
             deb)  have dpkg-deb || { warn "缺少 dpkg-deb（无法出 deb）"; fail=1; } ;;
             rpm)  have rpmbuild || { warn "缺少 rpmbuild（无法出 rpm）"; fail=1; } ;;
             arch) have makepkg && continue; have bsdtar || { warn "既无 makepkg 也无 bsdtar（无法出 Arch 包）"; fail=1; } ;;
+            tarball) have tar || { warn "缺少 tar（无法出 tarball）"; fail=1; } ;;
+            alpine)  have abuild || { warn "缺少 abuild（无法出 .apk，需 Alpine 环境）"; fail=1; } ;;
         esac
     done
 
@@ -157,5 +161,6 @@ for t in "${EXPANDED[@]}"; do
 done
 
 log "全部完成，产物："
-find "$OUT_DIR" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.*' \) \
+find "$OUT_DIR" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.*' \
+    -o -name '*.apk' -o -name '*.tar.gz' \) \
     -printf '  %f  (%s bytes)\n' 2>/dev/null || ls -l "$OUT_DIR"

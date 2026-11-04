@@ -393,9 +393,9 @@ impl Geometry {
 /// 布局支持级别。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayoutSupport {
-    /// 与真机验证过的 GH3XLNDZ 相同网格结构，且已在 ROG Strix SCAR 16 G634JY 实测。
+    /// 与 GH3XLNDZ 相同的网格结构（5 列 4 行、15 个官方参数齐全）。
     Verified,
-    /// 5 列 4 行同族布局：15 个官方参数齐全，网格结构与 GH3XLNDZ 一致，但未真机验证。
+    /// 5 列 4 行同族布局：15 个官方参数齐全，网格结构与 GH3XLNDZ 一致。
     Family,
     /// 官方 INF 收录了参数，但键表/网格结构与 GH3XLNDZ 不同，直接套用会按错键。
     Unsupported,
@@ -979,7 +979,7 @@ pub const HID_LAYOUTS: &[(&str, &str)] = &[
     ("ELAN1401", "NHM"),
     ("ELAN1402", "NHS"),
     // ELAN1403 与 ASUE1403 是同模组的两种命名（官方 SupportList 两者并列），
-    // 归入 GH2XLNDZ：结构同族、未真机验证，按 family 放行需人工逐键核对。
+    // 归入 GH2XLNDZ：结构同族，按 family 放行需人工逐键核对。
     ("ELAN1403", "GH2XLNDZ"),
     ("ELAN1404", "GVM"),
     ("ELAN1405", "GHM"),
@@ -987,7 +987,7 @@ pub const HID_LAYOUTS: &[(&str, &str)] = &[
     ("ELAN1407", "NHXL"),
 ];
 
-/// 默认布局名（真机验证过的 GH3XLNDZ）。
+/// 默认布局名（键表基准 GH3XLNDZ）。
 pub const DEFAULT_LAYOUT_NAME: &str = "GH3XLNDZ";
 
 impl LayoutSupport {

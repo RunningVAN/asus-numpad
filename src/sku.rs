@@ -45,9 +45,9 @@ pub struct Sku {
 /// `layout.rs` 的 [`crate::layout::HID_LAYOUTS`]（官方 INF 的 HID 名 → 键表）：
 /// 模组名相同（如 `ASUE1416` / `ASUF1416`）就一定是同一份键表、同一套几何。
 ///
-/// * `g614` 吸收 `g634`：同一块 ELAN 触摸板（04F3:3275 / ASUE1416），真机 G634JY 已验证；
+/// * `g614` 吸收 `g634`：同一块 ELAN 触摸板（04F3:3275 / ASUE1416），键表 GH3XLNDZ；
 /// * `g615` 吸收 `g635`、`h7606`：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ 同族；
-/// * `gx550` 吸收 `gx650`：两代冰刃双屏上游实测同属 gx551 键位族（模组未真机验证）。
+/// * `gx550` 吸收 `gx650`：两代冰刃双屏同属 gx551 键位族。
 ///
 /// 合并只影响「机型闸门」的 DMI 白名单，运行期选哪套键表仍由实际 HID 模组名决定，
 /// 所以合并不改变闸门的保守性：模组不在 `HID_LAYOUTS` 里，照样拒绝启动。
@@ -59,31 +59,31 @@ pub const SKUS: &[Sku] = &[
         id: "g533",
         display: "ASUS 枪神6（G533）",
         models: &["G533"],
-        note: "模组 ASUE1403/ELAN1403 → 键表 GH2XLNDZ（同族，未逐键实测）",
+        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）",
     },
     Sku {
         id: "g614",
         display: "ASUS 枪神7 / 魔霸新锐 2023 / 枪神7 超竞版 16 英寸（G614 / G634）",
         models: &["G614", "G634"],
-        note: "合并包：G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ，真机 G634JY 已验证）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
+        note: "合并包：G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
     },
     Sku {
         id: "g615",
         display: "ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版、ProArt P16（G615 / G635 / H7606）",
         models: &["G615", "G635", "H7606"],
-        note: "合并包：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族，需逐键核对）",
+        note: "合并包：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）",
     },
     Sku {
         id: "gx550",
         display: "ASUS 冰刃双屏 15 / 16 英寸（GX550 / GX551 / GX650）",
         models: &["GX550", "GX551", "GX650"],
-        note: "合并包：两代双屏上游实测同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A，未真机验证",
+        note: "合并包：GX550 / GX551 / GX650 同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A",
     },
     Sku {
         id: "ux582",
         display: "灵耀双屏（UX582 / UX482）",
         models: &["UX582", "UX482"],
-        note: "模组 ASUE1406 / ELAN1406 → 键表 NVM（未验证）；UX482 待规格页复核",
+        note: "模组 ASUE1406 / ELAN1406 → 键表 NVM",
     },
     Sku {
         id: "universal",
@@ -115,14 +115,137 @@ pub fn by_id(id: &str) -> Option<&'static Sku> {
     SKUS.iter().find(|s| s.id.eq_ignore_ascii_case(id.trim()))
 }
 
+/// DMI 身份快照：厂商 + 产品名 + 主板名 + 产品家族。
+///
+/// 单看 `product_name` 不够用，实际机器上这几种情况都真实存在：
+///
+/// * 部分机型 `product_name` 只有营销名（`ROG Strix SCAR 16`），机型编号 `G614` 只落在
+///   `board_name` 或 `product_family` 里；
+/// * 部分机型 `product_name` 是 `G614JY_G614JY`，编号重复两遍（老前缀匹配能吃下，
+///   但 `G614JY` 里的 `G614` 也可能被 `G614X` 的规则误吃，这里用整串多字段比对更稳）；
+/// * 白牌 / 虚拟机会写 `System Product Name`、`To Be Filled By O.E.M.` 这类占位串，
+///   当机型处理会误判成「不是 ASUS 机器」而拦下正常安装。
+///
+/// 所以判定改成「多字段取并集 + 占位串归一 + 厂商字段定性质」。
+#[derive(Debug, Clone, Default)]
+pub struct DmiIdentity {
+    /// `/sys/class/dmi/id/sys_vendor`，正常为 `ASUSTeK COMPUTER INC.`
+    pub sys_vendor: Option<String>,
+    /// `/sys/class/dmi/id/board_vendor`
+    pub board_vendor: Option<String>,
+    /// `/sys/class/dmi/id/product_name`，如 `ROG Strix SCAR 16 G614JY_G614JY`
+    pub product_name: Option<String>,
+    /// `/sys/class/dmi/id/board_name`，部分机型只有这里有编号
+    pub board_name: Option<String>,
+    /// `/sys/class/dmi/id/product_family`
+    pub product_family: Option<String>,
+}
+
+/// DMI 里常见的占位串（BIOS 没填真值时就写这些），一律当「读不到」处理。
+const DMI_PLACEHOLDERS: &[&str] = &[
+    "SYSTEM PRODUCT NAME",
+    "SYSTEM MANUFACTURER",
+    "SYSTEM VERSION",
+    "TO BE FILLED BY O.E.M.",
+    "TO BE FILLED BY OEM",
+    "DEFAULT STRING",
+    "NOT SPECIFIED",
+    "NOT APPLICABLE",
+    "INVALID",
+    "UNKNOWN",
+    "OEM",
+    "O.E.M.",
+];
+
+impl DmiIdentity {
+    /// 有效字段：去掉空值与占位串，统一大写，去重。
+    ///
+    /// 返回顺序固定为「产品名 → 主板名 → 产品家族」，便于输出与测试稳定。
+    pub fn haystacks(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for field in [&self.product_name, &self.board_name, &self.product_family] {
+            let Some(raw) = field.as_deref() else {
+                continue;
+            };
+            let up = raw.trim().to_ascii_uppercase();
+            if up.is_empty() || DMI_PLACEHOLDERS.contains(&up.as_str()) {
+                continue;
+            }
+            if !out.contains(&up) {
+                out.push(up);
+            }
+        }
+        out
+    }
+
+    /// 厂商字段的结论：`Some(true)` 明确是 ASUS、`Some(false)` 明确不是、`None` 判断不了。
+    ///
+    /// 只在两个厂商字段都读到实值、且都不含 ASUS 时才敢说「不是」；
+    /// 任一字段缺失（容器、非 Linux）都返回 `None`，交给后续按「未知」放行。
+    pub fn is_asus(&self) -> Option<bool> {
+        let mut seen = false;
+        for field in [&self.sys_vendor, &self.board_vendor] {
+            let Some(raw) = field.as_deref() else {
+                continue;
+            };
+            let up = raw.trim().to_ascii_uppercase();
+            if up.is_empty() || DMI_PLACEHOLDERS.contains(&up.as_str()) {
+                continue;
+            }
+            seen = true;
+            if up.contains("ASUS") {
+                return Some(true);
+            }
+        }
+        if seen {
+            Some(false)
+        } else {
+            None
+        }
+    }
+
+    /// 供日志输出的一行身份摘要（只列有效字段）。
+    pub fn label(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(v) = &self.sys_vendor {
+            if !v.trim().is_empty() {
+                parts.push(format!("vendor={}", v.trim()));
+            }
+        }
+        if let Some(v) = &self.product_name {
+            if !v.trim().is_empty() {
+                parts.push(format!("product={}", v.trim()));
+            }
+        }
+        if let Some(v) = &self.board_name {
+            let t = v.trim();
+            if !t.is_empty() && self.product_name.as_deref().map(str::trim) != Some(t) {
+                parts.push(format!("board={t}"));
+            }
+        }
+        if let Some(v) = &self.product_family {
+            if !v.trim().is_empty() {
+                parts.push(format!("family={}", v.trim()));
+            }
+        }
+        if parts.is_empty() {
+            "unknown".to_string()
+        } else {
+            parts.join(", ")
+        }
+    }
+}
+
 /// 机型校验结论。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DmiVerdict {
     /// DMI 命中本包机型
     Match,
-    /// DMI 明确是别的机型
+    /// DMI 明确是别的（ASUS）机型
     Mismatch(String),
-    /// 读不到 DMI（非 Linux、容器、权限受限）
+    /// DMI 厂商字段表明这不是 ASUS 机器
+    NonAsus(String),
+    /// 读不到 DMI（非 Linux、容器、权限受限、BIOS 只给了占位串）
     Unknown,
     /// 本包不做机型校验（`universal`）
     NotEnforced,
@@ -130,6 +253,9 @@ pub enum DmiVerdict {
 
 impl DmiVerdict {
     /// 是否允许继续启动。
+    ///
+    /// `Unknown` 放行的理由：读不到 DMI 的场合（容器、缺权限、BIOS 占位串）本来就
+    /// 无法判断，此时拦下会误伤正常机器；真正运行起来后还有布局闸门兜底。
     pub fn allows_run(&self) -> bool {
         matches!(
             self,
@@ -142,57 +268,243 @@ impl DmiVerdict {
         match self {
             DmiVerdict::Match => "match",
             DmiVerdict::Mismatch(_) => "mismatch",
+            DmiVerdict::NonAsus(_) => "non-asus",
             DmiVerdict::Unknown => "unknown",
             DmiVerdict::NotEnforced => "not-enforced",
         }
     }
 }
 
-/// 纯逻辑：给定机型表与 DMI 型号，判定是否对得上。
+/// 纯逻辑：给定机型表与单个 DMI 型号，判定是否对得上（只比对产品名字段）。
+///
+/// 保留这个入口是为了兼容只想知道「这一串型号属不属于本包」的调用方与用例；
+/// 真正跑在机器上的判定请用 [`verdict_for_identity`]（多字段 + 厂商定性）。
 pub fn verdict_for(sku: &Sku, dmi: Option<&str>) -> DmiVerdict {
+    let identity = DmiIdentity {
+        product_name: dmi.map(str::to_string),
+        ..Default::default()
+    };
+    verdict_for_identity(sku, &identity)
+}
+
+/// 纯逻辑：机型表 × DMI 身份 → 结论。
+///
+/// 判定顺序（越靠前越优先，保证不会被后面的宽松规则覆盖）：
+///
+/// 1. 通用包 → `NotEnforced`；
+/// 2. 三个型号字段都取不到有效值（缺失 / 占位串）→ `Unknown`（放行）；
+/// 3. 任一机型前缀出现在任一有效字段里 → `Match`；
+/// 4. 厂商字段明确不是 ASUS → `NonAsus`（拦下，装错机器的经典形态）；
+/// 5. 其余 → `Mismatch`，附上身份摘要方便用户对照。
+pub fn verdict_for_identity(sku: &Sku, identity: &DmiIdentity) -> DmiVerdict {
     if sku.models.is_empty() {
         return DmiVerdict::NotEnforced;
     }
-    let Some(dmi) = dmi.map(str::trim).filter(|s| !s.is_empty()) else {
+    let pools = identity.haystacks();
+    if pools.is_empty() {
         return DmiVerdict::Unknown;
-    };
-    let upper = dmi.to_ascii_uppercase();
-    if sku
-        .models
-        .iter()
-        .any(|m| upper.contains(&m.to_ascii_uppercase()))
-    {
-        DmiVerdict::Match
-    } else {
-        DmiVerdict::Mismatch(dmi.to_string())
     }
+    if sku.models.iter().any(|m| matches_model(m, &pools)) {
+        return DmiVerdict::Match;
+    }
+    if identity.is_asus() == Some(false) {
+        let vendor = identity
+            .sys_vendor
+            .as_deref()
+            .or(identity.board_vendor.as_deref())
+            .unwrap_or("unknown")
+            .trim()
+            .to_string();
+        return DmiVerdict::NonAsus(vendor);
+    }
+    DmiVerdict::Mismatch(identity.label())
+}
+
+/// 给「装错包」的用户找最可能的正确包：按机型前缀的前 3 位做粗匹配。
+///
+/// 例如本机是 `G615JY`，装的是 `g614` 包 → `G61` 前缀同时命中 `g614`/`g615`，
+/// 这里会把 `g615` 找出来建议安装。命中多个时返回第一个（机型表按代次排序）。
+pub fn suggest_for(identity: &DmiIdentity) -> Option<&'static Sku> {
+    suggest_all_for(identity).into_iter().next()
+}
+
+/// 同 [`suggest_for`]，但把**全部**候选按匹配强度从高到低返回。
+///
+/// 同一代机型经常只差一位（`G614` / `G615` / `G635`），只给一个候选容易指错方向；
+/// 自检输出里把候选全列出来，用户按自己机器的完整型号挑就行。
+///
+/// 强度排序：`model` 代号与 DMI 代号 token **完全相等**的最强（权重 100），
+/// 其次是「同族前缀」——取 `model` 与 token 的公共前缀长度作为权重。
+pub fn suggest_all_for(identity: &DmiIdentity) -> Vec<&'static Sku> {
+    let pools = identity.haystacks();
+    if pools.is_empty() {
+        return Vec::new();
+    }
+    let tokens: Vec<String> = pools.iter().flat_map(|p| model_tokens(p)).collect();
+
+    let mut scored: Vec<(&'static Sku, usize)> = Vec::new();
+    for sku in SKUS {
+        if sku.models.is_empty() {
+            continue;
+        }
+        let mut best = 0usize;
+        for model in sku.models {
+            let up = model.to_ascii_uppercase();
+            if tokens.iter().any(|t| t == &up) {
+                best = best.max(100);
+            }
+            for pool in &pools {
+                let shared = shared_prefix_in(&up, pool);
+                if shared >= 3 {
+                    best = best.max(shared);
+                }
+            }
+        }
+        if best > 0 {
+            scored.push((sku, best));
+        }
+    }
+    // 权重降序；同权重保持 SKUS 表顺序（代次先后），结果稳定可测
+    scored.sort_by(|a, b| b.1.cmp(&a.1));
+    let mut out: Vec<&'static Sku> = Vec::new();
+    for (sku, _) in scored {
+        if !out.iter().any(|s| s.id == sku.id) {
+            out.push(sku);
+        }
+    }
+    out
+}
+
+/// 从任意 DMI 字符串里抽出「型号代号」token（`G614` / `GX650` / `H7606` / `G614JY`）。
+///
+/// 判定规则：按非字母数字切分，段长 ≥ 4、以 ASCII 字母开头、且至少含 2 位数字。
+///
+/// 这样串里的营销词（`ROG` / `STRIX` / `SCAR`）和纯数字（`16`）会被自然滤掉，
+/// 剩下的才是可用于比对的代号；像 `G614JY_G614JY` 这种重复写法会被切成两个相同的
+/// `G614JY`，不影响判定。
+pub fn model_tokens(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for seg in text.split(|c: char| !c.is_ascii_alphanumeric()) {
+        if seg.len() < 4 {
+            continue;
+        }
+        let bytes = seg.as_bytes();
+        if !bytes[0].is_ascii_alphabetic() {
+            continue;
+        }
+        if seg.chars().filter(|c| c.is_ascii_digit()).count() < 2 {
+            continue;
+        }
+        let up = seg.to_ascii_uppercase();
+        if !out.contains(&up) {
+            out.push(up);
+        }
+    }
+    out
+}
+
+/// 机型表里的 `model` 是否能对上这批 DMI 字段。
+///
+/// 优先按**型号代号 token** 比对，消除「子串匹配吃进邻近型号」的老问题：
+///
+/// * `model == token` → 命中；
+/// * `token` 以 `model` 开头、且 `model` 之后的第一位**不是数字** → 命中
+///   （`G614JY` / `G614JVR` 归 `G614`；`G6140` 不会被 `G614` 吃）；
+/// * 某个字段整串抽不出 token（纯营销名，如 `ROG STRIX SCAR 16`）→ 退回旧的
+///   整体子串匹配，宁可宽松也不误判这种读不出代号的机器。
+fn matches_model(model: &str, pools: &[String]) -> bool {
+    let up = model.to_ascii_uppercase();
+    if !up.is_ascii() || up.is_empty() {
+        return pools.iter().any(|p| p.to_ascii_uppercase().contains(&up));
+    }
+    for pool in pools {
+        let tokens = model_tokens(pool);
+        if tokens.is_empty() {
+            if pool.to_ascii_uppercase().contains(&up) {
+                return true;
+            }
+            continue;
+        }
+        for tok in &tokens {
+            if tok == &up {
+                return true;
+            }
+            if tok.len() > up.len() && tok.starts_with(&up) {
+                // up 全是 ASCII，按字节取界安全
+                if !tok.as_bytes()[up.len()].is_ascii_digit() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `model` 有多大一段前缀出现在 `pool` 里（从长到短试，命中即返回长度）。
+///
+/// DMI 产品名里型号编号前面还挂着营销名（`ROG STRIX G16 G615LR_G615LR`），
+/// 所以不能按整串做前缀比较，只能问「model 的前 n 位在 pool 里出现过吗」。
+fn shared_prefix_in(model: &str, pool: &str) -> usize {
+    let m = model.to_ascii_uppercase();
+    let p = pool.to_ascii_uppercase();
+    let mut n = m.len();
+    while n >= 3 {
+        // m 只含 ASCII（机型编号），按字节切片安全
+        if p.contains(&m[..n]) {
+            return n;
+        }
+        n -= 1;
+    }
+    0
+}
+
+/// 读单个 DMI 字段，空串按「读不到」处理。
+fn read_dmi_field(root: &Path, name: &str) -> Option<String> {
+    let text = std::fs::read_to_string(root.join(name)).ok()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn identity_at(root: &Path) -> DmiIdentity {
+    let id_dir = root.join("class/dmi/id");
+    DmiIdentity {
+        sys_vendor: read_dmi_field(&id_dir, "sys_vendor"),
+        board_vendor: read_dmi_field(&id_dir, "board_vendor"),
+        product_name: read_dmi_field(&id_dir, "product_name"),
+        board_name: read_dmi_field(&id_dir, "board_name"),
+        product_family: read_dmi_field(&id_dir, "product_family"),
+    }
+}
+
+/// 读本机 DMI 身份（Linux `/sys/class/dmi/id/`，其它平台全部字段为 `None`）。
+///
+/// 任一字段读不到都不影响其余字段——权限受限的容器里常见只有 `product_name` 可读。
+pub fn dmi_identity() -> DmiIdentity {
+    identity_at(Path::new("/sys"))
+}
+
+/// 从指定 sysfs 根目录读 DMI 身份（便于测试与容器内排查）。
+pub fn dmi_identity_at(root: &Path) -> DmiIdentity {
+    identity_at(root)
 }
 
 /// 读本机 DMI 型号（Linux `/sys/class/dmi/id/product_name`，其它平台返回 `None`）。
 pub fn dmi_product_name() -> Option<String> {
-    let text = std::fs::read_to_string("/sys/class/dmi/id/product_name").ok()?;
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+    dmi_identity().product_name
 }
 
 /// 从指定 sysfs 根目录读 DMI 型号（便于测试与容器内排查）。
 pub fn dmi_product_name_at(root: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(root.join("class/dmi/id/product_name")).ok()?;
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+    dmi_identity_at(root).product_name
 }
 
 /// 当前二进制的机型判定。
 pub fn current_verdict() -> DmiVerdict {
-    verdict_for(build_sku(), dmi_product_name().as_deref())
+    verdict_for_identity(build_sku(), &dmi_identity())
 }
 
 #[cfg(test)]
@@ -328,9 +640,166 @@ mod tests {
         .allows_run());
     }
 
+    fn ident(product: Option<&str>, board: Option<&str>, family: Option<&str>) -> DmiIdentity {
+        DmiIdentity {
+            sys_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
+            board_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
+            product_name: product.map(str::to_string),
+            board_name: board.map(str::to_string),
+            product_family: family.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn placeholders_count_as_unreadable() {
+        // BIOS 没填真值：占位串不能被当成「别的机型」拦下
+        let id = ident(
+            Some("System Product Name"),
+            Some("To Be Filled By O.E.M."),
+            Some("Default string"),
+        );
+        assert!(id.haystacks().is_empty());
+        assert_eq!(
+            verdict_for_identity(by_id("g614").unwrap(), &id),
+            DmiVerdict::Unknown
+        );
+        assert!(DmiIdentity::default().haystacks().is_empty());
+    }
+
+    #[test]
+    fn model_id_found_in_board_or_family_field() {
+        let g614 = by_id("g614").unwrap();
+        // 产品名只有营销名，编号在主板名里
+        let id = ident(Some("ROG Strix SCAR 16"), Some("G614JY"), None);
+        assert_eq!(
+            verdict_for_identity(g614, &id),
+            DmiVerdict::Match,
+            "{:?}",
+            id.label()
+        );
+        // 编号只在产品家族里
+        let id = ident(Some("ROG Strix SCAR 16"), None, Some("G614JZ"));
+        assert_eq!(
+            verdict_for_identity(g614, &id),
+            DmiVerdict::Match,
+            "{:?}",
+            id.label()
+        );
+        // 只有营销名、没有编号 → 认不出，按「别的机型」拦下（有值但认不出就不该放行）
+        let id = ident(Some("ROG Strix SCAR 16"), None, None);
+        assert!(matches!(
+            verdict_for_identity(g614, &id),
+            DmiVerdict::Mismatch(_)
+        ));
+    }
+
+    #[test]
+    fn non_asus_vendor_is_reported_as_non_asus() {
+        let id = DmiIdentity {
+            sys_vendor: Some("LENOVO".to_string()),
+            board_vendor: Some("LENOVO".to_string()),
+            product_name: Some("21KVCTO1WW".to_string()),
+            ..Default::default()
+        };
+        match verdict_for_identity(by_id("g614").unwrap(), &id) {
+            DmiVerdict::NonAsus(vendor) => assert!(vendor.contains("LENOVO"), "{vendor}"),
+            other => panic!("expected NonAsus, got {other:?}"),
+        }
+        assert!(!verdict_for_identity(by_id("g614").unwrap(), &id).allows_run());
+        // 厂商字段读不全时不硬判「不是 ASUS」
+        let id = DmiIdentity {
+            sys_vendor: None,
+            board_vendor: None,
+            product_name: Some("21KVCTO1WW".to_string()),
+            ..Default::default()
+        };
+        assert!(matches!(
+            verdict_for_identity(by_id("g614").unwrap(), &id),
+            DmiVerdict::Mismatch(_)
+        ));
+    }
+
+    #[test]
+    fn suggest_picks_the_neighbouring_generation() {
+        // 本机是 G615，装的是 g614 包 → 建议 g615
+        let id = ident(Some("ROG Strix G16 G615LR_G615LR"), None, None);
+        let hit = suggest_for(&id).expect("should suggest a package");
+        assert_eq!(hit.id, "g615", "suggested {}", hit.id);
+        // 读不到 DMI 时没有建议
+        assert!(suggest_for(&DmiIdentity::default()).is_none());
+    }
+
     #[test]
     fn unknown_build_sku_falls_back_to_universal() {
         let sku = build_sku();
         assert!(by_id(sku.id).is_some());
+    }
+
+    #[test]
+    fn model_tokens_drop_marketing_words() {
+        assert_eq!(
+            model_tokens("ROG Strix SCAR 16 G614JY_G614JY"),
+            vec!["G614JY".to_string()]
+        );
+        assert_eq!(model_tokens("ROG STRIX SCAR 16"), Vec::<String>::new());
+        assert_eq!(
+            model_tokens("ASUS ProArt P16 H7606WI"),
+            vec!["H7606WI".to_string()]
+        );
+    }
+
+    #[test]
+    fn token_prefix_does_not_swallow_longer_numbers() {
+        // G614 包不能把 G6140 之类更长的编号当成自家机型
+        let id = ident(Some("Generic Chassis G6140XY"), None, None);
+        assert!(matches!(
+            verdict_for_identity(by_id("g614").unwrap(), &id),
+            DmiVerdict::Mismatch(_)
+        ));
+        // 但同代后缀（G614JY / G614JVR）要能认
+        for name in ["G614JY", "G614JVR", "G614JV_G614JV"] {
+            let id = ident(Some(&format!("ROG Strix SCAR 16 {name}")), None, None);
+            assert_eq!(
+                verdict_for_identity(by_id("g614").unwrap(), &id),
+                DmiVerdict::Match,
+                "{name} 应归 g614"
+            );
+        }
+    }
+
+    #[test]
+    fn marketing_only_pool_falls_back_to_substring() {
+        // 抽不出型号代号的字段沿用整体子串匹配，不能因为令牌化就判死
+        let id = ident(Some("ASUS G615"), None, None);
+        assert_eq!(
+            verdict_for_identity(by_id("g615").unwrap(), &id),
+            DmiVerdict::Match
+        );
+    }
+
+    #[test]
+    fn board_name_rescues_marketing_product_name() {
+        // 产品名只有营销名时，主板名 / 家族里的编号要能兜住
+        let id = ident(Some("ROG Strix SCAR 16"), Some("G614JY"), None);
+        assert_eq!(
+            verdict_for_identity(by_id("g614").unwrap(), &id),
+            DmiVerdict::Match
+        );
+    }
+
+    #[test]
+    fn suggest_all_lists_strongest_first() {
+        let id = ident(Some("ROG Strix G16 G615LR_G615LR"), None, None);
+        let all = suggest_all_for(&id);
+        assert!(!all.is_empty(), "应有候选");
+        assert_eq!(all[0].id, "g615", "最强的候选应排第一");
+        // 候选去重
+        let mut ids: Vec<&str> = all.iter().map(|s| s.id).collect();
+        let n = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), n);
+        // 读不到 DMI 时无候选
+        assert!(suggest_all_for(&DmiIdentity::default()).is_empty());
     }
 }

@@ -7,7 +7,7 @@ set -euo pipefail
 
 PKG_NAME="asus-numpad"
 BIN_NAME="asus-numpad"
-PKG_LICENSE="MIT"
+PKG_LICENSE="GPL-3.0-or-later"
 PKG_URL="https://github.com/RunningVAN/asus-numpad"
 PKG_SUMMARY="ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动"
 PKG_DESC="ASUS 触摸板数字小键盘用户态驱动，参数取自官方 AsusNUMPADFilter.inf。"
@@ -76,8 +76,13 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-# 编译产物路径
+# 编译产物路径。
+# `ASUS_NUMPAD_BIN` 可覆盖：交叉编译或复用 CI 产物时不必让每个打包器都重新编译一次。
 built_binary() {
+    if [[ -n "${ASUS_NUMPAD_BIN:-}" ]]; then
+        echo "$ASUS_NUMPAD_BIN"
+        return 0
+    fi
     local root
     root="$(repo_root)"
     echo "$root/target/release/$BIN_NAME"
@@ -108,13 +113,14 @@ cargo_build() {
 # --------------------------------------------------------------------------- #
 install_common_files() {
     local root="$1" destdir="$2"
-    local bin bindir mandir unitdir rulesdir
+    local bin bindir mandir unitdir rulesdir langdir
 
     bin="$(built_binary)"
     bindir="$destdir/usr/bin"
     mandir="$destdir/usr/share/man/man1"
     unitdir="$destdir/usr/lib/systemd/system"
     rulesdir="$destdir/usr/lib/udev/rules.d"
+    langdir="$destdir/usr/share/asus-numpad/lang"
 
     install -d "$bindir" "$mandir" "$unitdir" "$rulesdir"
     install -m 0755 "$bin" "$bindir/$BIN_NAME"
@@ -123,10 +129,50 @@ install_common_files() {
     if [[ -f "$root/packaging/common/asus-numpad.1" ]]; then
         install -m 0644 "$root/packaging/common/asus-numpad.1" "$mandir/asus-numpad.1"
     fi
+    # 语言文件：二进制内置一份兜底，这里的可编辑副本供用户整份替换
+    if [[ -d "$root/lang" ]]; then
+        install -d "$langdir"
+        install -m 0644 \
+            "$root/lang/zh_CN.lang" "$root/lang/zh_TW.lang" "$root/lang/en.lang" "$langdir/"
+    fi
     install -d "$destdir/usr/share/doc/$PKG_NAME"
     [[ -f "$root/README.md" ]] && install -m 0644 "$root/README.md" "$destdir/usr/share/doc/$PKG_NAME/README.md"
     [[ -f "$root/LICENSE" ]]   && install -m 0644 "$root/LICENSE"   "$destdir/usr/share/doc/$PKG_NAME/copyright"
     return 0
+}
+
+# 默认配置：三套打包器各抄一份迟早会漂移，统一从这里取
+default_config_json() {
+    cat <<'JSON'
+{
+  "numlock": "sync",
+  "calc_gesture": true,
+  "calc_gesture_mode": "long",
+  "mixed_mode": "auto",
+  "grab": true,
+  "follow_keyboard_brightness": true,
+  "manual_brightness_step": 4,
+  "language": "auto"
+}
+JSON
+}
+
+# 机型自证文件：装完 `rpm -ql` / `pacman -Ql` / `dpkg -L` 就能看出这包属于哪台机器
+install_sku_json() {
+    local destdir="$1" version="$2" sku="${3:-universal}" pkg="${4:-$PKG_NAME}"
+    install -d "$destdir/usr/share/asus-numpad"
+    cat > "$destdir/usr/share/asus-numpad/sku.json" <<JSON
+{
+  "sku": "$sku",
+  "package": "$pkg",
+  "version": "$version"
+}
+JSON
+}
+
+# 版本号 -> 打包用的整数（deb/rpm 要求数字开头、arch 与 alpine 只要求干净字符串）
+version_is_semver() {
+    [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
 
 # deb 的 Description 续行必须以空格开头，否则 dpkg 解析整包失败。
