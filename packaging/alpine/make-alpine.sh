@@ -48,7 +48,7 @@ tar -C "$WORK" -czf "$SRCDEST/$PKG_NAME-$VERSION.tar.gz" "$PKG_NAME-$VERSION"
 SHA="$(sha512sum "$SRCDEST/$PKG_NAME-$VERSION.tar.gz" | cut -d' ' -f1)"
 
 sed -e "s/^pkgver=.*/pkgver=$VERSION/" \
-    -e "s/^sha512sums=.*/sha512sums=\"$SHA\"/" \
+    -e "s|^sha512sums=.*|sha512sums=\"$SHA  $PKG_NAME-$VERSION.tar.gz\"|" \
     -e "s|^source=.*|source=\"$PKG_NAME-\$pkgver.tar.gz\"|" \
     "$SELF_DIR/APKBUILD" > "$APKROOT/APKBUILD"
 install -m 0644 "$SELF_DIR/$PKG_NAME.post-install" "$APKROOT/"

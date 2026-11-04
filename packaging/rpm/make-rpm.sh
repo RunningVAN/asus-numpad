@@ -65,6 +65,10 @@ DEFINES=(
     --define "debug_package %{nil}"
     --define "_build_id_links none"
 )
+# 跳过 BuildRequires 检查：CI 与本地常用 rustup 提供工具链，rpm 库里并不存在
+# 「rust」这个包，不加 --nodeps 时 rpmbuild 会在「检查构建依赖」阶段直接失败。
+# spec 里的 BuildRequires 仍然保留，发行版官方构建（mock/koji）照常据此装依赖。
+DEFINES+=(--nodeps)
 
 log "rpmbuild -bb"
 if [[ $CHECK_ONLY -eq 1 ]]; then

@@ -281,4 +281,6 @@ sku.verdict.mismatch = 不相符——本機是 {dmi}，裝錯套件了
 sku.verdict.unknown = 無法判定，按放行處理（讀不到 DMI 不等於機型不對）
 sku.verdict.not_enforced = 未啟用（相容套件不校驗機型）
 sku.suggest = 建議改裝：{sku}（{pkg}）
+sku.tip_precise = 本機可辨識為 {sku}，改裝 {pkg} 可取得該機型的預設佈局與備註
+sku.no_candidate = 機型表未收錄本機代號，可用 --allow-sku-mismatch 強行執行，或到倉庫提 issue 補充該機型
 err.sku_mismatch = 本套件只服務「{sku}」，與本機不符，已停止啟動。請改裝 {pkg}；強制執行加 --allow-sku-mismatch。

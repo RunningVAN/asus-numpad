@@ -1513,6 +1513,28 @@ fn sku_block() -> String {
                 .join(" / ");
             out.push('\n');
             out.push_str(&i18n::tf("sku.suggest", &[("sku", &names), ("pkg", &pkgs)]));
+        } else {
+            // 候选为空说明这台机器的代号在机型表里根本没有，
+            // 别让用户以为是自己装错，得明确告知「表里没有你这台」
+            out.push('\n');
+            out.push_str(&i18n::t("sku.no_candidate"));
+        }
+    }
+    // 兼容包不知道自己是给哪台机器的：既然 DMI 认得出，顺手告诉用户还能装更精确的包。
+    // 精确包的价值是默认布局与机型备注直接对口，不必靠运行期探测兜底。
+    if matches!(verdict, sku::DmiVerdict::NotEnforced) {
+        if let Some(s) = sku::suggest_all_for(&identity)
+            .into_iter()
+            .find(|s| !s.models.is_empty())
+        {
+            out.push('\n');
+            out.push_str(&i18n::tf(
+                "sku.tip_precise",
+                &[
+                    ("sku", s.display),
+                    ("pkg", &format!("asus-numpad-{}", s.id)),
+                ],
+            ));
         }
     }
     out

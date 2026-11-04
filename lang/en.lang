@@ -281,4 +281,6 @@ sku.verdict.mismatch = mismatch — this machine is {dmi}, wrong package
 sku.verdict.unknown = cannot tell, allowing run (unreadable DMI does not mean wrong model)
 sku.verdict.not_enforced = not enforced (the universal package skips the model check)
 sku.suggest = Suggested package: {sku} ({pkg})
+sku.tip_precise = Detected {sku}; installing {pkg} gives you that model's default layout
+sku.no_candidate = This machine is not in the model table; run with --allow-sku-mismatch, or file an issue to add it
 err.sku_mismatch = This package only serves "{sku}" and does not match this machine; startup stopped. Install {pkg} instead, or add --allow-sku-mismatch to force.

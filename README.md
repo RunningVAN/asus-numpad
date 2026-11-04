@@ -52,7 +52,7 @@ level: 0x41..0x48 = 1..8 档    # 0x00 = 熄灭，0x01 = 点亮（不指定档�
 
 「跟随键盘背光」= 读 `/sys/class/leds/asus::kbd_backlight/brightness` 的 `current/max`，
 线性归一到 1..8 档，每 500 ms 轮询，仅档位变化时下发，不刷 EC。
-手动三档与跟随共用同一套换算（`bright N` ≡ 键盘 3 档时的第 N 档），
+手动档位与跟随共用同一张档表的换算（`bright N` 取第 N 个等分点），
 因此开关跟随不会造成亮度跳变。
 
 背光节点选择有优先级（`led_policy.rs`）：OMNI 无线接收器 `0b05:1ace` 永久排除，
