@@ -1,0 +1,107 @@
+==> 版本 1.1.0，目标 arch，产物目录 dist
+==> 编译 asus-numpad（release, locked）
+[1m[92m    Updating[0m crates.io index
+[1m[92m Downloading[0m crates ...
+[1m[92m  Downloaded[0m clap_lex v1.1.1
+[1m[92m  Downloaded[0m itoa v1.0.18
+[1m[92m  Downloaded[0m heck v0.5.0
+[1m[92m  Downloaded[0m anstyle v1.0.14
+[1m[92m  Downloaded[0m clap_builder v4.6.7
+[1m[92m  Downloaded[0m clap_derive v4.6.7
+[1m[92m  Downloaded[0m strsim v0.11.1
+[1m[92m  Downloaded[0m quote v1.0.47
+[1m[92m  Downloaded[0m anyhow v1.0.104
+[1m[92m  Downloaded[0m clap v4.6.7
+[1m[92m  Downloaded[0m unicode-ident v1.0.27
+[1m[92m  Downloaded[0m zmij v1.0.23
+[1m[92m  Downloaded[0m proc-macro2 v1.0.107
+[1m[92m  Downloaded[0m serde_derive v1.0.229
+[1m[92m  Downloaded[0m serde_core v1.0.229
+[1m[92m  Downloaded[0m serde v1.0.229
+[1m[92m  Downloaded[0m memchr v2.8.3
+[1m[92m  Downloaded[0m serde_json v1.0.154
+[1m[92m  Downloaded[0m syn v3.0.9
+[1m[92m  Downloaded[0m libc v0.2.191
+[1m[92m   Compiling[0m proc-macro2 v1.0.107
+[1m[92m   Compiling[0m quote v1.0.47
+[1m[92m   Compiling[0m unicode-ident v1.0.27
+[1m[92m   Compiling[0m serde_core v1.0.229
+[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m   Compiling[0m strsim v0.11.1
+[1m[92m   Compiling[0m clap_lex v1.1.1
+[1m[92m   Compiling[0m anstyle v1.0.14
+[1m[92m   Compiling[0m anyhow v1.0.104
+[1m[92m   Compiling[0m syn v3.0.9
+[1m[92m   Compiling[0m serde_json v1.0.154
+[1m[92m   Compiling[0m libc v0.2.191
+[1m[92m   Compiling[0m heck v0.5.0
+[1m[92m   Compiling[0m serde v1.0.229
+[1m[92m   Compiling[0m clap_builder v4.6.7
+[1m[92m   Compiling[0m asus-numpad v1.1.0 (/__w/asus-numpad/asus-numpad)
+[1m[92m   Compiling[0m memchr v2.8.3
+[1m[92m   Compiling[0m itoa v1.0.18
+[1m[92m   Compiling[0m serde_derive v1.0.229
+[1m[92m   Compiling[0m clap_derive v4.6.7
+[1m[92m   Compiling[0m clap v4.6.7
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 30.96s
+==> ── 构建 arch ──
+==> 导出源码树
+==> 使用 makepkg 构建
+[警告] makepkg 流程下仍会执行 PKGBUILD 的 build()，--no-build 不会跳过编译
+==> Making package: asus-numpad 1.1.0-1 (Wed Nov  4 21:49:42 2026)
+==> WARNING: Skipping dependency checks.
+==> Retrieving sources...
+  -> Found asus-numpad-1.1.0.tar.gz
+==> Validating source files with sha256sums...
+    asus-numpad-1.1.0.tar.gz ... Skipped
+==> Extracting sources...
+  -> Extracting asus-numpad-1.1.0.tar.gz with bsdtar
+==> Starting build()...
+[1m[92m   Compiling[0m proc-macro2 v1.0.107
+[1m[92m   Compiling[0m unicode-ident v1.0.27
+[1m[92m   Compiling[0m quote v1.0.47
+[1m[92m   Compiling[0m serde_core v1.0.229
+[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m   Compiling[0m libc v0.2.191
+[1m[92m   Compiling[0m anyhow v1.0.104
+[1m[92m   Compiling[0m serde v1.0.229
+[1m[92m   Compiling[0m heck v0.5.0
+[1m[92m   Compiling[0m syn v3.0.9
+[1m[92m   Compiling[0m strsim v0.11.1
+[1m[92m   Compiling[0m clap_lex v1.1.1
+[1m[92m   Compiling[0m anstyle v1.0.14
+[1m[92m   Compiling[0m serde_json v1.0.154
+[1m[92m   Compiling[0m clap_builder v4.6.7
+[1m[92m   Compiling[0m memchr v2.8.3
+[1m[92m   Compiling[0m asus-numpad v1.1.0 (/tmp/asus-numpad-build.LKrnuR/work.8HZmSj/archbuild/src/asus-numpad-1.1.0)
+[1m[92m   Compiling[0m itoa v1.0.18
+[1m[92m   Compiling[0m clap_derive v4.6.7
+[1m[92m   Compiling[0m serde_derive v1.0.229
+[1m[92m   Compiling[0m clap v4.6.7
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 39.93s
+==> Entering fakeroot environment...
+==> Starting package()...
+==> Tidying install...
+  -> Removing libtool files...
+  -> Removing static library files...
+  -> Purging unwanted files...
+  -> Stripping unneeded symbols from binaries and libraries...
+Error while writing index for `/tmp/asus-numpad-build.LKrnuR/work.8HZmSj/archbuild/pkg/asus-numpad/usr/bin/asus-numpad': No debugging symbols
+gdb-add-index: No index was created for ./usr/bin/asus-numpad
+gdb-add-index: [Was there no debuginfo? Was there already an index?]
+  -> Compressing man and info pages...
+==> Checking for packaging issues...
+==> Creating package "asus-numpad"...
+  -> Generating .PKGINFO file...
+  -> Generating .BUILDINFO file...
+  -> Adding install file...
+  -> Generating .MTREE file...
+  -> Compressing package...
+==> Creating package "asus-numpad-debug"...
+  -> Generating .PKGINFO file...
+  -> Generating .BUILDINFO file...
+  -> Generating .MTREE file...
+  -> Compressing package...
+==> Leaving fakeroot environment.
+==> Finished making: asus-numpad 1.1.0-1 (Wed Nov  4 21:50:24 2026)
+[错误] 未产出 .pkg.tar.zst
