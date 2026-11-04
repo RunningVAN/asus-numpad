@@ -111,14 +111,18 @@ jobs:
           chmod 0440 /etc/sudoers.d/builder
           chown -R builder:builder "$GITHUB_WORKSPACE"
       - name: 构建 ${{ matrix.target }}
+        shell: bash
         run: |
-          set -o pipefail
-          chmod +x packaging/build.sh packaging/*/make-*.sh
+          set -o pipefail -x
+          # 先接管 stdout/stderr，后面任何一条命令提前失败也留下完整日志
+          exec > >(tee build.log) 2>&1
+          chmod +x packaging/build.sh
+          find packaging -mindepth 2 -maxdepth 2 -name 'make-*.sh' -exec chmod +x {} +
           if [ "${{ matrix.distro }}" = arch ]; then
             # makepkg 拒绝 root，整条链路切到 builder
-            su builder -c "cd '$GITHUB_WORKSPACE' && ./packaging/build.sh --out dist arch" 2>&1 | tee build.log
+            su builder -c "cd '$GITHUB_WORKSPACE' && ./packaging/build.sh --out dist arch"
           else
-            ./packaging/build.sh --out dist ${{ matrix.target }} 2>&1 | tee build.log
+            ./packaging/build.sh --out dist ${{ matrix.target }}
           fi
 
       # Actions 日志在没有 token 时读不到，失败就把构建日志推到独立分支，事后可复盘

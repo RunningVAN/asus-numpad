@@ -28,6 +28,8 @@ VERSION="${VERSION:-$(cargo_version)}"
 [[ -n "$VERSION" ]] || die "读不到版本号"
 OUT_DIR="${OUT_DIR:-$ROOT/dist}"
 mkdir -p "$OUT_DIR"
+# makepkg 会在子目录里跑，PKGDEST 必须是绝对路径，否则产物落到子目录里找不到
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 
 WORK="$(mktmp)"
 SRCTREE="$WORK/$PKG_NAME-$VERSION"
