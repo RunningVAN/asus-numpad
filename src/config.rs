@@ -93,6 +93,15 @@ pub const MANUAL_BRIGHTNESS_STEPS: u8 = 4;
 /// 自定义手动档位表的长度上限（受硬件 0x41..=0x48 八个物理档限制）。
 pub const MANUAL_BRIGHTNESS_MAX_STEPS: usize = 8;
 
+/// 自定义档位是否合法：`0`（熄灭）或硬件亮度档 `0x41..=0x48`。
+///
+/// 允许 0 是为了让「从 0 到最大线性四档」能写成 `[0, 0x43, 0x46, 0x48]`，
+/// 与 `bright 0` 的熄灭语义一致；其余值一律视为手写配置错误。
+pub fn manual_level_allowed(v: u8) -> bool {
+    v == VAL_OFF
+        || (VAL_BRIGHTNESS_BASE + 1..=VAL_BRIGHTNESS_BASE + VAL_BRIGHTNESS_MAX).contains(&v)
+}
+
 pub const PROC_INPUT_DEVICES: &str = "/proc/bus/input/devices";
 /// 配置文件正式路径（与 rpm 包内安装路径一致）。
 pub const CONFIG_PATH: &str = "/etc/asus-numpad/asus-numpad.json";
@@ -554,13 +563,17 @@ impl Config {
                 ],
             ));
         }
-        // 自定义手动档表：越界值剔除、空表/超长表直接放弃自定义（回落到线性等分），
+        // 自定义手动档表：非法值剔除、非递增表/空表/超长表按规则收敛，
         // 免得手改配置写成 `[0, 255]` 把灯发到哨位上，或写 20 档却没那么多物理档。
+        //
+        // 合法取值是 `0`（熄灭）或 `0x41..=0x48`：允许 0 是为了支持「从 0 到最大
+        // 线性自定义四档」这种写法（如 `[0, 0x43, 0x46, 0x48]`），硬件侧 0 就是
+        // 熄灭，与 `bright 0` 同义。
         if let Some(custom) = self.manual_brightness_levels.take() {
             let mut kept: Vec<u8> = custom
                 .iter()
                 .copied()
-                .filter(|v| (lo..=hi).contains(v))
+                .filter(|v| manual_level_allowed(*v))
                 .collect();
             if kept.len() != custom.len() {
                 let dropped = (custom.len() - kept.len()).to_string();
@@ -582,8 +595,12 @@ impl Config {
                 ));
                 kept.truncate(MANUAL_BRIGHTNESS_MAX_STEPS);
             }
+            // 档位必须从暗到亮严格递增：否则 `bright 2` 可能比 `bright 1` 更暗，
+            // 与「档位越大越亮」的直觉相反。写错就整表丢弃，回落线性等分。
             if kept.is_empty() {
                 notes.push(crate::i18n::t("note.manual_levels_reset"));
+            } else if !kept.windows(2).all(|w| w[0] < w[1]) {
+                notes.push(crate::i18n::t("note.manual_levels_not_increasing"));
             } else {
                 self.manual_brightness_levels = Some(kept);
             }
@@ -1024,6 +1041,50 @@ mod tests {
     }
 
     #[test]
+    fn custom_levels_may_start_from_off() {
+        // 「从 0 到最大线性四档」：0 是熄灭，其余三档线性铺到最亮
+        let mut c = Config {
+            manual_brightness_levels: Some(vec![0x00, 0x43, 0x46, 0x48]),
+            ..Config::default()
+        };
+        let notes = c.sanitize();
+        assert!(
+            c.manual_brightness_levels.is_some(),
+            "含 0 的自定义表应被保留，却回落到线性等分: {notes:?}"
+        );
+        assert_eq!(c.manual_steps(), 4);
+        assert_eq!(c.level_for_step(1), Some(VAL_OFF));
+        assert_eq!(c.level_for_step(2), Some(0x43));
+        assert_eq!(c.level_for_step(3), Some(0x46));
+        assert_eq!(c.level_for_step(4), Some(0x48));
+    }
+
+    #[test]
+    fn custom_levels_must_be_increasing() {
+        let mut c = Config {
+            manual_brightness_levels: Some(vec![0x48, 0x46, 0x43, 0x41]),
+            ..Config::default()
+        };
+        let notes = c.sanitize();
+        assert!(!notes.is_empty(), "倒序表应给出告警");
+        // 丢弃自定义后回落到默认线性四档
+        assert!(c.manual_brightness_levels.is_none());
+        assert_eq!(c.manual_steps(), MANUAL_BRIGHTNESS_STEPS);
+        assert_eq!(c.level_for_step(1), Some(0x41));
+    }
+
+    #[test]
+    fn custom_levels_still_drop_out_of_range() {
+        let mut c = Config {
+            manual_brightness_levels: Some(vec![0x00, 0x30, 0x43, 0x48]),
+            ..Config::default()
+        };
+        let notes = c.sanitize();
+        assert!(!notes.is_empty(), "越界档位应被剔除并告警");
+        assert_eq!(c.manual_levels(), vec![0x00, 0x43, 0x48]);
+    }
+
+    #[test]
     fn linear_levels_helper_handles_edge_cases() {
         use crate::brightness::linear_levels;
         // 空表 / 0 档 → 空
@@ -1094,12 +1155,13 @@ mod tests {
 
     #[test]
     fn custom_levels_are_sanitized() {
-        // 越界值剔除 → 表变短，档数跟着变
+        // 越界值剔除 → 表变短，档数跟着变（0 是合法值，代表熄灭）
         let mut c: Config =
-            serde_json::from_str(r#"{"manual_brightness_levels":["0x41",0,"0x30","0x48"]}"#)
+            serde_json::from_str(r#"{"manual_brightness_levels":["0x41","0x30","0x46","0x48"]}"#)
                 .unwrap();
         let notes = c.sanitize();
-        assert_eq!(c.manual_brightness_levels, Some(vec![0x41, 0x48]));
+        assert_eq!(c.manual_brightness_levels, Some(vec![0x41, 0x46, 0x48]));
+        assert_eq!(c.manual_steps(), 3);
         // 提示文案随语言变化，这里只要求「有提示」且指向该配置项
         assert!(
             notes.iter().any(|n| n.contains("manual_brightness_levels")),
@@ -1107,18 +1169,19 @@ mod tests {
         );
         // 全越界 → 放弃自定义，回落线性等分
         let mut c: Config =
-            serde_json::from_str(r#"{"manual_brightness_levels":[0,"0xff"]}"#).unwrap();
+            serde_json::from_str(r#"{"manual_brightness_levels":["0x30","0xff"]}"#).unwrap();
         let notes = c.sanitize();
         assert_eq!(c.manual_brightness_levels, None);
         assert_eq!(c.manual_levels().len(), MANUAL_BRIGHTNESS_STEPS as usize);
         assert_eq!(notes.len(), 2, "越界剔除 + 回落各一条提示: {notes:?}");
-        // 超长表截断到 8 档
+        // 超长表：硬件只有 8 个物理档，10 档截断后必然出现重复值 → 判非递增 → 回落
         let mut c: Config =
             serde_json::from_str(r#"{"manual_brightness_levels":[65,65,65,65,65,65,65,65,65,65]}"#)
                 .unwrap();
         let notes = c.sanitize();
-        assert_eq!(c.manual_levels().len(), MANUAL_BRIGHTNESS_MAX_STEPS);
-        assert_eq!(notes.len(), 1, "只有截断一条提示: {notes:?}");
+        assert!(c.manual_brightness_levels.is_none());
+        assert_eq!(c.manual_levels().len(), MANUAL_BRIGHTNESS_STEPS as usize);
+        assert!(notes.len() >= 2, "截断 + 非递增各一条提示: {notes:?}");
     }
 
     #[test]

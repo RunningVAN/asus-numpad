@@ -52,7 +52,8 @@ note.invalid_i2c_addr = --i2c-addr={v} cannot be parsed, ignored
 note.invalid_language = language={v} is not recognised, falling back to auto
 note.manual_step_clamped = manual_brightness_step={step} is outside 0..={max}, clamped to {max}
 note.levels_dropped = {n} entr(y/ies) in brightness_levels are outside 0x{lo}..=0x{hi} and were dropped
-note.manual_levels_dropped = {n} entr(y/ies) in manual_brightness_levels are outside 0x{lo}..=0x{hi} and were dropped
+note.manual_levels_dropped = {n} entr(y/ies) in manual_brightness_levels are neither 0 (off) nor inside 0x{lo}..=0x{hi} and were dropped
+note.manual_levels_not_increasing = manual_brightness_levels must increase strictly from dim to bright; custom table dropped, falling back to linear spacing
 note.manual_levels_truncated = manual_brightness_levels has {n} steps, above the hardware limit of {max}; truncated
 note.manual_levels_reset = manual_brightness_levels is empty after dropping out-of-range values; falling back to linear spacing
 note.numlock_zone = numlock_zone={v} is no longer supported, treating it as a whole cell

@@ -52,7 +52,8 @@ note.invalid_i2c_addr = --i2c-addr={v} 无法解析，忽略
 note.invalid_language = language={v} 无法识别，按 auto 处理
 note.manual_step_clamped = manual_brightness_step={step} 超出 0..={max}，已收敛到 {max}
 note.levels_dropped = brightness_levels 中有 {n} 项超出 0x{lo}..=0x{hi}，已剔除
-note.manual_levels_dropped = manual_brightness_levels 中有 {n} 项超出 0x{lo}..=0x{hi}，已剔除
+note.manual_levels_dropped = manual_brightness_levels 中有 {n} 项既不是 0（熄灭）也不在 0x{lo}..=0x{hi} 内，已剔除
+note.manual_levels_not_increasing = manual_brightness_levels 必须从暗到亮严格递增，已放弃自定义、回落到线性等分
 note.manual_levels_truncated = manual_brightness_levels 有 {n} 档，超过硬件上限 {max} 档，已截断
 note.manual_levels_reset = manual_brightness_levels 剔除越界值后为空，已放弃自定义、回落到线性等分
 note.numlock_zone = numlock_zone={v} 已不再支持，按整格 cell 处理

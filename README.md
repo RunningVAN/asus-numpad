@@ -162,7 +162,7 @@ asus-numpad --lang en check     # 仅本次生效
 | `led_kind` | `auto` / `hidraw` / `i2c` / `none` | 背光通道 |
 | `follow_keyboard_brightness` | `true` / `false` | 是否跟随键盘背光，默认 `true` |
 | `manual_brightness_step` | `0`..`4` | 手动档（0=灭，1..4 线性递增），仅跟随关闭时生效 |
-| `manual_brightness_levels` | 数组 | 自定义四档下发值，默认按 `brightness_levels` 线性等分 |
+| `manual_brightness_levels` | 数组 | 自定义四档下发值，默认按 `brightness_levels` 线性等分；每项取 `0`（熄灭）或 `0x41`..`0x48`，须从暗到亮严格递增 |
 | `brightness_levels` | 数组 | 硬件全档下发值，默认 `0x41`..`0x48`（1..8 档） |
 | `brightness_poll_ms` | 毫秒 | 轮询间隔，默认 `500` |
 | `allow_unverified_layout` | `true` / `false` | 放行未收录键表的同族布局 |
@@ -213,7 +213,9 @@ ASUS_NUMPAD_SKU=g614 RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
 1. **亮度档位由硬件全档表线性等分**：`brightness_levels` 是面板的完整档表
    （默认 `0x41`..`0x48`，8 档），手动档位取其中的等分点——默认 4 档即
    `0x41`/`0x43`/`0x46`/`0x48`（0 档熄灭）。档数与具体下发值都可用
-   `manual_brightness_levels` 覆写（上限 `brightness_levels` 的长度）；跟随模式下
+   `manual_brightness_levels` 覆写（上限 `brightness_levels` 的长度）：每项取 `0`
+   （熄灭）或 `0x41`..`0x48`，且必须从暗到亮严格递增，否则整表丢弃并回落线性等分。
+   想「从全灭到最亮」四档就写 `[0, 0x43, 0x46, 0x48]`；跟随模式下
    键盘背光档位同样归一到这张表上，键盘关到 0 时取最低档，亮度只降不升。
 2. **NumLock 长按阈值**：官方 `iNumLockMaxVaildDist = 2741` 在 0.1 mm 单位下仅 0.27 mm，
    与「长按不动」的物理语义矛盾。本实现按字面值使用，若长按被判成滑动，先查这里。
