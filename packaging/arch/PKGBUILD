@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Maintainer: asus-numpad maintainers <maintainers@example.invalid>
 #
 # 本地构建：./packaging/arch/make-arch.sh（会先打 tarball 再调本文件）

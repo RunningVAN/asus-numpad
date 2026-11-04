@@ -29,7 +29,7 @@ done
 
 [ "$(id -u)" -eq 0 ] || { echo "需要 root（sudo $0 ...）" >&2; exit 1; }
 
-HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 PREFIX=${PREFIX%/}
 DEST="$PREFIX"
 

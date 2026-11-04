@@ -223,4 +223,9 @@ ASUS_NUMPAD_SKU=g614 RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
 
 ## 许可
 
-GPL-3.0-or-later（GPLv3 或更高版本），见 [LICENSE](LICENSE)。
+GPL-3.0-or-later（GPLv3 或更高版本），全文见 [LICENSE](LICENSE)。
+
+Copyright (C) 2026 RunningVAN
+
+改协议的原因：本项目的键表与几何换算来自官方驱动逆向和厂商 INF 的实测结论，再分发条件
+与 copyleft 一致；同时避免下游把本项目闭源塞进固件工具链后不回馈。

@@ -27,9 +27,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends shellcheck
-          shellcheck -x -S warning packaging/build.sh packaging/lib/common.sh \
+          shellcheck -x -S warning \
+              packaging/build.sh packaging/build-skus.sh packaging/install-sku.sh \
+              packaging/lib/common.sh \
               packaging/deb/make-deb.sh packaging/rpm/make-rpm.sh packaging/arch/make-arch.sh \
-              packaging/arch/PKGBUILD packaging/arch/asus-numpad.install
+              packaging/alpine/make-alpine.sh packaging/tarball/make-tarball.sh \
+              packaging/arch/PKGBUILD packaging/arch/asus-numpad.install \
+              packaging/alpine/APKBUILD \
+              tools/repo-gen.sh
       - name: shellcheck 维护脚本（POSIX sh）
         run: shellcheck -s sh -S warning packaging/deb/postinst packaging/deb/prerm packaging/deb/postrm
       # 只把 correctness 级别当门槛，样式类提示留给后续清理

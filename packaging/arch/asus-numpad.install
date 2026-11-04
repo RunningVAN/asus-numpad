@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Arch 包的安装钩子（pacman 在 install / upgrade / remove 时调用）
 # 注意：这里不用 $1 判断参数名拼写错误，pacman 传的第二个参数是版本号。
 
