@@ -157,6 +157,21 @@ for t in "${EXPANDED[@]}"; do
             log "── 构建 arch ──"
             "$SELF_DIR/arch/make-arch.sh" --version "$VERSION" --no-build --out "$OUT_DIR"
             ;;
+        alpine)
+            log "── 构建 alpine ──"
+            # abuild 自己会跑一遍 cargo（在净网沙箱里），这里不能传 --no-build：
+            # .apk 的编译发生在 APKBUILD 的 build() 内，跳过就出不了包。
+            "$SELF_DIR/alpine/make-alpine.sh" --version "$VERSION" --out "$OUT_DIR"
+            ;;
+        tarball)
+            log "── 构建 tarball ──"
+            "$SELF_DIR/tarball/make-tarball.sh" --version "$VERSION" --no-build --out "$OUT_DIR"
+            ;;
+        *)
+            # 以前这里没有兜底：`all` 展开出来的 tarball/alpine 会被静默跳过，
+            # 用户看到「全部完成」却少一半产物。现在直接报错，宁可失败也不假装成功。
+            die "内部错误：目标 $t 没有对应的构建分支"
+            ;;
     esac
 done
 

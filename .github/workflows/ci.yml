@@ -7,6 +7,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# 失败时要把 build.log 推到 ci-log-<distro> 分支；默认 token 是只读，会 403
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -61,7 +65,7 @@ jobs:
             setup: >-
               apt-get update &&
               apt-get install -y --no-install-recommends
-              curl ca-certificates dpkg-dev fakeroot build-essential &&
+              curl ca-certificates git dpkg-dev fakeroot build-essential &&
               curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable &&
               ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             target: deb
@@ -70,23 +74,26 @@ jobs:
             setup: >-
               apt-get update &&
               apt-get install -y --no-install-recommends
-              curl ca-certificates dpkg-dev build-essential &&
+              curl ca-certificates git dpkg-dev build-essential &&
               curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable &&
               ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             target: deb
           - distro: fedora
             image: fedora:latest
             setup: >-
-              dnf install -y curl ca-certificates rpm-build systemd-rpm-macros tar gzip &&
+              dnf install -y curl ca-certificates git rpm-build systemd-rpm-macros tar gzip &&
               curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable &&
               ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             target: rpm
+          # makepkg 明确拒绝以 root 身份运行，所以另建 builder 用户，并把 rust
+          # 装到 /usr/local/{cargo,rustup}（rust 官方镜像的做法），两个用户都能用
           - distro: arch
             image: archlinux:latest
             setup: >-
-              pacman -Sy --noconfirm --needed base-devel curl libarchive &&
-              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable &&
-              ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
+              pacman -Sy --noconfirm --needed base-devel curl git libarchive &&
+              export CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup &&
+              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path &&
+              ln -sf /usr/local/cargo/bin/* /usr/local/bin/
             target: arch
     runs-on: ubuntu-latest
     container:
@@ -97,24 +104,43 @@ jobs:
           submodules: false
       - name: 安装构建依赖
         run: ${{ matrix.setup }}
+      - name: 准备构建用户（arch）
+        if: matrix.distro == 'arch'
+        run: |
+          set -eux
+          id builder >/dev/null 2>&1 || useradd -m builder
+          mkdir -p /etc/sudoers.d
+          printf 'builder ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/builder
+          chmod 0440 /etc/sudoers.d/builder
+          chmod -R a+rwX /usr/local/cargo /usr/local/rustup
+          chown -R builder:builder "$GITHUB_WORKSPACE"
       - name: 构建 ${{ matrix.target }}
         run: |
           set -o pipefail
           chmod +x packaging/build.sh packaging/*/make-*.sh
-          ./packaging/build.sh --out dist ${{ matrix.target }} 2>&1 | tee build.log
+          if [ "${{ matrix.distro }}" = arch ]; then
+            # makepkg 拒绝 root，整条链路切到 builder
+            su builder -c "cd '$GITHUB_WORKSPACE' && ./packaging/build.sh --out dist arch" 2>&1 | tee build.log
+          else
+            ./packaging/build.sh --out dist ${{ matrix.target }} 2>&1 | tee build.log
+          fi
 
       # Actions 日志在没有 token 时读不到，失败就把构建日志推到独立分支，事后可复盘
       - name: 失败回传日志（${{ matrix.distro }}）
         if: failure()
         run: |
           set -euo pipefail
+          test -f build.log || { echo "没有 build.log，跳过回传"; exit 0; }
           mkdir -p /tmp/logpush
-          cp build.log /tmp/logpush/ 2>/dev/null || true
+          cp build.log /tmp/logpush/
           cd /tmp/logpush
-          git init -q -b "ci-log-${{ matrix.distro }}"
-          git add -A
+          git init -q
+          git config --global --add safe.directory '*'
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com add -A
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "ci log ${{ matrix.distro }}"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" "ci-log-${{ matrix.distro }}"
+          # 单写 refspec 才不会被 git 当成不完整的 refname
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+            "HEAD:refs/heads/ci-log-${{ matrix.distro }}"
       - name: 校验产物
         run: |
           ls -l dist/
