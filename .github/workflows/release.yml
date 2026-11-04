@@ -64,92 +64,154 @@ jobs:
             packaging/tarball/install.sh packaging/tarball/uninstall.sh \
             packaging/alpine/asus-numpad.post-install
 
+  # 各发行版在自己的容器里出包。容器常驻、分阶段跑，是为了让失败落在 step 名上：
+  # 拿不到 Actions 日志时，step 名就是唯一线索。每个阶段的输出都 tee 到 logs/，
+  # 由 diagnose job 汇总后推到一个分支，便于事后复盘。
   package:
     needs: test
     runs-on: ubuntu-latest
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: deb-debian
             image: debian:bookworm
-            build: |
+            deps: |
+              set -eux
               apt-get update
-              apt-get install -y --no-install-recommends cargo rustc dpkg-dev fakeroot ca-certificates
-              ./packaging/deb/make-deb.sh --out dist
-            glob: "dist/*.deb,dist/*.ddeb"
+              apt-get install -y --no-install-recommends curl ca-certificates dpkg-dev fakeroot build-essential
+              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+              ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
+            build: ./packaging/deb/make-deb.sh --out dist
           - name: deb-ubuntu
             image: ubuntu:24.04
-            build: |
+            deps: |
+              set -eux
               apt-get update
-              apt-get install -y --no-install-recommends cargo rustc dpkg-dev ca-certificates
-              ./packaging/deb/make-deb.sh --out dist
-            glob: "dist/*.deb"
-          # rpm 同时覆盖 Fedora 与 openSUSE：spec 里不用发行版私有宏
+              apt-get install -y --no-install-recommends curl ca-certificates dpkg-dev build-essential
+              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+              ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
+            build: ./packaging/deb/make-deb.sh --out dist
+          # 一套 spec 同时覆盖 Fedora 与 openSUSE：不依赖发行版私有宏
           - name: rpm-fedora
             image: fedora:latest
-            build: |
-              dnf install -y cargo rust rpm-build systemd-rpm-macros
-              ./packaging/rpm/make-rpm.sh --out dist
-            glob: "dist/*.rpm"
+            deps: |
+              set -eux
+              dnf install -y cargo rust rpm-build systemd-rpm-macros tar gzip
+            build: ./packaging/rpm/make-rpm.sh --out dist
           - name: rpm-opensuse
             image: opensuse/tumbleweed:latest
-            build: |
-              zypper --non-interactive install --no-recommends cargo rust rpm-build
-              ./packaging/rpm/make-rpm.sh --out dist
-            glob: "dist/*.rpm"
+            deps: |
+              set -eux
+              zypper --non-interactive install --no-recommends cargo rust rpm-build tar gzip
+            build: ./packaging/rpm/make-rpm.sh --out dist
           - name: arch
             image: archlinux:latest
-            build: |
+            deps: |
+              set -eux
               pacman -Syu --noconfirm --needed base-devel rust sudo bsdtar
-              useradd -m builder
-              echo 'builder ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+              id builder >/dev/null 2>&1 || useradd -m builder
+              echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
               chown -R builder:builder /build
-              su builder -c 'cd /build && ./packaging/arch/make-arch.sh --out dist'
-            glob: "dist/*.pkg.tar.*"
+            build: su builder -c 'cd /build && ./packaging/arch/make-arch.sh --out dist'
           - name: alpine
             image: alpine:latest
-            build: |
+            deps: |
+              set -eux
               apk add --no-cache alpine-sdk cargo rust bash tar gzip
-              adduser -D builder
-              echo 'builder ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-              chown -R builder /build
-              # abuild 必须有自己的签名密钥，否则连本地包都不让出
-              su builder -c 'export HOME=/home/builder; abuild-keygen -a -i -n >/dev/null 2>&1 || true'
-              su builder -c 'export HOME=/home/builder; cd /build && ./packaging/alpine/make-alpine.sh --out dist'
-            glob: "dist/*.apk"
+              id builder >/dev/null 2>&1 || adduser -D builder
+              echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
+              su builder -c 'export HOME=/home/builder; abuild-keygen -a -i -n' || true
+              chown -R builder:builder /build
+            # abuild 不接受 root 运行，且必须有自己的签名密钥，都放在 builder 下
+            build: su builder -c 'export HOME=/home/builder; cd /build && ./packaging/alpine/make-alpine.sh --out dist'
 
     steps:
       - uses: actions/checkout@v4
-      - name: 容器内出包（${{ matrix.name }}）
+      - name: 建日志目录
+        run: mkdir -p logs
+
+      - name: 起容器并复制源码（${{ matrix.name }}）
         run: |
           set -euo pipefail
-          docker rm -f asus-numpad-build >/dev/null 2>&1 || true
+          docker rm -f npbuild >/dev/null 2>&1 || true
+          docker create --name npbuild -v "$PWD:/src:ro" "${{ matrix.image }}" sleep 3600 >/dev/null
+          docker start npbuild >/dev/null
+          # 源码只读挂入、容器内复制一份：容器里的 root/builder 碰不到宿主文件
+          docker exec npbuild sh -c 'mkdir -p /build && cp -a /src/. /build/' 2>&1 | tee logs/01-copy.log
 
-          # 源码只读挂入，容器内复制一份再编译：容器里的 root/builder 碰不到宿主文件
-          cat > inner.sh <<'INNER'
-          set -eux
-          mkdir -p /build
-          cp -a /src/. /build/
-          cd /build
-          INNER
-          cat >> inner.sh <<INNER
-          ${{ matrix.build }}
-          INNER
+      - name: 装构建依赖（${{ matrix.name }}）
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$DEPS" > deps.sh
+          docker cp deps.sh npbuild:/deps.sh
+          docker exec npbuild sh /deps.sh 2>&1 | tee logs/02-deps.log
+        env:
+          DEPS: ${{ matrix.deps }}
 
-          docker run --name asus-numpad-build \
-            -v "$PWD:/src:ro" -v "$PWD/inner.sh:/inner.sh:ro" \
-            "${{ matrix.image }}" bash /inner.sh
+      - name: 编译并出包（${{ matrix.name }}）
+        run: |
+          set -o pipefail
+          docker exec -w /build npbuild bash -c "$BUILD" 2>&1 | tee logs/03-build.log
+        env:
+          BUILD: ${{ matrix.build }}
 
+      - name: 收集产物（${{ matrix.name }}）
+        run: |
+          set -euo pipefail
           mkdir -p dist
-          docker cp asus-numpad-build:/build/dist/. dist/
-          docker rm -f asus-numpad-build
+          docker cp npbuild:/build/dist/. dist/
           ls -l dist
+
+      - name: 容器日志（${{ matrix.name }}）
+        if: always()
+        run: docker logs npbuild > logs/04-docker.log 2>&1 || true
+
+      - name: 保存日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.name }}
+          path: logs/
+          if-no-files-found: ignore
+
       - uses: actions/upload-artifact@v4
         with:
           name: pkg-${{ matrix.name }}
-          path: ${{ matrix.glob }}
+          path: dist/
           if-no-files-found: error
+
+  # Actions 日志在没有 token 的情况下读不到，把出包日志推回一个分支才能复盘。
+  diagnose:
+    needs: [package]
+    if: always()
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: logs-*
+          path: logs
+          merge-multiple: true
+      - name: 汇总
+        run: |
+          set -euo pipefail
+          mkdir -p ci-logs
+          cp -a logs/. ci-logs/ 2>/dev/null || true
+          find ci-logs -type f | sort
+      - name: 推到 ci-logs 分支
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan ci-logs-tmp
+          git add -A ci-logs
+          git commit -m "ci: 出包日志 ${{ github.run_id }}" || echo "无日志"
+          git push -f origin HEAD:ci-logs
 
   # 静态 tarball 单独出：musl 目标在宿主上比在容器里好搞
   tarball:
@@ -173,6 +235,7 @@ jobs:
   # 汇总：生成四套仓库索引 → 发 Release → 提交 repo/ 回 main
   publish:
     needs: [package, tarball]
+    if: needs.package.result == 'success' && needs.tarball.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
