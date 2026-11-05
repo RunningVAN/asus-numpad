@@ -9,6 +9,7 @@ Name:           asus-numpad
 Summary:        ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 # 旧版按机型分包（asus-numpad-g614 等）已被单一包取代：升级时由本包接管，
 # 装过任意机型包的机器 dnf upgrade 会自动换过来，不会因为共用 /usr/bin/asus-numpad 报文件冲突。
+# 这里的名单只为接管历史包名，不代表机型支持范围。
 %global old_skus g533 g614 g615 g634 g635 gx550 gx650 ux582 universal
 %for s %old_skus
 Provides:       asus-numpad-%{s} = %{version}-%{release}

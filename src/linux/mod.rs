@@ -134,7 +134,7 @@ fn is_numpad_candidate(dev: &InputDevice) -> bool {
     if crate::layout::hid_id_of(&dev.name).is_some() {
         return true;
     }
-    // HID 名字被裁剪的情况：ELAN（04F3）/ PixArt（093A，G615 的 ASCP1400 模组）
+    // HID 名字被裁剪的情况：ELAN（04F3）/ PixArt（093A，ASCP1400 模组）
     // 触摸板直接按 vendor 放行
     if dev.id.vendor == 0x04f3 || dev.id.vendor == 0x093a {
         return true;

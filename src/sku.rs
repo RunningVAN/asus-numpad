@@ -2,7 +2,7 @@
 //!
 //! ## 为什么不再按机型分包
 //!
-//! 早期做法是按机型出多个包（`asus-numpad-g614`、`asus-numpad-g615` …），每个包在
+//! 早期做法是按机型出多个包（`asus-numpad-g614` 之类），每个包在
 //! 编译期把机型写死，装错包就退出码 3 拒绝启动。这带来三个问题：
 //!
 //! * 用户必须先查清自己是哪台机器才能装——查 DMI、对表、挑包，全是多余步骤；
@@ -50,71 +50,34 @@ pub struct Sku {
 
 /// 机型配置表。新增机型只加一行——这张表是唯一源，出包脚本不再复制一份。
 ///
-/// ## 分组规则
+/// ## 只收跑过的机型
 ///
-/// 一个配置服务一个**触摸板模组族**，而不是一个整机 SKU。同族的依据是
-/// `layout.rs` 的 [`crate::layout::HID_LAYOUTS`]（官方 INF 的 HID 名 → 键表）：
-/// 模组名相同（如 `ASUE1416` / `ASUF1416`）就一定是同一份键表、同一套几何。
+/// 表里只有 `g614`（实测机型 `G634JY` 所在的一族）与兜底的 `universal`。
+/// 其他机型（`G533` / `G513`、`G615` / `G635`、`GX550` / `GX551` / `GX650`、
+/// `UX582` / `UX482`）不再单独建条目：键表本来就不跟整机型号走，而是由
+/// [`crate::layout::HID_LAYOUTS`] 按实际触摸板模组选择（模组名相同即同一份键表、
+/// 同一套几何），这些机器落 [`SkuSource::Fallback`] 照样能跑。写进表里只是没有
+/// 实测支撑的声明，真出问题也没人能复现。
 ///
-/// * `g614` 吸收 `g634`：同一块 ELAN 触摸板（04F3:3275 / ASUE1416），键表 GH3XLNDZ；
-/// * `g533` 吸收 `g513`：魔霸6 15 英寸与枪神6 同代同平台，模组 ASUE1403 / ELAN1403
-///   → GH2XLNDZ 同族（G513 只有部分配置带 NumberPad，没有该模组的机器由硬件探测兜底）；
-///   17 英寸 `g713` **不并入**：G17 机身自带物理数字键，触控板没有虚拟数字键盘
-///   （官方规格 `NumberPad` 一栏为 `N/A`），落入 [`NON_NUMPAD_MODELS`] 直接拒绝；
-/// * `g615` 吸收 `g635`：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ 同族；
-/// * `gx550` 吸收 `gx650`：两代冰刃双屏同属 gx551 键位族。
-///
-/// 曾经把 ProArt P16（`H7606`）并进 `g615`，是**错的**：那台机器的触控板是 ASUS
-/// DialPad 智能旋钮（官方规格写 `support DialPad`），根本没有 NumberPad 虚拟数字键盘。
-/// 现已从机型号召里剔除，并落入 [`NON_NUMPAD_MODELS`] 显式拒绝，免得用户装了白装。
-///
-/// 分组只影响「自动识别」的 DMI 白名单，运行期选哪套键表仍由实际 HID 模组名决定，
-/// 所以分组不改变保守性：模组不在 `HID_LAYOUTS` 里，照样拒绝启动。
+/// 所以本表只回答一件事：是不是实测机型、要不要走实测参数。「认不出」不是错误，
+/// 通用配置就是默认路径。
 ///
 /// 历史机型包名（`asus-numpad-g614` 等）由统一包 Obsoletes 掉，老用户
-/// `dnf upgrade` 会自动接管，不需要先手工卸载旧机型包。
+/// `dnf upgrade` 会自动接管，不需要先手工卸载旧机型包——那只关乎包名迁移，与机型表无关。
 pub const SKUS: &[Sku] = &[
-    Sku {
-        id: "g533",
-        display: "ASUS 枪神6 / 魔霸6 15 英寸（G533 / G513）",
-        models: &["G533", "G513"],
-        modules: &["ASUE1403", "ELAN1403"],
-        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）；枪神6（G533）与魔霸6 15 英寸（G513）同代同平台，官方规格里 G513 只有部分配置写 Support NumberPad，没这块触摸板的机器由硬件探测兜底。17 英寸 G713 是物理数字键，不并入",
-    },
     Sku {
         id: "g614",
         display: "ASUS 枪神7 / 枪神8 / 魔霸新锐 2023 / 枪神7 超竞版 16 英寸（G614 / G634）",
         models: &["G614", "G634"],
         modules: &["ASUE1416", "ASUF1416"],
-        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
-    },
-    Sku {
-        id: "g615",
-        display: "ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版（G615 / G635）",
-        models: &["G615", "G635"],
-        modules: &["ASCP1400", "ASCF1400"],
-        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，已剔除并显式拒绝",
-    },
-    Sku {
-        id: "gx550",
-        display: "ASUS 冰刃双屏 15 / 16 英寸（GX550 / GX551 / GX650）",
-        models: &["GX550", "GX551", "GX650"],
-        modules: &["ASUE1408", "ASUE1404"],
-        note: "GX550 / GX551 / GX650 同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A",
-    },
-    Sku {
-        id: "ux582",
-        display: "灵耀双屏（UX582 / UX482）",
-        models: &["UX582", "UX482"],
-        modules: &["ASUE1406", "ELAN1406"],
-        note: "模组 ASUE1406 / ELAN1406 → 键表 NVM",
+        note: "唯一上过真机的配置（G634JY）：同一块 ELAN 触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
     },
     Sku {
         id: "universal",
-        display: "通用配置（未匹配到具体机型时使用）",
+        display: "通用配置（默认路径：非实测机型都走这里）",
         models: &[],
         modules: &[],
-        note: "没认出机型时用官方默认参数，键表仍按实际触摸板模组自动选择；认出后可用 asus-numpad sku <id> 手动指定",
+        note: "参数取官方默认，键表按实际触摸板模组自动选择；也可用 asus-numpad sku <id> 手动指定",
     },
 ];
 
@@ -847,13 +810,14 @@ mod tests {
         assert_eq!(ids.len(), n, "SKU id 必须唯一");
         assert!(by_id("universal").is_some(), "必须保留 universal 兜底");
         assert!(by_id("G614").is_some(), "机型查询应忽略大小写");
-        // g513 并入 g533；g713 不并入任何配置（17 英寸物理数字键，落 NON_NUMPAD_MODELS）；
-        // h7606 从机型号召直接剔除（ProArt 是 DialPad 旋钮）
-        for merged in ["g634", "g635", "gx650", "g513", "g713", "h7606"] {
-            assert!(
-                by_id(merged).is_none(),
-                "{merged} 已并入同族配置，不应再单独存在"
-            );
+        // 只收跑过的机型：表里除 g614 与兜底的 universal 之外不应再有条目
+        let mut ids: Vec<&str> = SKUS.iter().map(|s| s.id).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec!["g614", "universal"]);
+        for gone in [
+            "g533", "g634", "g635", "gx550", "gx650", "ux582", "g713", "h7606",
+        ] {
+            assert!(by_id(gone).is_none(), "{gone} 不应单列");
         }
         for s in SKUS {
             assert!(!s.display.is_empty(), "{} 缺少展示名", s.id);
@@ -867,15 +831,6 @@ mod tests {
         let cases = [
             ("ROG Strix SCAR 16 G634JY_G634JY", "g614"),
             ("ROG Strix SCAR 16 G614JZ_G614JZ", "g614"),
-            ("ROG Strix SCAR 16 G615LR_G615LR", "g615"),
-            ("ROG Strix SCAR 16 G635LX_G635LX", "g615"),
-            ("ROG Strix SCAR 15 G533ZW_G533ZW", "g533"),
-            ("ROG Strix G15 G513RM_G513RM", "g533"),
-            ("ROG Zephyrus Duo 16 GX650PZ_GX650PZ", "gx550"),
-            ("ROG Zephyrus Duo 15 GX550LXS_GX550LXS", "gx550"),
-            ("ROG Zephyrus Duo 15 SE GX551QS_GX551QS", "gx550"),
-            ("ASUS Zenbook Duo UX582LR_UX582LR", "ux582"),
-            ("ASUS Zenbook Duo UX482EG_UX482EG", "ux582"),
         ];
         for (product, want) in cases {
             let r = resolve(&dmi(product), &no_hw(), None).unwrap();
@@ -888,13 +843,26 @@ mod tests {
     }
 
     #[test]
-    fn one_binary_serves_every_model() {
-        // 同一份二进制在两种机器上得到两套配置：这正是取消分包后要保证的行为
-        let a = resolve(&dmi("ROG Strix SCAR 16 G634JY_G634JY"), &no_hw(), None).unwrap();
-        let b = resolve(&dmi("ROG Strix SCAR 16 G615LR_G615LR"), &no_hw(), None).unwrap();
-        assert_eq!(a.id(), "g614");
-        assert_eq!(b.id(), "g615");
-        assert_ne!(a.sku.models, b.sku.models);
+    fn untested_models_fall_back_instead_of_being_listed() {
+        // 不在实测机型表里的机器不做机型声明：落通用配置，照常放行。
+        // 键表由 layout 按实际触摸板模组选，与机型无关，功能不受影响。
+        for product in [
+            "ROG Strix SCAR 15 G533ZW_G533ZW",
+            "ROG Strix G15 G513RM_G513RM",
+            "ROG Strix SCAR 16 G615LR_G615LR",
+            "ROG Strix SCAR 16 G635LX_G635LX",
+            "ROG Zephyrus Duo 16 GX650PZ_GX650PZ",
+            "ROG Zephyrus Duo 15 GX550LXS_GX550LXS",
+            "ASUS Zenbook Duo UX582LR_UX582LR",
+            "ASUS Zenbook Duo UX482EG_UX482EG",
+        ] {
+            let r = resolve(&dmi(product), &no_hw(), None).unwrap();
+            assert_eq!(r.id(), "universal", "{product}");
+            assert_eq!(r.source, SkuSource::Fallback, "{product}");
+            assert_eq!(r.verdict, DmiVerdict::Unknown, "{product}");
+            assert!(r.allows_run(), "{product} 应放行");
+            assert!(!r.is_detected(), "{product} 不应算认出机型");
+        }
     }
 
     #[test]
@@ -946,24 +914,31 @@ mod tests {
         .unwrap();
         assert_eq!(r.source, SkuSource::Fallback);
         assert!(r.allows_run());
+        // 模组属于其他机型族（不在机型表里）：照样放行，键表交给 layout 按模组选
+        let r = resolve(
+            &dmi("ROG Strix G15 G513RM_G513RM"),
+            &hw(&["ASUE1403:00"]),
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.id(), "universal");
+        assert_eq!(r.source, SkuSource::Fallback);
+        assert!(r.allows_run());
     }
 
     #[test]
     fn manual_selection_overrides_detection() {
         // 手动指定优先于 DMI：读错硬件信息时这是唯一的逃生通道
-        let r = resolve(
-            &dmi("ROG Strix SCAR 16 G634JY_G634JY"),
-            &no_hw(),
-            Some("gx550"),
-        )
-        .unwrap();
-        assert_eq!(r.id(), "gx550");
+        let r = resolve(&no_identity(), &no_hw(), Some("g614")).unwrap();
+        assert_eq!(r.id(), "g614");
         assert_eq!(r.source, SkuSource::Manual);
         assert!(r.allows_run());
-        assert_eq!(r.detail.as_deref(), Some("gx550"));
+        assert_eq!(r.detail.as_deref(), Some("g614"));
         // 大小写与空白不敏感
-        let r = resolve(&no_identity(), &no_hw(), Some("  GX550 ")).unwrap();
-        assert_eq!(r.id(), "gx550");
+        let r = resolve(&no_identity(), &no_hw(), Some("  G614 ")).unwrap();
+        assert_eq!(r.id(), "g614");
+        // 已下架的机型 id 现在按未知处理（退出码 2 并提示可用 id），不再静默接受
+        assert!(resolve(&no_identity(), &no_hw(), Some("gx550")).is_err());
         // 手动指定 universal = 明确要通用配置
         let r = resolve(&no_identity(), &no_hw(), Some("universal")).unwrap();
         assert_eq!(r.id(), "universal");
@@ -1038,8 +1013,21 @@ mod tests {
                 "{product}: {:?}",
                 r.verdict
             );
-            assert_ne!(r.id(), "universal", "{product} 应认出具体配置");
+            assert!(r.allows_run(), "{product} 应放行");
         }
+        // 实测机型才走具体参数，其余走通用配置
+        assert_eq!(
+            resolve(&dmi("ROG Strix SCAR 16 G634JY_G634JY"), &no_hw(), None)
+                .unwrap()
+                .id(),
+            "g614"
+        );
+        assert_eq!(
+            resolve(&dmi("ROG Strix SCAR 16 G635LX_G635LX"), &no_hw(), None)
+                .unwrap()
+                .id(),
+            "universal"
+        );
     }
 
     #[test]

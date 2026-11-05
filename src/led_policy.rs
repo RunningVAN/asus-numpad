@@ -6,8 +6,8 @@
 
 /// ELAN 触摸板 vendor（NumberPad 触摸板模组几乎都是它）。
 pub const ELAN_VID: u32 = 0x04f3;
-/// PixArt 触摸板 vendor：G615（2025 款）用的 ASCP1400 / ASCF1400 模组
-/// 上报为 `093A:2808`，此前因不在白名单内导致点灯链路断开。
+/// PixArt 触摸板 vendor：`ASCP1400` / `ASCF1400` 模组上报为 `093A:2808`，
+/// 此前因不在白名单内导致点灯链路断开。
 pub const PIXART_VID: u32 = 0x093a;
 /// ASUS vendor ID：部分机型的 N-KEY / 触摸板接口挂在它下面。
 pub const ASUS_VID: u32 = 0x0b05;
@@ -33,7 +33,7 @@ pub fn candidate_rank(vid: u32, pid: u32, has_feature: bool) -> Option<u8> {
     if vid == ASUS_VID && pid == OMNI_PID {
         return None;
     }
-    // 触摸板本体厂商：ELAN 与 PixArt（G615 的 ASCP1400 模组）。两者同等看待，
+    // 触摸板本体厂商：ELAN 与 PixArt（ASCP1400 模组）。两者同等看待，
     // 真正决定优先级的是报告描述符里有没有 FEATURE `0x0d`。
     let is_touchpad = vid == ELAN_VID || vid == PIXART_VID;
     let is_asus = vid == ASUS_VID;
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn pixart_touchpad_is_a_candidate() {
-        // G615（2025）：ASCP1400/ASCF1400 模组上报 093A:2808
+        // ASCP1400 / ASCF1400 模组上报 093A:2808
         assert_eq!(candidate_rank(0x093a, 0x2808, true), Some(0));
         assert_eq!(candidate_rank(0x093a, 0x2808, false), Some(3));
         let cands = vec![

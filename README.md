@@ -231,19 +231,16 @@ use vendor defaults.
 
 | Model id | Models |
 | --- | --- |
-| `g533` | Strix SCAR 15 / Strix G15 (2022): `G533`, `G513` |
 | `g614` | Strix SCAR 16 / Strix G16 (2023): `G614`, `G634` |
-| `g615` | Strix SCAR 16 / Strix G16 (2025 and later): `G615`, `G635` |
-| `gx550` | Zephyrus Duo 15 and 16: `GX550`, `GX551`, `GX650` |
-| `ux582` | Zenbook Duo: `UX582`, `UX482` |
+| `universal` | Everything else: vendor defaults, keymap picked by touchpad module |
 
-**Hardware tested: `G634` only** (Strix SCAR 16 2023). Every other row comes from touchpad module
-data, keymap tables and vendor documents. None has been verified on a physical machine: treat them
-as theoretical support. Reports from other models are welcome.
+Two rows only, because one family has been on a physical machine (`G634JY`). Other models are
+neither listed nor rejected: they run on `universal`, and the keymap still comes from the actual
+touchpad module, not from the machine name. Listing a model without hardware behind it is a claim
+nobody can reproduce.
 
-The model code in DMI is authoritative; marketing names are for orientation only. Each model id
-covers one touchpad module family and one keymap, not a single machine SKU. The old per-model package
-names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades move to `asus-numpad`.
+The model code in DMI is authoritative; marketing names are for orientation only. The old per-model
+package names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades move to `asus-numpad`.
 
 ### Model detection
 
