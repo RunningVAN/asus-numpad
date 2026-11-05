@@ -40,6 +40,10 @@ pub struct Sku {
     pub display: &'static str,
     /// DMI `product_name` 里出现的机型前缀；为空表示不做机型校验
     pub models: &'static [&'static str],
+    /// 与 [`Sku::models`] 共用同一代号前缀、但**没有**该硬件的代际代号（如 `G513Q`
+    /// 之于 `G513`）。命中即判定这不是本配置的机器，不再参与 DMI 识别，继续走
+    /// 触摸板模组判据 / 通用配置。DMI 里没有年份字段，代际只能靠代号第三位字母区分。
+    pub excludes: &'static [&'static str],
     /// 该机型号对应的触摸板模组名（`ASUE1416` / `ASCP1400` …），与
     /// [`crate::layout::HID_LAYOUTS`] 的键同源。硬件层面的第二判据，见 [`HardwareProbe`]。
     pub modules: &'static [&'static str],
@@ -57,7 +61,8 @@ pub struct Sku {
 ///
 /// * `g614` 吸收 `g634`：同一块 ELAN 触摸板（04F3:3275 / ASUE1416），键表 GH3XLNDZ；
 /// * `g533` 吸收 `g513`：魔霸6 15 英寸与枪神6 同代同平台，模组 ASUE1403 / ELAN1403
-///   → GH2XLNDZ 同族（G513 只有部分配置带 NumberPad，没有该模组的机器由硬件探测兜底）；
+///   → GH2XLNDZ 同族。2021 代枪神5 / 魔霸5 与 2022 代共用 `G533` / `G513` 前缀，
+///   靠 `excludes`（`G533Q*` / `G513Q*` / `G513I*`）把它们挡在识别之外；
 /// * `g615` 吸收 `g635`：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ 同族；
 /// * `gx550` 吸收 `gx650`：两代冰刃双屏同属 gx551 键位族。
 ///
@@ -73,15 +78,19 @@ pub struct Sku {
 pub const SKUS: &[Sku] = &[
     Sku {
         id: "g533",
-        display: "ASUS 枪神6 / 魔霸6 15 英寸（G533 / G513）",
+        display: "ASUS 枪神6 / 魔霸6 15 英寸（G533Z* / G513R*，2022 代）",
         models: &["G533", "G513"],
+        // 2021 代枪神5 / 魔霸5：代号第三位是 Q / I，官方规格页没有 NumberPad，
+        // 靠模组判据之外再按代际挡一道，免得识别成 g533 给出「这台有小键盘」的错觉。
+        excludes: &["G533Q", "G513Q", "G513I"],
         modules: &["ASUE1403", "ELAN1403"],
-        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）；枪神6（G533）与魔霸6 15 英寸（G513）同代同平台，官方规格里 G513 只有部分配置写 Support NumberPad，没这块触摸板的机器由硬件探测兜底",
+        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）。2022 代（枪神6 G533Z*、魔霸6 15 英寸 G513R*）才有 NumberPad；2021 代（G533Q* / G513Q* / G513I*）官方规格无此硬件，由 excludes 挡在识别之外，落通用配置",
     },
     Sku {
         id: "g614",
         display: "ASUS 枪神7 / 枪神8 / 魔霸新锐 2023 / 枪神7 超竞版 16 英寸（G614 / G634）",
         models: &["G614", "G634"],
+        excludes: &[],
         modules: &["ASUE1416", "ASUF1416"],
         note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘。这是唯一上过真机的配置（G634JY）",
     },
@@ -89,6 +98,7 @@ pub const SKUS: &[Sku] = &[
         id: "g615",
         display: "ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版（G615 / G635）",
         models: &["G615", "G635"],
+        excludes: &[],
         modules: &["ASCP1400", "ASCF1400"],
         note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，不并入本配置",
     },
@@ -96,6 +106,7 @@ pub const SKUS: &[Sku] = &[
         id: "gx550",
         display: "ASUS 冰刃双屏 15 / 16 英寸（GX550 / GX551 / GX650）",
         models: &["GX550", "GX551", "GX650"],
+        excludes: &[],
         modules: &["ASUE1408", "ASUE1404"],
         note: "GX550 / GX551 / GX650 同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A",
     },
@@ -103,6 +114,7 @@ pub const SKUS: &[Sku] = &[
         id: "ux582",
         display: "灵耀双屏（UX582 / UX482）",
         models: &["UX582", "UX482"],
+        excludes: &[],
         modules: &["ASUE1406", "ELAN1406"],
         note: "模组 ASUE1406 / ELAN1406 → 键表 NVM",
     },
@@ -110,6 +122,7 @@ pub const SKUS: &[Sku] = &[
         id: "universal",
         display: "通用配置（默认路径：未匹配到具体机型时使用）",
         models: &[],
+        excludes: &[],
         modules: &[],
         note: "参数取官方默认，键表按实际触摸板模组自动选择；也可用 asus-numpad sku <id> 手动指定",
     },
@@ -201,7 +214,7 @@ fn universal() -> &'static Sku {
 /// 判定顺序（越靠前越优先）：
 ///
 /// 1. 手动指定（配置文件 `sku` / `--sku`）→ `Manual`，认了这个 id 就不再质疑；
-/// 2. DMI 型号字段命中某条机的 `models` → `Dmi`；
+/// 2. DMI 型号字段命中某条机的 `models` → `Dmi`（该条机的 `excludes` 命中的代际除外）；
 /// 3. 触摸板模组命中某条机的 `modules` → `Hardware`；
 /// 4. 厂商字段明确不是 ASUS → 通用配置 + `NonAsus`；
 /// 5. 其余（读不到 DMI、型号不在表里）→ 通用配置 + `Unknown`，照常运行。
@@ -291,6 +304,11 @@ fn dmi_hit(identity: &DmiIdentity) -> Option<(&'static Sku, &'static str)> {
     }
     let mut best: Option<(&'static Sku, &'static str)> = None;
     for sku in SKUS.iter().filter(|s| !s.models.is_empty()) {
+        // 代际排除优先于型号命中：同前缀的老代际机器没有这块硬件，不参与识别，
+        // 继续往下走触摸板模组判据 / 通用配置。
+        if sku.excludes.iter().any(|ex| matches_model(ex, &pools)) {
+            continue;
+        }
         for model in sku.models {
             if !matches_model(model, &pools) {
                 continue;
@@ -924,6 +942,51 @@ mod tests {
 
     fn no_identity() -> DmiIdentity {
         DmiIdentity::default()
+    }
+
+    #[test]
+    fn previous_generation_sharing_a_prefix_is_excluded() {
+        // 2021 代枪神5（G533Q*）/ 魔霸5（G513Q*、G513I*）与 2022 代共用 G533 / G513 前缀，
+        // 但官方规格页没有 NumberPad：不能被识别成 g533。
+        for product in [
+            "ROG Strix SCAR 15 G533QM_G533QM",
+            "ROG Strix SCAR 15 G533QR_G533QR",
+            "ROG Strix SCAR 15 G533QS_G533QS",
+            "ROG Strix G15 G513QM_G513QM",
+            "ROG Strix G15 G513QR_G513QR",
+            "ROG Strix G15 G513IC_G513IC",
+            "ROG Strix G15 G513IH_G513IH",
+        ] {
+            let r = resolve(&dmi(product), &no_hw(), None).unwrap();
+            assert_eq!(r.id(), "universal", "{product} 应落通用配置");
+            assert_eq!(r.source, SkuSource::Fallback, "{product}");
+            assert!(!r.is_detected(), "{product} 不应算认出机型");
+            assert!(r.allows_run(), "{product} 不应被拦");
+        }
+        // 代际排除只管识别，逃生通道照样在：手动指定 g533 立即生效
+        let r = resolve(&dmi("ROG Strix G15 G513QM_G513QM"), &no_hw(), Some("g533")).unwrap();
+        assert_eq!(r.id(), "g533");
+        assert_eq!(r.source, SkuSource::Manual);
+        assert!(r.allows_run());
+        // 主板名写错、但确实插着 2022 代的模组：硬件判据仍能把它拉回 g533
+        let r = resolve(
+            &dmi("ROG Strix G15 G513QM_G513QM"),
+            &hw(&["ASUE1403:00"]),
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.id(), "g533");
+        assert_eq!(r.source, SkuSource::Hardware);
+        // 排除项不会误伤 2022 代：R / Z 开头的代号照旧命中
+        for (product, want) in [
+            ("ROG Strix SCAR 15 G533ZW_G533ZW", "g533"),
+            ("ROG Strix G15 G513RM_G513RM", "g533"),
+            ("ROG Strix G15 G513RC_G513RC", "g533"),
+        ] {
+            let r = resolve(&dmi(product), &no_hw(), None).unwrap();
+            assert_eq!(r.id(), want, "{product}");
+            assert_eq!(r.source, SkuSource::Dmi, "{product}");
+        }
     }
 
     #[test]

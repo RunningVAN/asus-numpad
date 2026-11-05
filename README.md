@@ -231,7 +231,7 @@ use vendor defaults.
 
 | Model id | Models |
 | --- | --- |
-| `g533` | Strix SCAR 15 / Strix G15 (2022): `G533`, `G513` |
+| `g533` | Strix SCAR 15 / Strix G15 (2022): `G533Z*`, `G513R*` (`G533Q*` / `G513Q*` / `G513I*` from 2021 ship without a NumberPad and are not matched) |
 | `g614` | Strix SCAR 16 / Strix G16 (2023): `G614`, `G634` |
 | `g615` | Strix SCAR 16 / Strix G16 (2025 and later): `G615`, `G635` |
 | `gx550` | Zephyrus Duo 15 and 16: `GX550`, `GX551`, `GX650` |
