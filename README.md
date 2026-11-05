@@ -10,31 +10,53 @@ Timing and geometry constants come from `AlgoParameters` in the vendor file `Asu
 
 ## FAQ
 
-### Why ASUS only?
+### Why is support limited to ASUS models?
 
-Nothing in the code is ASUS-specific. The touchpad is read through evdev, contacts are mapped to
-cells, key events go out through uinput; porting to another touchpad means editing the model table
-(DMI and touchpad HID name) and the layout constants, not the code paths.
+The driver does not depend on ASUS-specific interfaces: input comes from the touchpad's evdev node,
+keys go out through uinput, and no vendor kernel module or ACPI object is involved, so any multitouch
+pad follows the same code path. A port means replacing the model entry (DMI `product_name` plus the
+touchpad HID name) and the layout constants (cell centres, thresholds).
 
-The limit is the hardware. A NumberPad touchpad carries two things other OEM touchpads generally
-do not: an LED layer that lights a pattern under the pad surface, and a vendor parameter set that
-pins down geometry, timing, gesture thresholds and backlight steps. Without the lit pattern there
-is no way to see which cell a finger is on, or whether number mode is active — the keys would work
-but nothing would tell you where they are. Without the parameters, tap, swipe and two-finger
-thresholds have to be guessed on a pad that was never tuned for numpad use. So support stays on
-models that have both, and the model table is the only place where that is decided.
+What cannot be ported is the hardware. The NumberPad panel provides two things other OEM touchpads
+generally do not:
 
-### Why a userspace driver?
+- **Addressable backlight.** Cell position and number-mode state are indicated by an LED pattern
+  driven through HID FEATURE report `0x0d` (`[0d 14 03 <v> ad]`, `0x41`..`0x48` select the brightness
+  step). Without it, keys are still emitted, but nothing indicates which cell a finger is on or
+  whether number mode is active.
+- **A factory calibration table.** `AlgoParameters` in `AsusNUMPADFilter.inf` fixes frame length
+  (8 ms), geometry unit (0.1 mm), tap window (350 ms), NumLock long press (62 frames), swipe
+  threshold (4838 um) and two-finger gap (40 mm). Without it those values have to be fitted on a
+  panel that was never tuned for numpad use, and tap and swipe recognition will not match the
+  Windows driver.
 
-- **Nothing to break on a kernel upgrade.** No stock module is replaced, no ACPI or i8042 change,
-  uninstalling restores stock behaviour — a driver that fights the kernel is the reason this
-  touchpad has no Linux support in the first place.
-- **Vendor numbers instead of guesses.** Timing, geometry, thresholds and backlight steps are the
-  values from ASUS's own driver file, so the state machine behaves like the Windows one.
-- **One package, several models.** Model selection is by DMI and touchpad HID name, so one package
-  covers G614, G634 and the rest of the supported table.
-- **The hardware is already paid for.** On Linux this pad is otherwise an ordinary touchpad; the
-  numpad it was sold with is a missing driver, not a missing feature.
+Support is therefore limited to models that have both, and `src/sku.rs` is the only place where that
+is decided. A panel that has both can be added by editing that table and the layout constants.
+Patches are welcome.
+
+### Why a userspace driver instead of a kernel module?
+
+- The panel is attached through ELAN i2c-hid (`04F3:3275` / `ASUE1416`), not through the ASUS `0B05`
+  keyboard controller, so no existing kernel module covers it and none has to be replaced to add
+  support.
+- Backlight control is a HID FEATURE report on the touchpad's own hidraw node, which a userspace
+  process can issue without kernel changes.
+- Timing, geometry and threshold values are taken from the vendor INF verbatim, so state machine
+  behaviour matches the Windows driver, and per-model differences stay in one table.
+- The boot path is untouched. Uninstalling removes the service unit and the udev rule and the pad
+  returns to stock behaviour; kernel upgrades cannot regress it.
+
+### Will this be merged into asusctl?
+
+No.
+
+- Only a small number of ASUS models ship this touchpad.
+- Once the package for the matching model is installed there is little left to adjust: the numpad
+  works as it is, so adding it to asusctl offers little to the rest of its users.
+- The maintainer does not have the time to adapt it to asusctl's architecture and release cycle.
+
+Contributions are welcome either way: patches to this project, or an implementation of these features
+in asusctl.
 
 ## How it works
 
