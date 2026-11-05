@@ -182,9 +182,9 @@ use vendor defaults.
 | `gx550` | Zephyrus Duo 15 and 16: `GX550`, `GX551`, `GX650` |
 | `ux582` | Zenbook Duo: `UX582`, `UX482` |
 
-**Hardware tested: `G634` only** (Strix SCAR 16 2023). Every other row is supported from touchpad
-module data, keymap tables and vendor documents; none has been verified on a physical machine, so
-treat them as theoretical support. Reports from other models are welcome.
+**Hardware tested: `G634` only** (Strix SCAR 16 2023). Every other row comes from touchpad module
+data, keymap tables and vendor documents. None has been verified on a physical machine: treat them
+as theoretical support. Reports from other models are welcome.
 
 The model code in DMI is authoritative; marketing names are for orientation only. A package serves
 one touchpad module family, not one machine SKU. Merged package names stay in `Obsoletes` and model
