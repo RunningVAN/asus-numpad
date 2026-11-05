@@ -1,87 +1,96 @@
 # asus-numpad
 
-在 ASUS 笔记本触摸板上启用数字小键盘（NumberPad）的 Linux 用户态驱动，Rust 实现。
+English | [简体中文](README.zh-CN.md)
 
-通过 evdev 读触点、uinput 出按键，**不替换内核模块、不改 ACPI 表**，卸载即恢复原状。
-算法参数直接取自官方 `AsusNUMPADFilter.inf` 的 `AlgoParameters` 原值，不是拟合出来的。
+A userspace Linux driver that turns the ASUS NumberPad into a numeric keypad. The driver
+grabs the touchpad through evdev, maps contact positions to numpad cells and injects the
+matching key events through uinput. No kernel module is replaced and no ACPI table is
+patched, so removing the package restores the stock behaviour.
 
-## 原理
+Timing and geometry constants follow `AlgoParameters` in the vendor file `AsusNUMPADFilter.inf`.
 
-### 1. 数据链路
+## How it works
+
+### Data path
 
 ```
-触摸板 ──evdev(/dev/input/eventN)──> 帧缓冲(8ms) ──> 状态机 ──> uinput(/dev/uinput) ──> 系统按键
-                                                  └──> hidraw FEATURE 报文 ──> 数字区背光
+touchpad --evdev(/dev/input/eventN)--> frame buffer (8 ms) --> state machine --uinput(/dev/uinput)--> key events
+                                                                   |
+                                                                   `--> hidraw FEATURE report --> numpad backlight
 ```
 
-驱动独占触摸板（`grab`），把触点坐标换算成数字区格位，再合成对应的数字键事件交给内核。
-系统因此只看到一块普通键盘，与真实 NumPad 无差别。
+The touchpad is grabbed exclusively. Contacts are converted to cells, cells to keycodes, and
+the rest of the system sees an ordinary keyboard.
 
-### 2. 参数来源
+### Timing and geometry
 
-官方 INF 中 `AlgoParameters` 共 425 项，本实现逐项对齐关键项：
-
-| 参数 | 值 | 含义 |
+| Parameter | Value | Meaning |
 | --- | --- | --- |
-| 帧长 | 8 ms | 状态机时间基准，长按 62 帧 = 496 ms |
-| 长度单位 | 0.1 mm | 布局几何与阈值统一用此单位 |
-| 点按时长 | 350 ms | 区分点按与滑动 |
-| NumLock 长按 | 62 帧 | 图标区长按切换数字模式 |
-| 手势位移阈值 | 4838 µm | 低于此值不算滑动 |
-| 双指间距 | 40 mm | 判定双指滚动 |
-| 应用手势 | 7000 µm | 计算器热区触发位移 |
+| Frame length | 8 ms | Time base of the state machine; a long press is 62 frames (496 ms) |
+| Length unit | 0.1 mm | Unit for all layout geometry and thresholds |
+| Tap duration | 350 ms | Separates a tap from a swipe |
+| NumLock long press | 62 frames | Toggles number mode from the icon area |
+| Swipe threshold | 4838 µm | Movement below this is not treated as a swipe |
+| Two-finger gap | 40 mm | Detects two-finger scrolling |
+| Launch gesture | 7000 µm | Distance that triggers the calculator hot zone |
 
-### 3. 布局换算
+### Key layout
 
-键位不按整机型号区分，而按**触摸板模组 + HID 名**区分。`/sys/class/input/*/name` 中的
-`ASUE1416`、`ASCF1400` 之类前缀是模组厂代码，同名模组在各机型上描述符一致，
-于是驱动只维护「HID 名 → 键表」映射（`HID_LAYOUTS`，44 条，覆盖官方 `SupportList` 全部模组）。
+Keymaps are selected by touchpad module and HID name, not by laptop model. The `ASUE1416` and
+`ASCF1400` prefixes in `/sys/class/input/*/name` are module vendor codes, and a given module
+reports the same descriptor on every model it ships in. The driver therefore keeps one
+HID-name-to-keymap table (`HID_LAYOUTS`, 44 entries, covering every module in the vendor
+`SupportList`).
 
-数字区取触摸板右上角区域，按 5 行 4 列切格，每格中心落在官方 `NUMPADLAYOUT_GH3XLNDZ_00..14`
-给定的坐标上（单位 0.1 mm）。坐标→格位→键码的换算全在该模块内完成，可脱离硬件单测。
+The numpad occupies the top-right corner of the touchpad as 5 rows by 4 columns. Cell centres
+are the coordinates given by `NUMPADLAYOUT_GH3XLNDZ_00..14` in 0.1 mm units. Coordinate to cell
+to keycode conversion is self-contained and covered by unit tests that run without hardware.
 
-### 4. 背光协议
+### Backlight
 
-数字区背光走 HID FEATURE 报告，与数字键事件是两条独立通道：
+The numpad backlight is a separate channel from key events:
 
 ```
-报文: 0d 14 03 <level> ad      # 6 字节，FEATURE report ID = 0x0d
-level: 0x41..0x48 = 1..8 档    # 0x00 = 熄灭，0x01 = 点亮（不指定档位）
-下发: HIDIOCSFEATURE           # 无需先发 0x60 解锁
+report: 0d 14 03 <level> ad   # 6 bytes, HID FEATURE report ID 0x0d
+level:  0x41..0x48            # steps 1..8
+        0x00                  # off
+        0x01                  # on, keep current step
+write:  HIDIOCSFEATURE        # no 0x60 unlock required
 ```
 
-「跟随键盘背光」= 读 `/sys/class/leds/asus::kbd_backlight/brightness` 的 `current/max`，
-线性归一到 1..8 档，每 500 ms 轮询，仅档位变化时下发，不刷 EC。
-手动档位与跟随共用同一张档表的换算（`bright N` 取第 N 个等分点），
-因此开关跟随不会造成亮度跳变。
+`bright follow on` reads `current` and `max` from
+`/sys/class/leds/asus::kbd_backlight/brightness`, maps the ratio linearly onto steps 1..8, polls
+every 500 ms and writes only when the step changes. Manual steps and follow mode share the same
+step table, so toggling follow does not cause a brightness jump.
 
-背光节点选择有优先级（`led_policy.rs`）：OMNI 无线接收器 `0b05:1ace` 永久排除，
-ELAN `04f3:*` 且带 FEATURE `0x0d` 最优先，其次 ASUS `0b05:*`，最后 i2c 兜底（`0x38` / `0x15`）。
+Node selection (`led_policy.rs`) scores candidates. The OMNI wireless receiver `0b05:1ace` is
+always excluded, ELAN `04f3:*` with FEATURE `0x0d` comes first, then ASUS `0b05:*`, and i2c
+(`0x38` / `0x15`) last.
 
-### 5. 权限模型
+### Permissions
 
-整条链路不需要 root：udev 规则给 hidraw / event 节点打 `TAG+="uaccess"`，
-服务以 `systemd --user` 用户单元随会话启动，`/dev/uinput` 由 systemd 会话授权。
+Root is not required. The udev rules tag hidraw and event nodes with `TAG+="uaccess"`, the
+daemon runs as a `systemd --user` unit, and `/dev/uinput` is granted by the session.
 
-## 模块
+## Source layout
 
-| 路径 | 职责 |
+| Path | Purpose |
 | --- | --- |
-| `src/main.rs` | CLI 子命令与参数装配 |
-| `src/engine.rs` | 官方 Algo 状态机，纯逻辑无系统调用 |
-| `src/layout.rs` | 布局几何、44 条 HID→键表映射、坐标换算 |
-| `src/config.rs` | 配置默认值、读写、旧路径迁移 |
-| `src/brightness.rs` | 键盘背光 → 数字区档位换算 |
-| `src/led_policy.rs` | 背光节点打分与选择 |
-| `src/sku.rs` | 机型闸门，包与机器对不上则拒启动 |
-| `src/i18n.rs` | 三语文案，支持外部 `.lang` 覆盖 |
-| `src/linux/` | evdev / uinput / hidraw / i2c 后端 |
-| `lang/` | 简中、繁中、英文文案 |
-| `packaging/` | deb / rpm / Arch / Alpine / Gentoo / Nix / tarball 打包脚本与仓库工具 |
+| `src/main.rs` | Command line parsing and wiring |
+| `src/engine.rs` | Vendor algorithm state machine, no system calls |
+| `src/layout.rs` | Layout geometry, 44 HID to keymap entries, coordinate conversion |
+| `src/config.rs` | Defaults, load and save, migration of old paths |
+| `src/brightness.rs` | Keyboard backlight to numpad step mapping |
+| `src/led_policy.rs` | Backlight node scoring and selection |
+| `src/sku.rs` | Model gate, refuses to start on a mismatched machine |
+| `src/i18n.rs` | Three languages, overridable with external `.lang` files |
+| `src/linux/` | evdev, uinput, hidraw and i2c backends |
+| `lang/` | Simplified Chinese, Traditional Chinese and English strings |
+| `packaging/` | deb, rpm, Arch, Alpine, Gentoo, Nix and tarball scripts, plus repository tools |
 
-## 安装
+## Installation
 
-走官方软件源，装一次以后跟着系统升级：
+Add the repository once and the package follows system upgrades:
 
 ```bash
 # Debian / Ubuntu
@@ -108,154 +117,164 @@ Server = https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/arch
 EOF
 sudo pacman -Sy asus-numpad
 
-# Arch / Manjaro（源码包 asus-numpad-rs，跟滚动版走）
-# 不等 AUR：把 Release 里的 PKGBUILD 与 asus-numpad-rs.install 放同一目录后
+# Arch / Manjaro, source package asus-numpad-rs
+# Put PKGBUILD and asus-numpad-rs.install from the release page in one directory:
 makepkg -si
-# AUR 收录后（包名 asus-numpad-rs）
+# Once the package is on AUR:
 yay -S asus-numpad-rs
 ```
 
-每个生态只出一份通用包：一份 deb 从 Ubuntu 22.04 编出，覆盖 22.04~24.04 与
-Debian 12/13；一份 rpm 从 AlmaLinux 9 编出，覆盖 RHEL/Alma/Rocky 9~10、Fedora
-与 openSUSE。不再按发行版重复出包。
+There is one package per ecosystem. The deb is built on Ubuntu 22.04 and covers 22.04 to 24.04
+plus Debian 12 and 13. The rpm is built on AlmaLinux 9 and covers RHEL, AlmaLinux and Rocky 9 to
+10, Fedora and openSUSE.
 
-也可以从 [Releases](https://github.com/RunningVAN/asus-numpad/releases) 直接下本机格式的包
-（deb / rpm / pkg.tar.zst / PKGBUILD+.SRCINFO / apk / 静态 tarball）。Alpine、Gentoo、
-Nix/NixOS、AUR、tarball 手工安装、升级卸载，见 **[docs/install.md](docs/install.md)**。
+Packages can also be downloaded from [Releases](https://github.com/RunningVAN/asus-numpad/releases)
+in the native format (deb, rpm, pkg.tar.zst, PKGBUILD with .SRCINFO, apk, static tarball).
+Alpine, Gentoo, NixOS, AUR, manual tarball install, upgrade and removal are documented in
+[docs/install.md](docs/install.md).
 
-包按机型拆分，装错会拒启动（退出码 3）。先看机型：
+Before a release, CI installs every package in a clean container for each target distribution
+and runs `--version`; a package that fails to install blocks the release.
+
+Packages are split per model and refuse to start on the wrong machine (exit code 3). Check the
+model code first:
 
 ```bash
-cat /sys/class/dmi/id/product_name      # 例如 G634JY → 装 g614 包
+cat /sys/class/dmi/id/product_name      # e.g. G634JY, use the g614 package
 ```
 
-拿不准就装 `asus-numpad`（兼容包，不校验机型）。
+If you are unsure, install `asus-numpad`, which skips the model check.
 
-每个包里只依赖 glibc（Alpine 是 musl），不拉 Rust 运行时。发版前 CI 会在
-每个目标发行版的干净容器里真装一遍再跑 `--version`，装不上就不发版——所以
-源里的包不会出现「新系统能装、老系统报 GLIBC_2.38 not found」。
+The only runtime dependency is glibc, or musl on Alpine; no Rust runtime is pulled in.
 
-## 用法
+## Usage
 
 ```bash
-asus-numpad check          # 自检：设备、几何换算、背光候选，只读
-asus-numpad dump           # 打印原始事件流
-asus-numpad run            # 前台运行（systemd 跑的就是这个）
-asus-numpad --dump-config  # 打印生效配置
+asus-numpad check          # read-only self test: devices, layout conversion, backlight candidates
+asus-numpad dump           # raw event stream
+asus-numpad run            # run in the foreground, this is what the systemd unit starts
+asus-numpad --dump-config  # effective configuration
 ```
 
-亮度：
+Brightness:
 
 ```bash
-asus-numpad bright 0|1|2|3      # 灭 / 暗 / 中 / 亮（固定档，关闭跟随）
+asus-numpad bright 0|1|2|3      # off, low, medium, high (fixed step, disables follow)
 asus-numpad bright up|down|cycle
 asus-numpad bright follow on|off
 asus-numpad bright status
 ```
 
-语言：
+Language:
 
 ```bash
 asus-numpad lang [zh-CN|zh-TW|en|auto]
-asus-numpad --lang en check     # 仅本次生效
+asus-numpad --lang en check     # applies to this invocation only
 ```
 
-优先级：`ASUS_NUMPAD_LANG` > `--lang` > 配置 `language` > 系统 locale。
+Precedence: `ASUS_NUMPAD_LANG`, then `--lang`, then `language` in the configuration file, then
+the system locale.
 
-## 配置
+## Configuration
 
-`~/.config/asus-numpad/asus-numpad.json`（root 手工运行时写 `/etc/asus-numpad/`）。
+`~/.config/asus-numpad/asus-numpad.json`, or `/etc/asus-numpad/` when run by root.
 
-| 键 | 取值 | 说明 |
+| Key | Value | Meaning |
 | --- | --- | --- |
-| `numlock` | `sync` / `toggle` / `off` | 与系统 NumLock 联动 |
-| `calc_gesture` | `true` / `false` | 手势触发计算器 |
-| `calc_gesture_mode` | `long` / `off` | 触发方式 |
-| `mixed_mode` | `auto` / `on` / `off` | 数字键与光标共存，需要 `/dev/uinput` |
-| `grab` | `true` / `false` | 抓取触摸板；关掉后点击会穿透到桌面 |
-| `led_kind` | `auto` / `hidraw` / `i2c` / `none` | 背光通道 |
-| `follow_keyboard_brightness` | `true` / `false` | 是否跟随键盘背光，默认 `true` |
-| `manual_brightness_step` | `0`..`4` | 手动档（0=灭，1..4 线性递增），仅跟随关闭时生效 |
-| `manual_brightness_levels` | 数组 | 自定义档位下发值，默认按 `brightness_levels` 线性等分成四档（`0`、`0x43`、`0x45`、`0x48`）；**每档可独立指定**任意硬件支持值——`0`（熄灭）或 `0x41`..`0x48`，长度 1..8 即档数，允许重复值，越界项整表回落到默认四档 |
-| `brightness_levels` | 数组 | 硬件全档下发值，默认 `0x41`..`0x48`（1..8 档） |
-| `brightness_poll_ms` | 毫秒 | 轮询间隔，默认 `500` |
-| `allow_unverified_layout` | `true` / `false` | 放行未收录键表的同族布局 |
+| `numlock` | `sync` / `toggle` / `off` | Follow the system NumLock state |
+| `calc_gesture` | `true` / `false` | Gesture launches the calculator |
+| `calc_gesture_mode` | `long` / `off` | How the gesture is triggered |
+| `mixed_mode` | `auto` / `on` / `off` | Keys and pointer together, needs `/dev/uinput` |
+| `grab` | `true` / `false` | Grab the touchpad; when off, clicks reach the desktop |
+| `led_kind` | `auto` / `hidraw` / `i2c` / `none` | Backlight channel |
+| `follow_keyboard_brightness` | `true` / `false` | Mirror the keyboard backlight, default `true` |
+| `manual_brightness_step` | `0`..`4` | Current manual step (0 = off), used when follow is disabled |
+| `manual_brightness_levels` | array | Step to value table, default `[0, 0x43, 0x45, 0x48]`. Each entry may be `0` or `0x41`..`0x48`; length 1..8 sets the number of steps; equal neighbours are allowed; a decreasing table is discarded and the default is used |
+| `brightness_levels` | array | Hardware steps, default `0x41`..`0x48` |
+| `brightness_poll_ms` | milliseconds | Poll interval, default `500` |
+| `allow_unverified_layout` | `true` / `false` | Accept an unlisted layout of a known family |
 
-未写入的键按官方默认值生效。
+Keys that are not written fall back to the vendor defaults.
 
-## 机型
+## Supported models
 
-| 包 | 机型 |
+| Package | Models |
 | --- | --- |
-| `g533` | 枪神6 / 魔霸6 15"（G533、G513） |
-| `g614` | 枪神7 / 魔霸新锐 2023 / 超竞版 16"（G614、G634） |
-| `g615` | 枪神9/10 16"、魔霸新锐 2025（G615、G635） |
-| `gx550` | 冰刃双屏 15/16"（GX550、GX551、GX650） |
-| `ux582` | 灵耀双屏（UX582、UX482） |
+| `g533` | Strix SCAR 15, Strix G15 (2022): `G533`, `G513` |
+| `g614` | Strix SCAR 16, Strix G16 (2023): `G614`, `G634` |
+| `g615` | Strix SCAR 16, Strix G16 (2025 and later): `G615`, `G635` |
+| `gx550` | Zephyrus Duo 15 and 16: `GX550`, `GX551`, `GX650` |
+| `ux582` | Zenbook Duo: `UX582`, `UX482` |
 
-### 明确不适用的机型
+The model code in DMI is authoritative. Regional marketing names differ and are only given for
+orientation.
 
-这几类机器**机身里没有 NumberPad 虚拟数字键盘**，装哪个包都没用，驱动与
-`packaging/install-sku.sh` 都会直接拒绝并说明原因（退出码 `4`）：
+A package serves one touchpad module family, not one machine SKU. Old package names that were
+merged are kept in `Obsoletes` so upgrades replace them automatically, and the model packages
+declare `Conflicts` against each other.
 
-| 机型 | 原因 |
+### Models without a NumberPad
+
+These machines have no virtual numpad in the touchpad, so no package helps. The driver and
+`packaging/install-sku.sh` refuse with exit code `4` and an explanation.
+
+| Model | Reason |
 | --- | --- |
-| ProArt P16（H7606） | 触控板是 ASUS **DialPad 智能旋钮**，官方规格写 `support DialPad`，走旋钮的 HID 用法，与 NumberPad 的 `FEATURE 0x0d` 数字区背光无关 |
-| 17" Strix G17（G713） | 17 英寸机身自带**物理数字键区**，官方规格 `NumberPad` 一栏是 `N/A`，触控板里没有虚拟数字键盘 |
-| 18" Plus（G834、G835、G814、G815、G813） | 机身自带**物理数字键**，触控板里没有虚拟数字键盘 |
+| ProArt P16 `H7606` | The touchpad is the ASUS DialPad. The specification lists DialPad support; it uses the knob HID usage rather than the numpad backlight FEATURE `0x0d` |
+| Strix G17 `G713`, 17-inch | Full physical numpad on the keyboard; the specification lists `NumberPad` as `N/A` |
+| 18-inch Plus, `G834`, `G835`, `G814`, `G815`, `G813` | Full physical numpad on the keyboard |
 
-一个包 = 一个触控板模组族，不是一个整机 SKU；被合并的旧包名保留在 `Obsoletes` 里，
-升级自动接管。机型包之间互相 `Conflicts`。
+### Model detection
 
-机型号判定用 DMI 的多字段并集（`product_name` / `board_name` / `product_family`），
-BIOS 占位串按「读不到」处理、不拦启动；厂商字段（`sys_vendor` / `board_vendor`）明确不是
-ASUS 时直接拒绝。装错包时 `check` 会按机型编号最长公共前缀给出该装的包名。
+Detection uses the union of the DMI fields `product_name`, `board_name` and `product_family`.
+BIOS placeholder strings are treated as missing and do not block startup. A vendor field
+(`sys_vendor`, `board_vendor`) that is clearly not ASUS blocks startup. When the wrong package is
+installed, `check` prints the package name that matches the longest common model prefix.
 
-DMI 之外还有一层硬件判据：驱动会读触摸板模组名（`ASUE1416` 这种，来自 i2c-hid / HID 层），
-DMI 说不出型号时靠它把机器认出来；但 DMI 已读出明确代号却对不上本包时，硬件层不会翻案。
+Hardware is a second signal. The driver reads the touchpad module name, such as `ASUE1416`, from
+i2c-hid and HID. It is used when DMI says nothing useful. When DMI gives a model code that is
+known but does not belong to the package, the hardware signal does not override it.
 
-各机型模组与键表的对应关系见 [docs/machines.md](docs/machines.md)。
+Module and keymap per model: [docs/machines.md](docs/machines.md).
 
-## 构建
+## Building
 
 ```bash
-./packaging/build.sh                        # 按当前发行版自动出包
-./packaging/build.sh deb rpm tarball        # 指定目标（deb/rpm/arch/alpine/tarball）
-./packaging/build-skus.sh g614              # 只出指定机型
-./tools/repo-gen.sh                         # dist/ → 本地仓库 repo/（apt/rpm/pacman/apk）
+./packaging/build.sh                        # package for the current distribution
+./packaging/build.sh deb rpm tarball        # explicit targets (deb/rpm/arch/alpine/tarball)
+./packaging/build-skus.sh g614              # single model
+./tools/repo-gen.sh                         # dist/ to local repositories in repo/ (apt/rpm/pacman/apk)
 ```
 
-静态链接构建（跨发行版分发）：
+Static build for distribution across distributions:
 
 ```bash
 ASUS_NUMPAD_SKU=g614 RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
   cargo build --target x86_64-unknown-linux-musl --release
 ```
 
-打包细节见 [packaging/README.md](packaging/README.md)。推 `v*` 标签会触发
-`.github/workflows/release.yml`：各发行版容器里出包 → 生成四套仓库索引 → 发 Release →
-把 `repo/` 提交回 `main`。
+Packaging details: [packaging/README.md](packaging/README.md). Pushing a `v*` tag runs
+`.github/workflows/release.yml`, which builds in per-distribution containers, generates the four
+repository indexes, publishes the release and commits `repo/` back to `main`.
 
-## 已知差异
+## Known limitations
 
-1. **亮度档位由硬件全档表线性等分**：`brightness_levels` 是面板的完整档表
-   （默认 `0x41`..`0x48`，8 档），手动档位取其中的等分点——默认 4 档即
-   `0x41`/`0x43`/`0x46`/`0x48`（0 档熄灭）。档数与具体下发值都可用
-   `manual_brightness_levels` 覆写（上限 `brightness_levels` 的长度）：每项取 `0`
-   （熄灭）或 `0x41`..`0x48`，且必须从暗到亮严格递增，否则整表丢弃并回落线性等分。
-   想「从全灭到最亮」四档就写 `[0, 0x43, 0x46, 0x48]`；跟随模式下
-   键盘背光档位同样归一到这张表上，键盘关到 0 时取最低档，亮度只降不升。
-2. **NumLock 长按阈值**：官方 `iNumLockMaxVaildDist = 2741` 在 0.1 mm 单位下仅 0.27 mm，
-   与「长按不动」的物理语义矛盾。本实现按字面值使用，若长按被判成滑动，先查这里。
-3. **图标子区边界未闭合**：官方布局里 icon 区与计算器热区有重叠描述，本实现按整格归入
-   NumLock 触发区。
-4. **背光不可回读**：`HIDIOCGFEATURE` 恒返回全 0，灯是否点亮只能看写入报文与驱动状态行。
+1. **Manual steps are sampled from a hardware table.** `brightness_levels` lists every hardware
+   step (`0x41`..`0x48` by default). `manual_brightness_levels` maps the manual steps onto that
+   axis and defaults to four steps, `[0, 0x43, 0x45, 0x48]`, from off to maximum. Entries may be
+   `0` or `0x41`..`0x48`, the table length sets the step count (1 to 8), and neighbours may be
+   equal; a decreasing table is discarded. Follow mode normalises the keyboard backlight onto the
+   same table, and the numpad never gets brighter than the keyboard.
+2. **NumLock long press threshold.** The vendor value `iNumLockMaxVaildDist = 2741` is 0.27 mm in
+   0.1 mm units, which conflicts with "press and hold without moving". The value is used as given;
+   if a long press is recognised as a swipe, start here.
+3. **Icon area boundary.** The vendor layout describes the icon cell and the calculator hot zone
+   with an overlap. The whole cell is assigned to the NumLock trigger.
+4. **The backlight cannot be read back.** `HIDIOCGFEATURE` always returns zeros, so the light state
+   is known only from the written report and the driver status line.
 
-## 许可
+## License
 
-GPL-3.0-or-later（GPLv3 或更高版本），全文见 [LICENSE](LICENSE)。
+GPL-3.0-or-later. See [LICENSE](LICENSE).
 
 Copyright (C) 2026 RunningVAN
-
-改协议的原因：本项目的键表与几何换算来自官方驱动逆向和厂商 INF 的实测结论，再分发条件
-与 copyleft 一致；同时避免下游把本项目闭源塞进固件工具链后不回馈。
