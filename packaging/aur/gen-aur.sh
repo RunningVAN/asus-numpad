@@ -46,8 +46,11 @@ if [[ -z "${SHA256}" ]]; then
     log "下载源码包计算校验和：${SOURCE_URL}"
     tmp="$(mktemp -t asus-numpad-aur)"
     trap 'rm -f "$tmp"' EXIT
-    curl -fsSL --retry 3 --retry-delay 2 -o "$tmp" "${REPO_URL}/archive/v${VERSION}.tar.gz" \
-        || die "下载失败，tag v${VERSION} 是否已推送？"
+    # --retry-all-errors：tag 刚推上去时 archive 会短暂 404，普通 --retry 不重试 404
+    if ! curl -fsSL --retry 6 --retry-delay 5 --retry-all-errors -o "$tmp" "${SOURCE_URL}"; then
+        code="$(curl -sL -o /dev/null -w '%{http_code}' "${SOURCE_URL}" || true)"
+        die "下载失败（HTTP ${code}）：${SOURCE_URL}"
+    fi
     if command -v sha256sum >/dev/null 2>&1; then
         SHA256="$(sha256sum "$tmp" | awk '{print $1}')"
     else

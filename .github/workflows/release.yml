@@ -375,6 +375,7 @@ jobs:
           path: |
             auraur/PKGBUILD
             auraur/.SRCINFO
+            auraur/asus-numpad-rs.install
           include-hidden-files: true
           if-no-files-found: error
 
@@ -489,11 +490,21 @@ jobs:
             exit 1
           fi
           mv dist/* pkg/
-          if compgen -G "aurart/auraur/*" >/dev/null; then
-            mv aurart/auraur/* pkg/
-          elif compgen -G "aurart/*" >/dev/null; then
-            mv aurart/* pkg/
-          fi
+          # AUR 三件套。注意 .SRCINFO 是隐藏文件，通配符 * 匹配不到，
+          # 用 cp -a <dir>/. 整体搬；asus-numpad-rs.install 是 PKGBUILD 里
+          # install= 指向的文件，缺了用户一端 makepkg 会直接报找不到。
+          for d in aurart/auraur aurart; do
+            if [ -d "$d" ]; then
+              cp -a "$d/." pkg/
+              break
+            fi
+          done
+          for f in PKGBUILD .SRCINFO asus-numpad-rs.install; do
+            if [ ! -f "pkg/$f" ]; then
+              echo "::error::AUR 产物缺 $f"
+              exit 1
+            fi
+          done
           echo "待发产物："
           ls -1a pkg
 
