@@ -1467,7 +1467,8 @@ fn sku_gate(allow_mismatch: bool) -> Option<i32> {
 fn sku_block() -> String {
     let pack = sku::build_sku();
     let identity = sku::dmi_identity();
-    let verdict = sku::verdict_for_identity(pack, &identity);
+    let hw = sku::probe_hardware();
+    let verdict = sku::verdict_full(pack, &identity, &hw);
     let mut out = i18n::tf(
         "sku.pack",
         &[("sku", pack.display), ("pkg", sku::build_package_name())],
@@ -1481,8 +1482,13 @@ fn sku_block() -> String {
         out.push_str(&i18n::tf("sku.dmi", &[("dmi", &identity.label())]));
     }
     out.push('\n');
+    if !hw.is_empty() {
+        out.push_str(&i18n::tf("sku.hw", &[("hw", &hw.label())]));
+        out.push('\n');
+    }
     let verdict_text = match &verdict {
         sku::DmiVerdict::Match => i18n::t("sku.verdict.match"),
+        sku::DmiVerdict::MatchHardware(m) => i18n::tf("sku.verdict.match_hw", &[("module", m)]),
         sku::DmiVerdict::Mismatch(d) => i18n::tf("sku.verdict.mismatch", &[("dmi", d)]),
         sku::DmiVerdict::NonAsus(v) => i18n::tf("sku.verdict.non_asus", &[("vendor", v)]),
         sku::DmiVerdict::Unknown => i18n::t("sku.verdict.unknown"),

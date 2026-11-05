@@ -20,7 +20,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::config::VAL_ON;
+use crate::config::{VAL_OFF, VAL_ON};
 
 /// 键盘背光 sysfs 目录（asus-wmi 注册的 LED 类设备）。
 pub const DEFAULT_DIR: &str = "/sys/class/leds/asus::kbd_backlight";
@@ -81,6 +81,33 @@ pub fn linear_levels(levels: &[u8], n: usize) -> Vec<u8> {
             levels[(pos.round() as usize).min(last)]
         })
         .collect()
+}
+
+/// 从「熄灭」到「最亮」在**硬件可达档位轴**上线性取 `n` 个点。
+///
+/// 硬件不是连续可调的：只有 `0x00`（灭）与 `0x41..=0x48`（8 档）。把可用值排成一条轴
+/// `[00, 41, 42, ..., 48]`（9 点），在上面等分取点，就等于「从 0 到最大线性」。
+///
+/// 默认 8 档 + 4 档 → 索引 `0 / 2.67 / 5.33 / 8` 四舍五入 → `0x00 / 0x43 / 0x45 / 0x48`。
+/// 首位固定落 `0x00`（灭），末位固定落最亮档。
+///
+/// 与 [`linear_levels`] 的差别：那个只在 `levels` 内部等分（首档是最暗的**亮**档），
+/// 拉不到熄灭；这个把 `0x00` 一起算进轴里。
+pub fn linear_levels_from_off(levels: &[u8], n: usize) -> Vec<u8> {
+    if levels.is_empty() || n == 0 {
+        return Vec::new();
+    }
+    // 只有一档时没有「两端」可言，取最亮——「1 档」总比「1 档就是黑的」符合直觉
+    if n == 1 {
+        return vec![*levels.last().expect("levels 非空")];
+    }
+    // 自定义表里可能已经手写了 0x00，避免轴上出现两个零点
+    let mut axis: Vec<u8> = Vec::with_capacity(levels.len() + 1);
+    if levels[0] != VAL_OFF {
+        axis.push(VAL_OFF);
+    }
+    axis.extend_from_slice(levels);
+    linear_levels(&axis, n)
 }
 
 /// 跟随器：持有 sysfs 路径、档位表与上一次读到的值。

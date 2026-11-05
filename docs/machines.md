@@ -66,7 +66,12 @@ asus-numpad check
   /dev/hidraw4  0b05:1ace  FEATURE0x0d=否  rank=255  [跳过：无线接收器]
 ```
 
+`check` 里的 `本机触摸板模组` 一行就是硬件层读数：驱动会扫
+`/sys/bus/i2c/devices/*/name`、`/sys/bus/hid/devices/*/HID_NAME` 与
+`/proc/bus/input/devices`，把 `ASUE1416` 这类模组名归一化后与机型表比对。
+DMI 写坏、写成占位串的机器靠这一层仍能认出机型；反过来 DMI 已经读出了明确代号
+（如 `G615JY`）却没对上本包时，不会因为同族模组在场就放行——那种组合通常是换过主板。
+
 新 PID 加进 `src/led_policy.rs` 的 `KNOWN_NUMPAD_PIDS`；新模组在
 `evidence/drivers/*_unpacked/**/AsusNUMPADFilter.inf` 里查 `HID_DEVICE_NAME`
 补一条 `HID_LAYOUTS`，再按上游布局文件补键表。
-*（内容由AI生成，仅供参考）*

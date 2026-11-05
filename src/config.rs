@@ -83,8 +83,8 @@ pub const VAL_BRIGHTNESS_MAX: u8 = 8;
 
 /// 手动调光的默认档数（`asus-numpad bright 1|2|3|4`，另有 0 = 熄灭）。
 ///
-/// 四档在 `brightness_levels` 上**线性等分**（含最暗与最亮两端）：
-/// 默认 8 档表 → `0x41 / 0x43 / 0x46 / 0x48`。
+/// 四档在「熄灭 + 硬件全档」这条轴上**线性等分**（`0x00` 与 `0x41..=0x48`，共 9 点），
+/// 首档就是熄灭、末档是最亮：默认 8 档表 → `0x00 / 0x43 / 0x45 / 0x48`。
 ///
 /// 这只是默认值：`manual_brightness_levels` 给了自定义表时，档数以该表长度为准，
 /// 亮度直接取表内写死的值（见 [`Config::manual_steps`]）。
@@ -459,8 +459,9 @@ impl Config {
     /// 手动调光用的档位表（从暗到亮）。
     ///
     /// * 配了 `manual_brightness_levels` → 原样使用（就是用户写的「自定义」）；
-    /// * 没配 → 在 `brightness_levels`（硬件全档表）上按 `manual_steps()` **线性等分**，
-    ///   首档落最暗、末档落最亮。默认 8 档表 + 4 档 → `0x41 / 0x43 / 0x46 / 0x48`。
+    /// * 没配 → 在「熄灭 + 硬件全档」这条轴（`0x00` 与 `0x41..=0x48`，共 9 点）上按
+    ///   `manual_steps()` **线性等分**，首档落 `0x00`（灭）、末档落最亮。
+    ///   默认 8 档 + 4 档 → `0x00 / 0x43 / 0x45 / 0x48`。
     ///
     /// 与「是否跟随键盘背光」无关：关掉跟随之后 `bright N` 依然可用。
     pub fn manual_levels(&self) -> Vec<u8> {
@@ -473,18 +474,21 @@ impl Config {
                     .collect();
             }
         }
-        crate::brightness::linear_levels(&self.brightness_levels, MANUAL_BRIGHTNESS_STEPS as usize)
+        crate::brightness::linear_levels_from_off(
+            &self.brightness_levels,
+            MANUAL_BRIGHTNESS_STEPS as usize,
+        )
     }
 
     /// 手动档位 → 报文亮度字节。
     ///
     /// - `step = 0` → `0x00`（熄灭）
-    /// - `step = 1..=manual_steps()` → 自定义 / 线性表里对应那一档（1 = 最暗，N = 最亮）
+    /// - `step = 1..=manual_steps()` → 自定义 / 线性表里对应那一档（1 = 灭到最暗端，N = 最亮）
     /// - 越界返回 `None`；档位表为空时退化为 `VAL_ON`
     ///
-    /// 线性档表默认与「键盘背光恰好有 N 档时的跟随目标」接近但不完全相等
-    /// （跟随按 `step/max` 起算，首档从 `1/max` 起；线性档首档直接落最暗档）。
-    /// 想让两者完全对齐，直接写 `manual_brightness_levels`。
+    /// 默认档表首档就是 `0x00`（用户要求「0 到最大线性四档」），所以 `bright 1` 与
+    /// `bright 0` 效果相同——这是硬件只有 8 级造成的，不是 bug。
+    /// 想让首档变成「最暗但仍有光」，写 `manual_brightness_levels: [0x41, 0x43, 0x46, 0x48]`。
     pub fn level_for_step(&self, step: u8) -> Option<u8> {
         if step == 0 {
             return Some(VAL_OFF);
@@ -499,12 +503,18 @@ impl Config {
         Some(levels[step as usize - 1])
     }
 
-    /// 不跟随键盘背光时点灯用的常亮值：取手动档，0 档视为「用 0x01 点亮」。
+    /// 不跟随键盘背光时点灯用的常亮值：取手动档，命中 `0x00` 档时退回 `0x01` 点亮。
+    ///
+    /// 「默认四档首档就是熄灭」之后，若这里原样返回 `0x00`，关掉跟随就会让数字区一直黑着，
+    /// 与「常亮」的语义相悖；真正的熄灭仍由 `bright 0` / `off` 负责。
     pub fn static_on_value(&self) -> u8 {
+        // 档位 0 是用户显式要求「不点灯」，与「四档里的第 1 档恰好是熄灭」要分开处理
+        if self.manual_brightness_step == 0 {
+            return VAL_OFF;
+        }
         match self.level_for_step(self.manual_brightness_step) {
-            Some(VAL_OFF) => VAL_OFF,
+            Some(VAL_OFF) | None => VAL_ON,
             Some(v) => v,
-            None => VAL_ON,
         }
     }
 
@@ -1011,13 +1021,14 @@ mod tests {
     }
 
     #[test]
-    fn manual_four_steps_span_dark_to_brightest() {
+    fn manual_four_steps_span_off_to_brightest() {
         let c = Config::default();
-        // 默认 8 档表线性四等分（含两端）：0x41 / 0x43 / 0x46 / 0x48
+        // 默认：在「熄灭 + 8 档」共 9 点上线性四等分 → 0 / 0x43 / 0x45 / 0x48
+        assert_eq!(c.manual_levels(), vec![VAL_OFF, 0x43, 0x45, 0x48]);
         assert_eq!(c.level_for_step(0), Some(VAL_OFF));
-        assert_eq!(c.level_for_step(1), Some(0x41));
+        assert_eq!(c.level_for_step(1), Some(VAL_OFF));
         assert_eq!(c.level_for_step(2), Some(0x43));
-        assert_eq!(c.level_for_step(3), Some(0x46));
+        assert_eq!(c.level_for_step(3), Some(0x45));
         assert_eq!(c.level_for_step(4), Some(0x48));
         // 越界档位不接受（由 CLI 拦成用法提示）
         assert_eq!(c.level_for_step(5), None);
@@ -1028,16 +1039,38 @@ mod tests {
         let c = Config::default();
         let levels = c.manual_levels();
         assert_eq!(levels.len(), MANUAL_BRIGHTNESS_STEPS as usize);
-        // 首档 = 最暗档，末档 = 最亮档（「从 0 到最大」的直觉）
-        assert_eq!(
-            levels.first().copied(),
-            c.brightness_levels.first().copied()
-        );
+        // 首档 = 熄灭，末档 = 最亮档（「从 0 到最大」的直觉）
+        assert_eq!(levels.first().copied(), Some(VAL_OFF));
         assert_eq!(levels.last().copied(), c.brightness_levels.last().copied());
-        // 单调不减，且严格递增（8 档表取 4 点不会撞档）
+        // 单调不减，中间档必须严格递增
         for w in levels.windows(2) {
-            assert!(w[0] < w[1], "档位必须从暗到亮严格递增: {levels:?}");
+            assert!(w[0] <= w[1], "档位必须从暗到亮: {levels:?}");
         }
+        assert!(
+            levels.windows(2).skip(1).all(|w| w[0] < w[1]),
+            "中间档需严格递增: {levels:?}"
+        );
+    }
+
+    #[test]
+    fn linear_from_off_is_stable_across_step_counts() {
+        use crate::brightness::linear_levels_from_off;
+        let eight: Vec<u8> = (1..=8).map(|i| 0x40 + i).collect();
+        // 两端固定：灭 → 最亮
+        for n in 2..=8usize {
+            let got = linear_levels_from_off(&eight, n);
+            assert_eq!(got.len(), n);
+            assert_eq!(got[0], VAL_OFF);
+            assert_eq!(*got.last().unwrap(), 0x48);
+        }
+        // 只有一档时没有两端之分，取最亮
+        assert_eq!(linear_levels_from_off(&eight, 1), vec![0x48]);
+        // 自定义表已含 0 时不重复插入零点
+        assert_eq!(
+            linear_levels_from_off(&[0x00, 0x43, 0x48], 3),
+            vec![0x00, 0x43, 0x48]
+        );
+        assert!(linear_levels_from_off(&[], 4).is_empty());
     }
 
     #[test]
@@ -1067,10 +1100,11 @@ mod tests {
         };
         let notes = c.sanitize();
         assert!(!notes.is_empty(), "倒序表应给出告警");
-        // 丢弃自定义后回落到默认线性四档
+        // 丢弃自定义后回落到默认线性四档（首档为熄灭）
         assert!(c.manual_brightness_levels.is_none());
         assert_eq!(c.manual_steps(), MANUAL_BRIGHTNESS_STEPS);
-        assert_eq!(c.level_for_step(1), Some(0x41));
+        assert_eq!(c.level_for_step(1), Some(VAL_OFF));
+        assert_eq!(c.level_for_step(4), Some(0x48));
     }
 
     #[test]
@@ -1115,10 +1149,10 @@ mod tests {
         assert_eq!(c.effective_levels().len(), 8);
         c.follow_keyboard_brightness = false;
         assert!(c.effective_levels().is_empty());
-        // 跟随关：按手动档常亮（1 档 = 最暗 0x41，3 档 = 0x46）
-        assert_eq!(c.static_on_value(), 0x41);
+        // 跟随关：按手动档常亮（1 档 = 熄灭档，常亮退化为 0x01；3 档 = 0x45）
+        assert_eq!(c.static_on_value(), 0x01);
         c.manual_brightness_step = 3;
-        assert_eq!(c.static_on_value(), 0x46);
+        assert_eq!(c.static_on_value(), 0x45);
         c.manual_brightness_step = 4;
         assert_eq!(c.static_on_value(), 0x48);
         c.manual_brightness_step = 0;
@@ -1270,7 +1304,7 @@ mod tests {
         assert!(!back.follow_keyboard_brightness);
         assert_eq!(back.manual_brightness_step, 2);
         assert_eq!(back.brightness_levels, c.brightness_levels);
-        assert_eq!(back.level_for_step(1), Some(0x41));
+        assert_eq!(back.level_for_step(1), Some(VAL_OFF));
         assert_eq!(back.level_for_step(2), Some(0x43));
         assert_eq!(back.level_for_step(4), Some(0x48));
     }

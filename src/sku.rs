@@ -33,6 +33,9 @@ pub struct Sku {
     pub display: &'static str,
     /// DMI `product_name` 里出现的机型前缀；为空表示不做机型校验
     pub models: &'static [&'static str],
+    /// 该机型号对应的触摸板模组名（`ASUE1416` / `ASCP1400` …），与
+    /// [`crate::layout::HID_LAYOUTS`] 的键同源。硬件层面的第二判据，见 [`HardwareProbe`]。
+    pub modules: &'static [&'static str],
     /// 该机型官方规格里的 NumberPad 结论，用于输出自证
     pub note: &'static str,
 }
@@ -59,36 +62,42 @@ pub const SKUS: &[Sku] = &[
         id: "g533",
         display: "ASUS 枪神6（G533）",
         models: &["G533"],
+        modules: &["ASUE1403", "ELAN1403"],
         note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）",
     },
     Sku {
         id: "g614",
         display: "ASUS 枪神7 / 魔霸新锐 2023 / 枪神7 超竞版 16 英寸（G614 / G634）",
         models: &["G614", "G634"],
+        modules: &["ASUE1416", "ASUF1416"],
         note: "合并包：G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
     },
     Sku {
         id: "g615",
         display: "ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版、ProArt P16（G615 / G635 / H7606）",
         models: &["G615", "G635", "H7606"],
+        modules: &["ASCP1400", "ASCF1400"],
         note: "合并包：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）",
     },
     Sku {
         id: "gx550",
         display: "ASUS 冰刃双屏 15 / 16 英寸（GX550 / GX551 / GX650）",
         models: &["GX550", "GX551", "GX650"],
+        modules: &["ASUE1408", "ASUE1404"],
         note: "合并包：GX550 / GX551 / GX650 同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A",
     },
     Sku {
         id: "ux582",
         display: "灵耀双屏（UX582 / UX482）",
         models: &["UX582", "UX482"],
+        modules: &["ASUE1406", "ELAN1406"],
         note: "模组 ASUE1406 / ELAN1406 → 键表 NVM",
     },
     Sku {
         id: "universal",
         display: "全机型兼容包（不做机型校验）",
         models: &[],
+        modules: &[],
         note: "仅在不确定机型时兜底使用",
     },
 ];
@@ -241,6 +250,8 @@ impl DmiIdentity {
 pub enum DmiVerdict {
     /// DMI 命中本包机型
     Match,
+    /// DMI 没给结论，但触摸板模组命中本包（比 DMI 更贴近真实硬件）
+    MatchHardware(String),
     /// DMI 明确是别的（ASUS）机型
     Mismatch(String),
     /// DMI 厂商字段表明这不是 ASUS 机器
@@ -259,7 +270,10 @@ impl DmiVerdict {
     pub fn allows_run(&self) -> bool {
         matches!(
             self,
-            DmiVerdict::Match | DmiVerdict::Unknown | DmiVerdict::NotEnforced
+            DmiVerdict::Match
+                | DmiVerdict::MatchHardware(_)
+                | DmiVerdict::Unknown
+                | DmiVerdict::NotEnforced
         )
     }
 
@@ -267,6 +281,7 @@ impl DmiVerdict {
     pub fn as_str(&self) -> &'static str {
         match self {
             DmiVerdict::Match => "match",
+            DmiVerdict::MatchHardware(_) => "match-hw",
             DmiVerdict::Mismatch(_) => "mismatch",
             DmiVerdict::NonAsus(_) => "non-asus",
             DmiVerdict::Unknown => "unknown",
@@ -306,6 +321,201 @@ pub fn verdict_for_identity(sku: &Sku, identity: &DmiIdentity) -> DmiVerdict {
     }
     if sku.models.iter().any(|m| matches_model(m, &pools)) {
         return DmiVerdict::Match;
+    }
+    if identity.is_asus() == Some(false) {
+        let vendor = identity
+            .sys_vendor
+            .as_deref()
+            .or(identity.board_vendor.as_deref())
+            .unwrap_or("unknown")
+            .trim()
+            .to_string();
+        return DmiVerdict::NonAsus(vendor);
+    }
+    DmiVerdict::Mismatch(identity.label())
+}
+
+/// 硬件探测结果：这台机器上真实存在的**触摸板模组名**。
+///
+/// DMI 是 BIOS 写的字符串，会写错、会写成占位串、会因为主板换装而对不上；
+/// 触摸板模组名（`ASUE1416:00` 这种）来自 i2c-hid / HID 子系统，直接反映硬件本身，
+/// 因此作为 DMI 之外的第二判据——DMI 说不上来时靠它放行，DMI 与实物冲突时也以它为准。
+#[derive(Debug, Clone, Default)]
+pub struct HardwareProbe {
+    /// 归一化后的模组名（大写、去掉 `:00` 之类的实例后缀），去重
+    pub modules: Vec<String>,
+}
+
+impl HardwareProbe {
+    pub fn is_empty(&self) -> bool {
+        self.modules.is_empty()
+    }
+
+    /// 本机硬件是否命中该机型的模组名单。
+    pub fn matches(&self, sku: &Sku) -> bool {
+        self.first_hit(sku).is_some()
+    }
+
+    /// 命中的第一个模组名（用于日志输出「凭什么判定是它」）。
+    pub fn first_hit(&self, sku: &Sku) -> Option<&str> {
+        let hit = self.modules.iter().find(|m| {
+            sku.modules.iter().any(|want| {
+                let want = want.to_ascii_uppercase();
+                // 完全相等，或本机串是「模组名 + 尾巴」（`ASUE1416` vs `ASUE1416-PIXA`）
+                m.as_str() == want.as_str() || m.starts_with(&want)
+            })
+        })?;
+        Some(hit.as_str())
+    }
+
+    /// 本机挂着的触摸板模组里，第一个被 `HID_LAYOUTS` 收录的（即「确定的触摸板模组」）。
+    pub fn known_module(&self) -> Option<&str> {
+        self.modules
+            .iter()
+            .find(|m| {
+                crate::layout::HID_LAYOUTS
+                    .iter()
+                    .any(|(k, _)| k.eq_ignore_ascii_case(m.as_str()))
+            })
+            .map(String::as_str)
+    }
+
+    /// 供日志输出的一行硬件摘要。
+    pub fn label(&self) -> String {
+        if self.modules.is_empty() {
+            "unknown".to_string()
+        } else {
+            self.modules.join(", ")
+        }
+    }
+}
+
+/// 已知触摸板模组的厂前缀。
+///
+/// 归一化时只认这些前缀，避免把 i2c/HID 总线上顺手读到的 `PNP0C50`（ACPI ID）、
+/// `HID-SENSOR` 之类当成模组名——宁可少数认不出，也不让无关串把机型判定带偏。
+const MODULE_PREFIXES: &[&str] = &[
+    "ASUE", "ASUF", "ASUP", "ASCP", "ASCF", "ELAN", "ATML", "SYNA", "FTS", "GTCH",
+];
+
+/// 归一化模组名：大写、去空白、砍掉 `:00` / `.0001` 这类实例后缀。
+fn normalize_module(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let cut = trimmed
+        .find(|c: char| c == ':' || c == '.' || c.is_whitespace())
+        .unwrap_or(trimmed.len());
+    let head = &trimmed[..cut];
+    if head.len() < 4 {
+        return None;
+    }
+    // 只留「字母开头 + 含数字」的标识（ASUE1416 / ELAN1403 / ASCP1400），
+    // 滤掉 i2c 总线上那些 `SynPS/2`、`PNP0C50` 之类的无关名字
+    let bytes = head.as_bytes();
+    if !bytes[0].is_ascii_alphabetic() {
+        return None;
+    }
+    if !head.chars().any(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    if !head.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return None;
+    }
+    let up = head.to_ascii_uppercase();
+    if !MODULE_PREFIXES.iter().any(|p| up.starts_with(p)) {
+        return None;
+    }
+    Some(up)
+}
+
+/// 从给定 sysfs 根与 input 设备表读硬件标识（便于测试）。
+///
+/// 三个来源互补：i2c-hid 触摸板在 `bus/i2c/devices/*/name`，HID 层在
+/// `bus/hid/devices/*/HID_NAME`，老内核/部分模组只在 `/proc/bus/input/devices` 里露面。
+pub fn probe_hardware_at(sys_root: &Path, input_devices: &Path) -> HardwareProbe {
+    let mut modules: Vec<String> = Vec::new();
+    let mut push = |raw: &str| {
+        if let Some(m) = normalize_module(raw) {
+            if !modules.contains(&m) {
+                modules.push(m);
+            }
+        }
+    };
+
+    for bus in ["bus/i2c/devices", "bus/hid/devices"] {
+        let dir = sys_root.join(bus);
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            for name in ["name", "HID_NAME"] {
+                if let Ok(text) = std::fs::read_to_string(entry.path().join(name)) {
+                    push(&text);
+                }
+            }
+        }
+    }
+
+    if let Ok(text) = std::fs::read_to_string(input_devices) {
+        for line in text.lines() {
+            // `N: Name="ASUE1416:00 04F3:3275 Touchpad"` 与 `I: ...` 两类行都扫一遍
+            for field in ["Name=\"", "Name: "] {
+                if let Some(pos) = line.find(field) {
+                    let rest = &line[pos + field.len()..];
+                    let end = rest.find('"').unwrap_or(rest.len());
+                    for token in rest[..end].split_whitespace() {
+                        push(token);
+                    }
+                }
+            }
+        }
+    }
+
+    HardwareProbe { modules }
+}
+
+/// 读本机硬件标识（非 Linux 环境返回空，判定退回 DMI 路径）。
+pub fn probe_hardware() -> HardwareProbe {
+    probe_hardware_at(Path::new("/sys"), Path::new("/proc/bus/input/devices"))
+}
+
+/// 纯逻辑：机型表 × DMI 身份 × 硬件探测 → 结论。
+///
+/// 与 [`verdict_for_identity`] 相比多了硬件层，判定顺序：
+///
+/// 1. 通用包 → `NotEnforced`；
+/// 2. DMI 命中机型 → `Match`；
+/// 3. 触摸板模组命中机型 → `MatchHardware`（DMI 写错/占位时的救命路径）；
+/// 4. DMI 三个型号字段全无效 → `Unknown`（放行）；
+/// 5. 厂商字段明确不是 ASUS → `NonAsus`；
+/// 6. 其余 → `Mismatch`。
+///
+/// 硬件判据放在 DMI「无效」之前、厂商判定之前：模组名是实物证据，
+/// 比 BIOS 字符串可信；但排在 DMI 命中之后，避免把同族不同代的机器错认成一台。
+pub fn verdict_full(sku: &Sku, identity: &DmiIdentity, hw: &HardwareProbe) -> DmiVerdict {
+    if sku.models.is_empty() {
+        return DmiVerdict::NotEnforced;
+    }
+    let pools = identity.haystacks();
+    if !pools.is_empty() && sku.models.iter().any(|m| matches_model(m, &pools)) {
+        return DmiVerdict::Match;
+    }
+    // DMI 里读出了明确的型号代号（`G615JY` 这种）却没对上本包：这是「明确不是这台」，
+    // 不允许一块同族触摸板把它翻案——换了主板/刷了 BIOS 的机器也会出现这种组合。
+    let dmi_has_code = pools.iter().any(|p| !model_tokens(p).is_empty());
+    if !dmi_has_code {
+        if let Some(module) = hw.first_hit(sku) {
+            return DmiVerdict::MatchHardware(module.to_string());
+        }
+        // DMI 说不出型号，但硬件上挂着一块**别的**已知触摸板模组 → 确实是别的机型
+        if let Some(other) = hw.known_module() {
+            return DmiVerdict::Mismatch(format!("module {}", other));
+        }
+    }
+    if pools.is_empty() {
+        return DmiVerdict::Unknown;
     }
     if identity.is_asus() == Some(false) {
         let vendor = identity
@@ -504,7 +714,7 @@ pub fn dmi_product_name_at(root: &Path) -> Option<String> {
 
 /// 当前二进制的机型判定。
 pub fn current_verdict() -> DmiVerdict {
-    verdict_for_identity(build_sku(), &dmi_identity())
+    verdict_full(build_sku(), &dmi_identity(), &probe_hardware())
 }
 
 #[cfg(test)]
@@ -727,6 +937,90 @@ mod tests {
         assert_eq!(hit.id, "g615", "suggested {}", hit.id);
         // 读不到 DMI 时没有建议
         assert!(suggest_for(&DmiIdentity::default()).is_none());
+    }
+
+    #[test]
+    fn normalize_module_strips_instance_suffix() {
+        assert_eq!(
+            normalize_module("ASUE1416:00\n").as_deref(),
+            Some("ASUE1416")
+        );
+        assert_eq!(
+            normalize_module(" ASUE1416:00 04F3:3275 Touchpad ").as_deref(),
+            Some("ASUE1416")
+        );
+        assert_eq!(
+            normalize_module("ROG STRIX SCAR 16"),
+            None,
+            "营销名不是模组"
+        );
+        assert_eq!(normalize_module("PNP0C50"), None, "ACPI 码不是模组");
+        assert_eq!(normalize_module(""), None);
+    }
+
+    #[test]
+    fn hardware_rescues_placeholder_dmi() {
+        // DMI 全是占位串（白牌 / 刷过 BIOS 的机器），过去只能放行到 Unknown；
+        // 现在触摸板模组能直接把机型认出来。
+        let identity = DmiIdentity {
+            sys_vendor: Some("System manufacturer".to_string()),
+            product_name: Some("System Product Name".to_string()),
+            ..Default::default()
+        };
+        let hw = HardwareProbe {
+            modules: vec!["ASUE1416".to_string()],
+        };
+        assert!(identity.haystacks().is_empty(), "占位串不算有效型号");
+        assert_eq!(
+            verdict_full(by_id("g614").unwrap(), &identity, &hw),
+            DmiVerdict::MatchHardware("ASUE1416".to_string())
+        );
+        // 换了机型包就不该被同一块触摸板救活
+        assert!(!verdict_full(by_id("g615").unwrap(), &identity, &hw).allows_run());
+    }
+
+    #[test]
+    fn hardware_does_not_override_explicit_dmi_mismatch() {
+        // DMI 明确是 G615，硬件也没挂错：装 g614 包仍然拒绝
+        let identity = DmiIdentity {
+            sys_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
+            product_name: Some("ROG Strix SCAR 16 G615JY_G615JY".to_string()),
+            ..Default::default()
+        };
+        let hw = HardwareProbe {
+            modules: vec!["ASUE1416".to_string()],
+        };
+        let v = verdict_full(by_id("g614").unwrap(), &identity, &hw);
+        assert!(!v.allows_run(), "{v:?}");
+        let v = verdict_full(by_id("g615").unwrap(), &identity, &hw);
+        assert_eq!(v, DmiVerdict::Match);
+    }
+
+    #[test]
+    fn hardware_probe_reads_i2c_and_input_tables() {
+        let root = std::env::temp_dir().join("asus-numpad-hw-selftest");
+        let i2c = root.join("bus/i2c/devices/i2c-ASUE1416:00");
+        std::fs::create_dir_all(&i2c).unwrap();
+        std::fs::write(i2c.join("name"), "ASUE1416:00\n").unwrap();
+        let hid = root.join("bus/hid/devices/0003:04F3:3275.0001");
+        std::fs::create_dir_all(&hid).unwrap();
+        std::fs::write(hid.join("HID_NAME"), "ASUE1416:00 04F3:3275 Touchpad\n").unwrap();
+        let input = root.join("proc-input-devices");
+        std::fs::write(
+            &input,
+            "I: Bus=0018\nN: Name=\"ASUE1416:00 04F3:3275 Touchpad\"\n",
+        )
+        .unwrap();
+
+        let hw = probe_hardware_at(&root, &input);
+        assert!(hw.matches(by_id("g614").unwrap()), "{:?}", hw);
+        assert!(!hw.matches(by_id("g615").unwrap()));
+        assert_eq!(hw.label(), "ASUE1416");
+
+        // 目录不存在时不 panic，返回空探测
+        let empty = probe_hardware_at(&root.join("nope"), &root.join("nope-input"));
+        assert!(empty.is_empty());
+        assert_eq!(empty.label(), "unknown");
     }
 
     #[test]

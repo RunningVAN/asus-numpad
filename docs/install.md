@@ -85,16 +85,16 @@ sudo apk add --allow-untrusted asus-numpad
 | 任意 x86_64 | `asus-numpad-<ver>-x86_64.tar.gz` |
 
 ```bash
-sudo apt install ./asus-numpad_1.1.1-1_amd64.deb
-sudo dnf install ./asus-numpad-1.1.1-1.fc44.x86_64.rpm
-sudo pacman -U asus-numpad-1.1.1-1-x86_64.pkg.tar.zst
-sudo apk add --allow-untrusted ./asus-numpad-1.1.1-r0.apk
+sudo apt install ./asus-numpad_1.2.0-1_amd64.deb
+sudo dnf install ./asus-numpad-1.2.0-1.fc44.x86_64.rpm
+sudo pacman -U asus-numpad-1.2.0-1-x86_64.pkg.tar.zst
+sudo apk add --allow-untrusted ./asus-numpad-1.2.0-r0.apk
 ```
 
 发版同时产出 `SHA256SUMS`，校验方式：
 
 ```bash
-sha256sum -c asus-numpad-1.1.1-SHA256SUMS --ignore-missing
+sha256sum -c asus-numpad-1.2.0-SHA256SUMS --ignore-missing
 ```
 
 ## tarball（任意发行版）
@@ -103,8 +103,8 @@ sha256sum -c asus-numpad-1.1.1-SHA256SUMS --ignore-missing
 包里带安装脚本，不经过包管理器：
 
 ```bash
-tar xzf asus-numpad-1.1.1-x86_64.tar.gz
-cd asus-numpad-1.1.1
+tar xzf asus-numpad-1.2.0-x86_64.tar.gz
+cd asus-numpad-1.2.0
 sudo ./install.sh --dry-run     # 先看它要做什么
 sudo ./install.sh
 ```
@@ -127,7 +127,7 @@ sudo ./install.sh
 sudo mkdir -p /etc/portage/repos.conf
 # 用本地 overlay 即可：
 sudo mkdir -p /var/db/repos/asus-numpad/sys-apps/asus-numpad
-sudo cp packaging/gentoo/asus-numpad-1.1.1.ebuild /var/db/repos/asus-numpad/sys-apps/asus-numpad/
+sudo cp packaging/gentoo/asus-numpad-1.2.0.ebuild /var/db/repos/asus-numpad/sys-apps/asus-numpad/
 cd /var/db/repos/asus-numpad && sudo repoman manifest 2>/dev/null || sudo pkgdev manifest
 sudo emerge -av sys-apps/asus-numpad
 ```

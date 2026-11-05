@@ -186,6 +186,9 @@ asus-numpad --lang en check     # 仅本次生效
 BIOS 占位串按「读不到」处理、不拦启动；厂商字段（`sys_vendor` / `board_vendor`）明确不是
 ASUS 时直接拒绝。装错包时 `check` 会按机型编号最长公共前缀给出该装的包名。
 
+DMI 之外还有一层硬件判据：驱动会读触摸板模组名（`ASUE1416` 这种，来自 i2c-hid / HID 层），
+DMI 说不出型号时靠它把机器认出来；但 DMI 已读出明确代号却对不上本包时，硬件层不会翻案。
+
 各机型模组与键表的对应关系见 [docs/machines.md](docs/machines.md)。
 
 ## 构建
