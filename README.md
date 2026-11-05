@@ -10,7 +10,9 @@ Timing and geometry constants come from `AlgoParameters` in the vendor file `Asu
 
 Version 1.0 restarts the numbering under the `asus-numpad` organisation: the project moved here from
 `RunningVAN/asus-numpad`, where the history from 1.0.0 up to 1.2.4 stays read-only. Packages from that source are
-not upgradable in place, so remove them once before switching repositories:
+not upgradable in place, so remove them once before switching repositories. The repositories here carry
+1.0.0 and later only, and 1.0.0 sorts below the old 1.2.4 — no package manager will offer it as an upgrade,
+which is why the removal below is not optional:
 
 ```bash
 # rpm: sudo dnf remove asus-numpad
