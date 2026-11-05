@@ -24,10 +24,10 @@ Installed-Size: 1380
 Depends: libc6 (>= 2.31)
 Recommends: systemd
 Filename: pool/main/a/asus-numpad/asus-numpad_1.2.2_amd64.deb
-Size: 473188
-MD5sum: a72778a2408a93c0571aca1ea99d0e75
-SHA1: 752789ffa934dd130f933f7b519b7f6e5a3b2f82
-SHA256: 4815733034d1ed3fe724eb00beda7feaa15cbcfc497fe93bdd55a3da1328f97a
+Size: 473148
+MD5sum: 562d0f5c940e2a2f336021521d2449ce
+SHA1: 0be6666662e25c869f7de0978f0fdf288215ec6e
+SHA256: 0088441b852403b4556687fec4268db6b3e239875ce9470db01a5091000ce962
 Section: utils
 Priority: optional
 Homepage: https://github.com/RunningVAN/asus-numpad
