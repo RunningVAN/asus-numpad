@@ -4,9 +4,9 @@
 #
 # 用法: ./packaging/deb/make-deb.sh [--version X] [--distro NAME] [--no-build] [--out DIR]
 #
-# --distro 给版本号加 `~NAME` 后缀（如 `1.2.0~jammy`），用于同一次发版里
+# --distro 给版本号加 `~NAME` 后缀（如 `1.0.0~jammy`），用于同一次发版里
 # 为多个发行版各出一个包：文件名不同才不会互相覆盖，apt 也认这种版本序
-# （`1.2.0~jammy` < `1.2.0`，升级链不断）。出"通用基线"包时不带这个参数。
+# （`1.0.0~jammy` < `1.2.0`，升级链不断）。出"通用基线"包时不带这个参数。
 
 set -euo pipefail
 SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

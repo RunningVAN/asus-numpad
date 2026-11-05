@@ -2,8 +2,8 @@
 # 渲染可提交 AUR 的 PKGBUILD（+ 有 makepkg 时顺带生成 .SRCINFO）。
 #
 # 用法：
-#   bash ./packaging/aur/gen-aur.sh --version 1.2.3 --out auraur
-#   bash ./packaging/aur/gen-aur.sh --version 1.2.3 --sha256 <hash> --out auraur
+#   bash ./packaging/aur/gen-aur.sh --version 1.0.0 --out auraur
+#   bash ./packaging/aur/gen-aur.sh --version 1.0.0 --sha256 <hash> --out auraur
 #
 # 不给 --sha256 时会现下载 GitHub 的 tag tarball 算一个，所以要求该 tag 已存在。
 # CI 里由 release.yml 的 aur job 调用；本地手动发 AUR 也用同一个入口。
