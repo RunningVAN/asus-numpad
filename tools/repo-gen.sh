@@ -60,12 +60,25 @@ log "版本 ${VERSION}，产物 ${DIST}，输出 $OUT"
 # prune 只按版本号保留最新 KEEP 个，所以当本次版本低于仓库里已有的版本时，新包会
 # 被当成"最旧"直接删掉，索引里只剩旧版本，而脚本照样以成功退出。发布侧看不出异常，
 # 装的人却拿到旧包。这里宁可让流水线红掉，也不产出这种索引。
-EXISTING="$(ls "$OUT"/apt/pool/main/a/asus-numpad "$OUT"/rpm/x86_64 \
-               "$OUT"/arch/x86_64 "$OUT"/alpine/x86_64 2>/dev/null \
-             | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1 || true)"
-if [[ -n "$EXISTING" && "$EXISTING" != "$VERSION" ]] \
-   && [[ "$(printf '%s\n%s\n' "$VERSION" "$EXISTING" | sort -V | tail -1)" != "$VERSION" ]]; then
-    die "仓库里已有 ${EXISTING}，本次要发 ${VERSION}：版本更低，包管理器不会把它当升级，prune 还会把新包当最旧的删掉。先清掉 $OUT 下的旧版本，或改一个更高的版本号。"
+existing_versions=()
+for d in "$OUT/apt/pool/main/a/asus-numpad" "$OUT/rpm/x86_64" \
+         "$OUT/arch/x86_64" "$OUT/alpine/x86_64"; do
+    [[ -d "$d" ]] || continue
+    for f in "$d"/*; do
+        [[ -e "$f" ]] || continue
+        v="$(printf '%s\n' "${f##*/}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+        if [[ -n "$v" ]]; then existing_versions+=("$v"); fi
+    done
+done
+EXISTING=""
+if ((${#existing_versions[@]})); then
+    EXISTING="$(printf '%s\n' "${existing_versions[@]}" | sort -V | tail -1)"
+fi
+if [[ -n "$EXISTING" && "$EXISTING" != "$VERSION" ]]; then
+    newest="$(printf '%s\n%s\n' "$VERSION" "$EXISTING" | sort -V | tail -1)"
+    if [[ "$newest" != "$VERSION" ]]; then
+        die "仓库里已有 ${EXISTING}，本次要发 ${VERSION}：版本更低，包管理器不会把它当升级，prune 还会把新包当最旧的删掉。先清掉 $OUT 下的旧版本，或改一个更高的版本号。"
+    fi
 fi
 mkdir -p "$OUT"
 
