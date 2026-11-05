@@ -1,0 +1,54 @@
++ chmod +x packaging/build.sh
++ find packaging -mindepth 2 -maxdepth 2 -name 'make-*.sh' -exec chmod +x '{}' +
++ '[' fedora = arch ']'
++ ./packaging/build.sh --out dist rpm
+==> 版本 1.2.4，目标 rpm，产物目录 dist
+==> 编译 asus-numpad（release, locked）
+[1m[92m    Updating[0m crates.io index
+[1m[92m Downloading[0m crates ...
+[1m[92m  Downloaded[0m anyhow v1.0.104
+[1m[92m  Downloaded[0m clap_derive v4.6.7
+[1m[92m  Downloaded[0m anstyle v1.0.14
+[1m[92m  Downloaded[0m clap v4.6.7
+[1m[92m  Downloaded[0m clap_lex v1.1.1
+[1m[92m  Downloaded[0m heck v0.5.0
+[1m[92m  Downloaded[0m itoa v1.0.18
+[1m[92m  Downloaded[0m strsim v0.11.1
+[1m[92m  Downloaded[0m clap_builder v4.6.7
+[1m[92m  Downloaded[0m zmij v1.0.23
+[1m[92m  Downloaded[0m quote v1.0.47
+[1m[92m  Downloaded[0m proc-macro2 v1.0.107
+[1m[92m  Downloaded[0m serde_derive v1.0.229
+[1m[92m  Downloaded[0m serde_core v1.0.229
+[1m[92m  Downloaded[0m unicode-ident v1.0.27
+[1m[92m  Downloaded[0m serde v1.0.229
+[1m[92m  Downloaded[0m memchr v2.8.3
+[1m[92m  Downloaded[0m serde_json v1.0.154
+[1m[92m  Downloaded[0m syn v3.0.9
+[1m[92m  Downloaded[0m libc v0.2.191
+[1m[92m   Compiling[0m proc-macro2 v1.0.107
+[1m[92m   Compiling[0m quote v1.0.47
+[1m[92m   Compiling[0m unicode-ident v1.0.27
+[1m[92m   Compiling[0m serde_core v1.0.229
+[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m   Compiling[0m strsim v0.11.1
+[1m[92m   Compiling[0m clap_lex v1.1.1
+[1m[92m   Compiling[0m anstyle v1.0.14
+[1m[92m   Compiling[0m heck v0.5.0
+[1m[92m   Compiling[0m libc v0.2.191
+[1m[92m   Compiling[0m syn v3.0.9
+[1m[92m   Compiling[0m serde v1.0.229
+[1m[92m   Compiling[0m anyhow v1.0.104
+[1m[92m   Compiling[0m serde_json v1.0.154
+[1m[92m   Compiling[0m clap_builder v4.6.7
+[1m[92m   Compiling[0m memchr v2.8.3
+[1m[92m   Compiling[0m itoa v1.0.18
+[1m[92m   Compiling[0m clap_derive v4.6.7
+[1m[92m   Compiling[0m serde_derive v1.0.229
+[1m[92m   Compiling[0m clap v4.6.7
+[1m[92m   Compiling[0m asus-numpad v1.2.4 (/__w/asus-numpad/asus-numpad)
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 13.28s
+==> ── 构建 rpm ──
+==> 导出源码 tarball
+==> rpmbuild -bb
+error: line 14: Unknown tag: %for s g533 g614 g615 g634 g635 gx550 gx650 ux582 universal
