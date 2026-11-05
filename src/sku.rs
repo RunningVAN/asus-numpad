@@ -897,10 +897,7 @@ mod tests {
     #[test]
     fn manual_unknown_id_is_an_error() {
         let err = resolve(&no_identity(), &no_hw(), Some("g999")).unwrap_err();
-        assert_eq!(
-            err,
-            ResolveError::UnknownId(UnknownSku("g999".to_string()))
-        );
+        assert_eq!(err, ResolveError::UnknownId(UnknownSku("g999".to_string())));
     }
 
     fn no_identity() -> DmiIdentity {
@@ -921,7 +918,10 @@ mod tests {
             "ROG Strix G15 G513IH_G513IH",
         ] {
             let err = resolve(&dmi(product), &no_hw(), None).unwrap_err();
-            assert!(matches!(err, ResolveError::Unsupported(_)), "{product}: {err}");
+            assert!(
+                matches!(err, ResolveError::Unsupported(_)),
+                "{product}: {err}"
+            );
         }
         // 逃生通道照样在：手动指定 g533 立即生效
         let r = resolve(&dmi("ROG Strix G15 G513QM_G513QM"), &no_hw(), Some("g533")).unwrap();
@@ -960,7 +960,10 @@ mod tests {
             "ROG Strix G17 G713QR_G713QR",
         ] {
             let err = resolve(&dmi(product), &no_hw(), None).unwrap_err();
-            assert!(matches!(err, ResolveError::Unsupported(_)), "{product}: {err}");
+            assert!(
+                matches!(err, ResolveError::Unsupported(_)),
+                "{product}: {err}"
+            );
         }
     }
 

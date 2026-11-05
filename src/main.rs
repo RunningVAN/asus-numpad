@@ -1677,7 +1677,10 @@ fn sku_block(cfg: &Config) -> String {
         Ok(r) => {
             let mut s = i18n::tf(
                 "sku.model",
-                &[("sku", r.sku.display), ("source", &i18n::t(r.source.i18n_key()))],
+                &[
+                    ("sku", r.sku.display),
+                    ("source", &i18n::t(r.source.i18n_key())),
+                ],
             );
             s.push('\n');
             if let Some(detail) = &r.detail {
