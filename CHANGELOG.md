@@ -2,6 +2,23 @@
 
 版本号跟包版本一致；`-N` 后缀是发版前的构建号。
 
+## 未发布
+
+### 单一包与自动识别
+
+- **不再按机型分包**：一份二进制覆盖全部机型，机型配置在运行期自动识别——先看 DMI
+  （`product_name` / `board_name` / `product_family` 并集，占位串按缺失处理），DMI 说不出来
+  时看触摸板模组（`ASUE1416` 这类，来自 i2c-hid / HID）。删掉编译期 `ASUS_NUMPAD_SKU` 注入
+  与 `build.rs`，出包不再按机型编多份。
+- **手动指定作为备用通道**：`asus-numpad sku` 看识别结果与依据，`sku list` 列机型，`sku g614`
+  写进配置长期生效，`sku auto` 恢复自动识别；`--sku g614` 只影响本次运行。用于虚拟机、白牌
+  机箱、BIOS 占位串等读不到正确硬件信息的场景。
+- **打包层收拢**：删掉 `packaging/build-skus.sh`、`install-sku.sh`、`skus.tsv`；spec 与
+  `make-rpm.sh` 去掉机型参数与包名互斥，改为 `Obsoletes` / `Provides` 旧机型包名，
+  装过 `asus-numpad-g614` 之类的机器 `dnf upgrade` 自动换过来。
+- 判定不变的部分：明确不是 NumberPad 的机型（`G713`、`H7606`、18 英寸 Plus 等）仍以退出码
+  `4` 拒绝并说明原因，非 ASUS 厂商仍以退出码 `3` 拒绝。
+
 ## 1.2.3
 
 ### 亮度

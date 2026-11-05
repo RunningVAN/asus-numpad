@@ -279,6 +279,13 @@ pub struct Config {
     /// 默认 `false`：`auto` 识别到非 GH3XLNDZ 布局时只报告不跑，避免键位表不同
     /// 导致按错键；确认可用后再置 `true`（或命令行加 `--allow-unverified`）。
     pub allow_unverified_layout: bool,
+    /// 手动指定的机型配置 id（如 `g614`）；不写 = 按 DMI 型号 / 触摸板模组自动识别。
+    ///
+    /// 只给「硬件信息读不准」的机器留的后路：虚拟机、DMI 被写成占位串的整机、
+    /// 换过主板、白牌机箱等。命令行 `--sku` 优先级更高；
+    /// `asus-numpad sku auto` 可清空本字段、回到自动识别。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sku: Option<String>,
     /// 仅支持 cell；icon 子区语义未闭合已移除（读入后强制回落）
     pub numlock_zone: String,
     // ---- 按压力度（FORCE_07 = 1 / FORCE_08 = 2 档位） ----
@@ -373,6 +380,7 @@ impl Default for Config {
             repeat_interval_ms: 40.0,
             layout_name: "auto".to_string(),
             allow_unverified_layout: false,
+            sku: None,
             numlock_zone: "cell".to_string(),
             pressure_numpad_min: 0,
             key_mode: KeyMode::Keypad,
@@ -601,6 +609,20 @@ impl Config {
             }
         } else {
             self.language = "auto".to_string();
+        }
+        // 手动指定的机型 id：空串等于不指定；表里没有的 id 直接丢弃并提示，
+        // 免得手改配置写错一个字母就让驱动再也起不来。
+        if let Some(raw) = self.sku.take() {
+            let id = raw.trim().to_string();
+            match crate::sku::by_id(&id) {
+                Some(entry) => self.sku = Some(entry.id.to_string()),
+                None => {
+                    notes.push(crate::i18n::tf(
+                        "note.sku_unknown",
+                        &[("id", &id), ("ids", &crate::sku::known_ids().join(", "))],
+                    ));
+                }
+            }
         }
         self.frame_ms = self.frame_ms.max(1);
         self.numlock_trigger_frames = self.numlock_trigger_frames.max(1);
@@ -902,6 +924,12 @@ impl Config {
             "manual_brightness_levels": self.manual_brightness_levels,
             "led_kind": self.led_kind,
         });
+
+        // 只在手动指定机型时写出：默认配置里没有这一项，读一眼就知道是自动识别
+        let mut value = value;
+        if let Some(id) = &self.sku {
+            value["sku"] = serde_json::json!(id);
+        }
 
         let mut text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string());
         text.push('\n');

@@ -78,7 +78,6 @@ install_common_files "$ROOT" "$STAGE"
 
 install -d "$STAGE/etc/asus-numpad"
 default_config_json > "$STAGE/etc/asus-numpad/asus-numpad.json.sample"
-install_sku_json "$STAGE" "$VERSION" "${ASUS_NUMPAD_SKU:-universal}" "$BUNDLE"
 
 install -m 0755 "$SELF_DIR/install.sh"   "$STAGE/install.sh"
 install -m 0755 "$SELF_DIR/uninstall.sh" "$STAGE/uninstall.sh"

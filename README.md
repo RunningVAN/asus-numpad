@@ -177,10 +177,11 @@ distribution. Native packages are also on
 CI installs every package in a clean container for each target distribution and runs `--version`;
 a package that fails to install blocks the release.
 
-Model packages refuse a mismatched machine with exit code 3 and name the package that fits the
-machine, so the model table never has to be consulted beforehand.
-
-`asus-numpad` is the package without a model check. Runtime dependency: glibc, or musl on Alpine.
+There is one package. The model is detected at runtime: the same binary reads DMI fields and the
+touchpad module, then picks the matching keymap, so there is no package to choose and nothing to get
+wrong. If the hardware cannot be read reliably (virtual machines, whitebox chassis, BIOS placeholder
+strings), pin the model by hand, see [Model detection](#model-detection). Runtime dependency: glibc,
+or musl on Alpine.
 
 ## Usage
 
@@ -224,10 +225,11 @@ use vendor defaults.
 | `brightness_levels` | array | Hardware steps, default `0x41`..`0x48` |
 | `brightness_poll_ms` | ms | Poll interval, default `500` |
 | `allow_unverified_layout` | `true` / `false` | Accept an unlisted layout of a known family |
+| `sku` | model id / `null` | Pin a model and skip detection; `null` means auto |
 
 ## Supported models
 
-| Package | Models |
+| Model id | Models |
 | --- | --- |
 | `g533` | Strix SCAR 15 / Strix G15 (2022): `G533`, `G513` |
 | `g614` | Strix SCAR 16 / Strix G16 (2023): `G614`, `G634` |
@@ -239,32 +241,41 @@ use vendor defaults.
 data, keymap tables and vendor documents. None has been verified on a physical machine: treat them
 as theoretical support. Reports from other models are welcome.
 
-The model code in DMI is authoritative; marketing names are for orientation only. A package serves
-one touchpad module family, not one machine SKU. Merged package names stay in `Obsoletes` and model
-packages declare `Conflicts` against each other.
+The model code in DMI is authoritative; marketing names are for orientation only. Each model id
+covers one touchpad module family and one keymap, not a single machine SKU. The old per-model package
+names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades move to `asus-numpad`.
 
 ### Model detection
 
 Detection uses the union of the DMI fields `product_name`, `board_name` and `product_family`. BIOS
 placeholder strings count as missing and do not block startup; a vendor field that is clearly not
-ASUS blocks startup. With the wrong package installed, `check` prints the package that matches the
-longest common model prefix.
+ASUS blocks startup.
 
 Touchpad module name (such as `ASUE1416`, read from i2c-hid and HID) is the second signal and is
-used when DMI has no usable model. A known DMI model that does not belong to the package is not
+used when DMI has no usable model. A known DMI model that is not a NumberPad machine is not
 overridden by it. Module and keymap per model: [docs/machines.md](docs/machines.md).
+
+When the hardware cannot be read reliably, pin the model:
+
+```bash
+asus-numpad sku            # what was detected, and on what evidence
+asus-numpad sku list       # available model ids
+asus-numpad sku g614       # pin a model, persisted to the config
+asus-numpad sku auto       # back to auto-detection
+```
+
+`sku` in the config wins over detection; `--sku g614` applies to one invocation only.
 
 ## Building
 
 ```bash
 ./packaging/build.sh                        # current distribution
 ./packaging/build.sh deb rpm tarball        # explicit targets (deb/rpm/arch/alpine/tarball)
-./packaging/build-skus.sh g614              # single model
 ./tools/repo-gen.sh                         # dist/ to local repositories in repo/ (apt/rpm/pacman/apk)
 ```
 
 ```bash
-ASUS_NUMPAD_SKU=g614 RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
+RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
   cargo build --target x86_64-unknown-linux-musl --release
 ```
 

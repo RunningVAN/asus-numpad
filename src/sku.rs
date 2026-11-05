@@ -1,33 +1,41 @@
-//! 机型（SKU）闸门：每个发行包只服务一组机型。
+//! 机型配置：一个包，运行期自动选择本机对应的机型参数。
 //!
-//! ## 为什么按机型拆包
+//! ## 为什么不再按机型分包
 //!
-//! 驱动真正依赖的是**触摸板 HID 模组**（`ASUE1416` 等），不是整机型号；但发行层面
-//! 若只出一个「宣称支持全部机型」的包，用户既看不出自己这台有没有被适配，也无法在
-//! 装错时被拦住。所以按机型拆成多个包，每个包在编译期把机型注入进来
-//! （环境变量 [`SKU_ENV`]），运行期读 DMI 的 `product_name` 比对：
+//! 早期做法是按机型出多个包（`asus-numpad-g614`、`asus-numpad-g615` …），每个包在
+//! 编译期把机型写死，装错包就退出码 3 拒绝启动。这带来三个问题：
 //!
-//! * 机型对上 → 正常走布局闸门（`verified` / `family` / `unsupported` 三档不变）；
-//! * 机型对不上 → 直接拒绝启动，并提示该装哪个包。
+//! * 用户必须先查清自己是哪台机器才能装——查 DMI、对表、挑包，全是多余步骤；
+//! * 同一台机器换主板 / 刷 BIOS / 装到虚拟机后包名立刻变成「错的」；
+//! * 机型表每加一行就要多发一轮包，九个包维护成本远高于收益。
 //!
-//! 判定只看「DMI 里是否出现本包机型前缀」。同型号的高低配（如魔霸新锐 2023 的
-//! `EAGX` 有 NumberPad、`EACX` 没有）DMI 前缀相同，闸门不会误伤——那种情况本来
-//! 就由「有没有这个触摸板硬件」决定，驱动找不到设备自然不会动键盘。
+//! 现在只有一个包，机型表 [`SKUS`] 编译进二进制，启动时按**本机实际硬件**选配置：
+//!
+//! 1. 配置文件 / 命令行显式指定（`"sku": "g614"` 或 `--sku g614`）——最高优先，
+//!    给「DMI 读不出型号」的机器留的备用通道（[`SkuSource::Manual`]）；
+//! 2. DMI 型号字段命中（[`SkuSource::Dmi`]）；
+//! 3. 触摸板模组名命中（[`SkuSource::Hardware`]）——DMI 写成占位串时的第二判据；
+//! 4. 都没命中 → 通用配置（[`SkuSource::Fallback`]），照常运行，键表由
+//!    [`crate::layout`] 按实际 HID 模组决定。
+//!
+//! ## 仍然会拦的两种情况
+//!
+//! 自动识别之后「装错包」不再是问题，但有两类机器**装了也没用**，必须直说：
+//! 厂商明确不是 ASUS（[`DmiVerdict::NonAsus`]），以及 DMI 命中「结构上没有
+//! NumberPad」的机型（[`NON_NUMPAD_MODELS`]，如 ProArt 的 DialPad 旋钮、
+//! 18 英寸的物理数字键）→ [`DmiVerdict::NotNumberPad`]。
 //!
 //! ## 不做的事
 //!
-//! 这里不做布局/键表判定，那仍然由 [`crate::layout`] 负责。机型闸门只回答一个问题：
-//! **这个包是不是给这台机器的。**
+//! 这里不做布局/键表判定，那仍然由 [`crate::layout`] 负责。本模块只回答一个问题：
+//! **这台机器该用哪套机型参数。**
 
 use std::path::Path;
 
-/// 打包脚本用来注入机型的环境变量（编译期读取）。
-pub const SKU_ENV: &str = "ASUS_NUMPAD_SKU";
-
-/// 一个发行包对应的机型。
+/// 一个机型配置条目。
 #[derive(Debug)]
 pub struct Sku {
-    /// 包名后缀，如 `g614` → `asus-numpad-g614`
+    /// 配置 id（也是 `--sku` / 配置文件的取值），如 `g614`
     pub id: &'static str,
     /// 给用户看的机型说明
     pub display: &'static str,
@@ -40,11 +48,11 @@ pub struct Sku {
     pub note: &'static str,
 }
 
-/// 机型表。新增机型只加一行，并同步 `packaging/skus.tsv`。
+/// 机型配置表。新增机型只加一行——这张表是唯一源，出包脚本不再复制一份。
 ///
-/// ## 合并规则（1.0.0-14 起）
+/// ## 分组规则
 ///
-/// 一个包服务一个**触摸板模组族**，而不是一个整机 SKU。同族的依据是
+/// 一个配置服务一个**触摸板模组族**，而不是一个整机 SKU。同族的依据是
 /// `layout.rs` 的 [`crate::layout::HID_LAYOUTS`]（官方 INF 的 HID 名 → 键表）：
 /// 模组名相同（如 `ASUE1416` / `ASUF1416`）就一定是同一份键表、同一套几何。
 ///
@@ -60,11 +68,11 @@ pub struct Sku {
 /// DialPad 智能旋钮（官方规格写 `support DialPad`），根本没有 NumberPad 虚拟数字键盘。
 /// 现已从机型号召里剔除，并落入 [`NON_NUMPAD_MODELS`] 显式拒绝，免得用户装了白装。
 ///
-/// 合并只影响「机型闸门」的 DMI 白名单，运行期选哪套键表仍由实际 HID 模组名决定，
-/// 所以合并不改变闸门的保守性：模组不在 `HID_LAYOUTS` 里，照样拒绝启动。
+/// 分组只影响「自动识别」的 DMI 白名单，运行期选哪套键表仍由实际 HID 模组名决定，
+/// 所以分组不改变保守性：模组不在 `HID_LAYOUTS` 里，照样拒绝启动。
 ///
-/// 被吸收的旧包名写在 `packaging/skus.tsv` 第 5 列，出包时由本包 Obsoletes 掉，
-/// 老用户 `dnf upgrade` 会自动接管，不需要先手工卸载旧机型包。
+/// 历史机型包名（`asus-numpad-g614` 等）由统一包 Obsoletes 掉，老用户
+/// `dnf upgrade` 会自动接管，不需要先手工卸载旧机型包。
 pub const SKUS: &[Sku] = &[
     Sku {
         id: "g533",
@@ -78,21 +86,21 @@ pub const SKUS: &[Sku] = &[
         display: "ASUS 枪神7 / 枪神8 / 魔霸新锐 2023 / 枪神7 超竞版 16 英寸（G614 / G634）",
         models: &["G614", "G634"],
         modules: &["ASUE1416", "ASUF1416"],
-        note: "合并包：G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
+        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
     },
     Sku {
         id: "g615",
         display: "ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版（G615 / G635）",
         models: &["G615", "G635"],
         modules: &["ASCP1400", "ASCF1400"],
-        note: "合并包：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，已剔除并显式拒绝",
+        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，已剔除并显式拒绝",
     },
     Sku {
         id: "gx550",
         display: "ASUS 冰刃双屏 15 / 16 英寸（GX550 / GX551 / GX650）",
         models: &["GX550", "GX551", "GX650"],
         modules: &["ASUE1408", "ASUE1404"],
-        note: "合并包：GX550 / GX551 / GX650 同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A",
+        note: "GX550 / GX551 / GX650 同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A",
     },
     Sku {
         id: "ux582",
@@ -103,10 +111,10 @@ pub const SKUS: &[Sku] = &[
     },
     Sku {
         id: "universal",
-        display: "全机型兼容包（不做机型校验）",
+        display: "通用配置（未匹配到具体机型时使用）",
         models: &[],
         modules: &[],
-        note: "仅在不确定机型时兜底使用",
+        note: "没认出机型时用官方默认参数，键表仍按实际触摸板模组自动选择；认出后可用 asus-numpad sku <id> 手动指定",
     },
 ];
 
@@ -166,21 +174,209 @@ pub fn non_numpad_hit(identity: &DmiIdentity) -> Option<(&'static str, &'static 
         .map(|(model, why)| (*model, *why))
 }
 
-/// 编译期由 `build.rs` 生成的机型常量（见仓库根 `build.rs`）。
-pub mod build {
-    include!(concat!(env!("OUT_DIR"), "/build_sku.rs"));
+/// 机型配置是怎么选出来的——输出里要说清「凭什么判定是这台」。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkuSource {
+    /// 配置文件 `sku` 字段 / 命令行 `--sku` 显式指定
+    Manual,
+    /// DMI 型号字段命中
+    Dmi,
+    /// 触摸板模组名命中（DMI 读不出型号时的第二判据）
+    Hardware,
+    /// 都没命中，用通用配置
+    Fallback,
 }
 
-/// 当前二进制所属机型。未注入时 `build.rs` 会写成 `universal`。
-pub fn build_sku() -> &'static Sku {
-    by_id(build::BUILD_SKU_ID).unwrap_or_else(|| by_id("universal").expect("SKUS 必须含 universal"))
+impl SkuSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SkuSource::Manual => "manual",
+            SkuSource::Dmi => "dmi",
+            SkuSource::Hardware => "hardware",
+            SkuSource::Fallback => "fallback",
+        }
+    }
+
+    /// 对应 `sku.source.*` 这组 i18n 键。
+    pub fn i18n_key(&self) -> &'static str {
+        match self {
+            SkuSource::Manual => "sku.source.manual",
+            SkuSource::Dmi => "sku.source.dmi",
+            SkuSource::Hardware => "sku.source.hardware",
+            SkuSource::Fallback => "sku.source.fallback",
+        }
+    }
 }
 
-/// 本二进制的包名（如 `asus-numpad-g614`），由 `build.rs` 在编译期固定。
+/// 自动识别的结果：用哪套配置 + 凭什么。
+#[derive(Debug, Clone)]
+pub struct Resolved {
+    pub sku: &'static Sku,
+    pub source: SkuSource,
+    /// 选中依据的细节：命中的机型代号 / 触摸板模组 / 手动指定的 id
+    pub detail: Option<String>,
+    /// 这台机器该不该跑（`NotNumberPad` / `NonAsus` 会被启动闸门拦下）
+    pub verdict: DmiVerdict,
+}
+
+impl Resolved {
+    pub fn id(&self) -> &'static str {
+        self.sku.id
+    }
+
+    pub fn allows_run(&self) -> bool {
+        self.verdict.allows_run()
+    }
+
+    /// 是否真的认出了机型（`false` = 落到通用配置）
+    pub fn is_detected(&self) -> bool {
+        self.source != SkuSource::Fallback
+    }
+}
+
+/// 手动指定的机型 id 不在表里。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownSku(pub String);
+
+impl std::fmt::Display for UnknownSku {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unknown model id: {}", self.0)
+    }
+}
+
+impl std::error::Error for UnknownSku {}
+
+/// 机型表里所有可选 id（含兜底的 `universal`）。
+pub fn known_ids() -> Vec<&'static str> {
+    SKUS.iter().map(|s| s.id).collect()
+}
+
+fn universal() -> &'static Sku {
+    by_id("universal").expect("SKUS 必须含 universal")
+}
+
+/// 纯逻辑：DMI 身份 × 硬件探测 × 手动指定 → 该用哪套机型配置。
 ///
-/// 出包脚本用它 grep 二进制自证机型，避免「包名对了、二进制还是上一台」的错包。
-pub fn build_package_name() -> &'static str {
-    build::BUILD_PACKAGE_NAME
+/// 判定顺序（越靠前越优先）：
+///
+/// 1. 手动指定（配置文件 `sku` / `--sku`）→ `Manual`，认了这个 id 就不再质疑；
+/// 2. DMI 型号字段命中某条机的 `models` → `Dmi`；
+/// 3. 触摸板模组命中某条机的 `modules` → `Hardware`；
+/// 4. DMI 命中「结构上没有 NumberPad」的机型 → 通用配置 + `NotNumberPad`；
+/// 5. 厂商字段明确不是 ASUS → 通用配置 + `NonAsus`；
+/// 6. 其余（读不到 DMI、型号不在表里）→ 通用配置 + `Unknown`，照常运行。
+///
+/// 第 6 步刻意放行：读不到 DMI 不等于装错机器，真正跑起来后还有布局闸门按实际
+/// HID 模组兜底。手动指定是给这类机器准备的备用通道。
+pub fn resolve(
+    identity: &DmiIdentity,
+    hw: &HardwareProbe,
+    manual: Option<&str>,
+) -> Result<Resolved, UnknownSku> {
+    if let Some(id) = manual {
+        if !id.trim().is_empty() {
+            let sku = by_id(id).ok_or_else(|| UnknownSku(id.trim().to_string()))?;
+            // 手动指定等于「我确认这台就是它」，不再让 DMI 反过来否掉用户的选择
+            let verdict = if sku.models.is_empty() {
+                DmiVerdict::NotEnforced
+            } else {
+                DmiVerdict::Match
+            };
+            return Ok(Resolved {
+                sku,
+                source: SkuSource::Manual,
+                detail: Some(sku.id.to_string()),
+                verdict,
+            });
+        }
+    }
+
+    if let Some((sku, model)) = dmi_hit(identity) {
+        return Ok(Resolved {
+            sku,
+            source: SkuSource::Dmi,
+            detail: Some(model.to_string()),
+            verdict: DmiVerdict::Match,
+        });
+    }
+
+    for sku in SKUS.iter().filter(|s| !s.modules.is_empty()) {
+        if let Some(module) = hw.first_hit(sku) {
+            return Ok(Resolved {
+                sku,
+                source: SkuSource::Hardware,
+                detail: Some(module.to_string()),
+                verdict: DmiVerdict::MatchHardware(module.to_string()),
+            });
+        }
+    }
+
+    if let Some((model, reason)) = non_numpad_hit(identity) {
+        return Ok(Resolved {
+            sku: universal(),
+            source: SkuSource::Fallback,
+            detail: Some(model.to_string()),
+            verdict: DmiVerdict::NotNumberPad {
+                model: model.to_string(),
+                reason,
+            },
+        });
+    }
+
+    if identity.is_asus() == Some(false) {
+        let vendor = identity
+            .sys_vendor
+            .as_deref()
+            .or(identity.board_vendor.as_deref())
+            .unwrap_or("unknown")
+            .trim()
+            .to_string();
+        return Ok(Resolved {
+            sku: universal(),
+            source: SkuSource::Fallback,
+            detail: None,
+            verdict: DmiVerdict::NonAsus(vendor),
+        });
+    }
+
+    Ok(Resolved {
+        sku: universal(),
+        source: SkuSource::Fallback,
+        detail: None,
+        verdict: DmiVerdict::Unknown,
+    })
+}
+
+/// 本机该用哪套机型配置（读真实 DMI 与触摸板）；`manual` 来自配置 / 命令行。
+pub fn current(manual: Option<&str>) -> Result<Resolved, UnknownSku> {
+    resolve(&dmi_identity(), &probe_hardware(), manual)
+}
+
+/// 纯逻辑：DMI 型号 → 命中的配置条目与命中的那个代号。
+///
+/// 多条同时命中时取 `model` 最长的那个：`G614` 与 `G614JY` 都在表里时，
+/// 更长的代号更精确。
+fn dmi_hit(identity: &DmiIdentity) -> Option<(&'static Sku, &'static str)> {
+    let pools = identity.haystacks();
+    if pools.is_empty() {
+        return None;
+    }
+    let mut best: Option<(&'static Sku, &'static str)> = None;
+    for sku in SKUS.iter().filter(|s| !s.models.is_empty()) {
+        for model in sku.models {
+            if !matches_model(model, &pools) {
+                continue;
+            }
+            let better = match best {
+                Some((_, cur)) => model.len() > cur.len(),
+                None => true,
+            };
+            if better {
+                best = Some((sku, model));
+            }
+        }
+    }
+    best
 }
 
 /// 按 id 查机型（大小写不敏感）。
@@ -358,59 +554,6 @@ impl DmiVerdict {
     }
 }
 
-/// 纯逻辑：给定机型表与单个 DMI 型号，判定是否对得上（只比对产品名字段）。
-///
-/// 保留这个入口是为了兼容只想知道「这一串型号属不属于本包」的调用方与用例；
-/// 真正跑在机器上的判定请用 [`verdict_for_identity`]（多字段 + 厂商定性）。
-pub fn verdict_for(sku: &Sku, dmi: Option<&str>) -> DmiVerdict {
-    let identity = DmiIdentity {
-        product_name: dmi.map(str::to_string),
-        ..Default::default()
-    };
-    verdict_for_identity(sku, &identity)
-}
-
-/// 纯逻辑：机型表 × DMI 身份 → 结论。
-///
-/// 判定顺序（越靠前越优先，保证不会被后面的宽松规则覆盖）：
-///
-/// 1. 通用包 → `NotEnforced`；
-/// 2. 三个型号字段都取不到有效值（缺失 / 占位串）→ `Unknown`（放行）；
-/// 3. 任一机型前缀出现在任一有效字段里 → `Match`；
-/// 4. 厂商字段明确不是 ASUS → `NonAsus`（拦下，装错机器的经典形态）；
-/// 5. 其余 → `Mismatch`，附上身份摘要方便用户对照。
-pub fn verdict_for_identity(sku: &Sku, identity: &DmiIdentity) -> DmiVerdict {
-    if sku.models.is_empty() {
-        return DmiVerdict::NotEnforced;
-    }
-    let pools = identity.haystacks();
-    if pools.is_empty() {
-        return DmiVerdict::Unknown;
-    }
-    if sku.models.iter().any(|m| matches_model(m, &pools)) {
-        return DmiVerdict::Match;
-    }
-    // 白名单没命中，但命中了「确定没有 NumberPad」的机型：给出准确原因，
-    // 不要落进 Mismatch 里让用户去试别的包。
-    if let Some((model, reason)) = non_numpad_hit(identity) {
-        return DmiVerdict::NotNumberPad {
-            model: model.to_string(),
-            reason,
-        };
-    }
-    if identity.is_asus() == Some(false) {
-        let vendor = identity
-            .sys_vendor
-            .as_deref()
-            .or(identity.board_vendor.as_deref())
-            .unwrap_or("unknown")
-            .trim()
-            .to_string();
-        return DmiVerdict::NonAsus(vendor);
-    }
-    DmiVerdict::Mismatch(identity.label())
-}
-
 /// 硬件探测结果：这台机器上真实存在的**触摸板模组名**。
 ///
 /// DMI 是 BIOS 写的字符串，会写错、会写成占位串、会因为主板换装而对不上；
@@ -557,118 +700,6 @@ pub fn probe_hardware() -> HardwareProbe {
     probe_hardware_at(Path::new("/sys"), Path::new("/proc/bus/input/devices"))
 }
 
-/// 纯逻辑：机型表 × DMI 身份 × 硬件探测 → 结论。
-///
-/// 与 [`verdict_for_identity`] 相比多了硬件层，判定顺序：
-///
-/// 1. 通用包 → `NotEnforced`；
-/// 2. DMI 命中机型 → `Match`；
-/// 3. 触摸板模组命中机型 → `MatchHardware`（DMI 写错/占位时的救命路径）；
-/// 4. DMI 三个型号字段全无效 → `Unknown`（放行）；
-/// 5. 厂商字段明确不是 ASUS → `NonAsus`；
-/// 6. 其余 → `Mismatch`。
-///
-/// 硬件判据放在 DMI「无效」之前、厂商判定之前：模组名是实物证据，
-/// 比 BIOS 字符串可信；但排在 DMI 命中之后，避免把同族不同代的机器错认成一台。
-pub fn verdict_full(sku: &Sku, identity: &DmiIdentity, hw: &HardwareProbe) -> DmiVerdict {
-    if sku.models.is_empty() {
-        return DmiVerdict::NotEnforced;
-    }
-    let pools = identity.haystacks();
-    if !pools.is_empty() && sku.models.iter().any(|m| matches_model(m, &pools)) {
-        return DmiVerdict::Match;
-    }
-    // DMI 里读出了明确的型号代号（`G615JY` 这种）却没对上本包：这是「明确不是这台」，
-    // 不允许一块同族触摸板把它翻案——换了主板/刷了 BIOS 的机器也会出现这种组合。
-    let dmi_has_code = pools.iter().any(|p| !model_tokens(p).is_empty());
-    if !dmi_has_code {
-        if let Some(module) = hw.first_hit(sku) {
-            return DmiVerdict::MatchHardware(module.to_string());
-        }
-        // DMI 说不出型号，但硬件上挂着一块**别的**已知触摸板模组 → 确实是别的机型
-        if let Some(other) = hw.known_module() {
-            return DmiVerdict::Mismatch(format!("module {}", other));
-        }
-    }
-    if pools.is_empty() {
-        return DmiVerdict::Unknown;
-    }
-    // 命中「确定没有 NumberPad」的机型（ProArt 的 DialPad、18 英寸物理数字键）：
-    // 明确告知这台不用装，也不给「改装哪个包」的建议——装哪个都没用。
-    if let Some((model, reason)) = non_numpad_hit(identity) {
-        return DmiVerdict::NotNumberPad {
-            model: model.to_string(),
-            reason,
-        };
-    }
-    if identity.is_asus() == Some(false) {
-        let vendor = identity
-            .sys_vendor
-            .as_deref()
-            .or(identity.board_vendor.as_deref())
-            .unwrap_or("unknown")
-            .trim()
-            .to_string();
-        return DmiVerdict::NonAsus(vendor);
-    }
-    DmiVerdict::Mismatch(identity.label())
-}
-
-/// 给「装错包」的用户找最可能的正确包：按机型前缀的前 3 位做粗匹配。
-///
-/// 例如本机是 `G615JY`，装的是 `g614` 包 → `G61` 前缀同时命中 `g614`/`g615`，
-/// 这里会把 `g615` 找出来建议安装。命中多个时返回第一个（机型表按代次排序）。
-pub fn suggest_for(identity: &DmiIdentity) -> Option<&'static Sku> {
-    suggest_all_for(identity).into_iter().next()
-}
-
-/// 同 [`suggest_for`]，但把**全部**候选按匹配强度从高到低返回。
-///
-/// 同一代机型经常只差一位（`G614` / `G615` / `G635`），只给一个候选容易指错方向；
-/// 自检输出里把候选全列出来，用户按自己机器的完整型号挑就行。
-///
-/// 强度排序：`model` 代号与 DMI 代号 token **完全相等**的最强（权重 100），
-/// 其次是「同族前缀」——取 `model` 与 token 的公共前缀长度作为权重。
-pub fn suggest_all_for(identity: &DmiIdentity) -> Vec<&'static Sku> {
-    let pools = identity.haystacks();
-    if pools.is_empty() {
-        return Vec::new();
-    }
-    let tokens: Vec<String> = pools.iter().flat_map(|p| model_tokens(p)).collect();
-
-    let mut scored: Vec<(&'static Sku, usize)> = Vec::new();
-    for sku in SKUS {
-        if sku.models.is_empty() {
-            continue;
-        }
-        let mut best = 0usize;
-        for model in sku.models {
-            let up = model.to_ascii_uppercase();
-            if tokens.iter().any(|t| t == &up) {
-                best = best.max(100);
-            }
-            for pool in &pools {
-                let shared = shared_prefix_in(&up, pool);
-                if shared >= 3 {
-                    best = best.max(shared);
-                }
-            }
-        }
-        if best > 0 {
-            scored.push((sku, best));
-        }
-    }
-    // 权重降序；同权重保持 SKUS 表顺序（代次先后），结果稳定可测
-    scored.sort_by_key(|&(_, weight)| std::cmp::Reverse(weight));
-    let mut out: Vec<&'static Sku> = Vec::new();
-    for (sku, _) in scored {
-        if !out.iter().any(|s| s.id == sku.id) {
-            out.push(sku);
-        }
-    }
-    out
-}
-
 /// 从任意 DMI 字符串里抽出「型号代号」token（`G614` / `GX650` / `H7606` / `G614JY`）。
 ///
 /// 判定规则：按非字母数字切分，段长 ≥ 4、以 ASCII 字母开头、且至少含 2 位数字。
@@ -734,24 +765,6 @@ fn matches_model(model: &str, pools: &[String]) -> bool {
     false
 }
 
-/// `model` 有多大一段前缀出现在 `pool` 里（从长到短试，命中即返回长度）。
-///
-/// DMI 产品名里型号编号前面还挂着营销名（`ROG STRIX G16 G615LR_G615LR`），
-/// 所以不能按整串做前缀比较，只能问「model 的前 n 位在 pool 里出现过吗」。
-fn shared_prefix_in(model: &str, pool: &str) -> usize {
-    let m = model.to_ascii_uppercase();
-    let p = pool.to_ascii_uppercase();
-    let mut n = m.len();
-    while n >= 3 {
-        // m 只含 ASCII（机型编号），按字节切片安全
-        if p.contains(&m[..n]) {
-            return n;
-        }
-        n -= 1;
-    }
-    0
-}
-
 /// 读单个 DMI 字段，空串按「读不到」处理。
 fn read_dmi_field(root: &Path, name: &str) -> Option<String> {
     let text = std::fs::read_to_string(root.join(name)).ok()?;
@@ -796,14 +809,34 @@ pub fn dmi_product_name_at(root: &Path) -> Option<String> {
     dmi_identity_at(root).product_name
 }
 
-/// 当前二进制的机型判定。
-pub fn current_verdict() -> DmiVerdict {
-    verdict_full(build_sku(), &dmi_identity(), &probe_hardware())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ident(product: Option<&str>, board: Option<&str>, family: Option<&str>) -> DmiIdentity {
+        DmiIdentity {
+            sys_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
+            board_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
+            product_name: product.map(str::to_string),
+            board_name: board.map(str::to_string),
+            product_family: family.map(str::to_string),
+        }
+    }
+
+    /// 只有 product_name 有值的身份——绝大多数真机就是这种形态。
+    fn dmi(product: &str) -> DmiIdentity {
+        ident(Some(product), None, None)
+    }
+
+    fn hw(modules: &[&str]) -> HardwareProbe {
+        HardwareProbe {
+            modules: modules.iter().map(|m| m.to_ascii_uppercase()).collect(),
+        }
+    }
+
+    fn no_hw() -> HardwareProbe {
+        HardwareProbe::default()
+    }
 
     #[test]
     fn sku_ids_are_unique_and_complete() {
@@ -814,150 +847,247 @@ mod tests {
         assert_eq!(ids.len(), n, "SKU id 必须唯一");
         assert!(by_id("universal").is_some(), "必须保留 universal 兜底");
         assert!(by_id("G614").is_some(), "机型查询应忽略大小写");
-        // g513 并进 g533；g713 不并入任何包（17 英寸物理数字键，落 NON_NUMPAD_MODELS）；
+        // g513 并入 g533；g713 不并入任何配置（17 英寸物理数字键，落 NON_NUMPAD_MODELS）；
         // h7606 从机型号召直接剔除（ProArt 是 DialPad 旋钮）
         for merged in ["g634", "g635", "gx650", "g513", "g713", "h7606"] {
             assert!(
                 by_id(merged).is_none(),
-                "{merged} 已并入同族包，不应再单独存在"
+                "{merged} 已并入同族配置，不应再单独存在"
             );
         }
         for s in SKUS {
             assert!(!s.display.is_empty(), "{} 缺少展示名", s.id);
             assert!(!s.note.is_empty(), "{} 缺少说明", s.id);
         }
+        assert!(known_ids().contains(&"universal"));
     }
 
     #[test]
-    fn g614_pack_covers_g634_real_dmi() {
-        let sku = by_id("g614").unwrap();
-        assert_eq!(
-            verdict_for(sku, Some("ROG Strix SCAR 16 G634JY_G634JY")),
-            DmiVerdict::Match
-        );
+    fn dmi_auto_selects_the_matching_config() {
+        let cases = [
+            ("ROG Strix SCAR 16 G634JY_G634JY", "g614"),
+            ("ROG Strix SCAR 16 G614JZ_G614JZ", "g614"),
+            ("ROG Strix SCAR 16 G615LR_G615LR", "g615"),
+            ("ROG Strix SCAR 16 G635LX_G635LX", "g615"),
+            ("ROG Strix SCAR 15 G533ZW_G533ZW", "g533"),
+            ("ROG Strix G15 G513RM_G513RM", "g533"),
+            ("ROG Zephyrus Duo 16 GX650PZ_GX650PZ", "gx550"),
+            ("ROG Zephyrus Duo 15 GX550LXS_GX550LXS", "gx550"),
+            ("ROG Zephyrus Duo 15 SE GX551QS_GX551QS", "gx550"),
+            ("ASUS Zenbook Duo UX582LR_UX582LR", "ux582"),
+            ("ASUS Zenbook Duo UX482EG_UX482EG", "ux582"),
+        ];
+        for (product, want) in cases {
+            let r = resolve(&dmi(product), &no_hw(), None).unwrap();
+            assert_eq!(r.id(), want, "{product}");
+            assert_eq!(r.source, SkuSource::Dmi, "{product}");
+            assert!(r.allows_run(), "{product} 应放行");
+            assert!(r.is_detected(), "{product} 应算认出机型");
+            assert!(r.detail.is_some(), "{product} 应说明命中的代号");
+        }
     }
 
     #[test]
-    fn plus_18inch_is_not_numpad() {
-        let sku = by_id("g614").unwrap();
-        let v = verdict_for(sku, Some("ROG Strix SCAR 18 G834JY_G834JY"));
-        // 18 英寸是物理数字键：不是「装错包」，而是根本没有 NumberPad
-        assert!(
-            matches!(&v, DmiVerdict::NotNumberPad { model, .. } if model == "G834"),
-            "v={v:?}"
-        );
-        assert!(!v.allows_run());
-        // 通用包不校验机型，照旧放行（用户自选兜底）
-        assert!(verdict_for(
-            by_id("universal").unwrap(),
-            Some("ROG Strix SCAR 18 G834JY")
+    fn one_binary_serves_every_model() {
+        // 同一份二进制在两种机器上得到两套配置：这正是取消分包后要保证的行为
+        let a = resolve(&dmi("ROG Strix SCAR 16 G634JY_G634JY"), &no_hw(), None).unwrap();
+        let b = resolve(&dmi("ROG Strix SCAR 16 G615LR_G615LR"), &no_hw(), None).unwrap();
+        assert_eq!(a.id(), "g614");
+        assert_eq!(b.id(), "g615");
+        assert_ne!(a.sku.models, b.sku.models);
+    }
+
+    #[test]
+    fn model_id_found_in_board_or_family_field() {
+        // 产品名只有营销名，编号在主板名里
+        let r = resolve(
+            &ident(Some("ROG Strix SCAR 16"), Some("G614JY"), None),
+            &no_hw(),
+            None,
         )
-        .allows_run());
+        .unwrap();
+        assert_eq!(r.id(), "g614");
+        assert_eq!(r.source, SkuSource::Dmi);
+        // 编号只在产品家族里
+        let r = resolve(
+            &ident(Some("ROG Strix SCAR 16"), None, Some("G614JZ")),
+            &no_hw(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.id(), "g614");
+        // 只有营销名、没有编号：认不出就落通用配置，不拦
+        let r = resolve(
+            &ident(Some("ROG Strix SCAR 16"), None, None),
+            &no_hw(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.id(), "universal");
+        assert_eq!(r.source, SkuSource::Fallback);
+        assert!(r.allows_run());
+        assert!(!r.is_detected());
+    }
+
+    #[test]
+    fn hardware_module_is_the_second_judgement() {
+        // DMI 里没有机型编号，但触摸板模组对得上 → 按硬件选配置
+        let r = resolve(&dmi("ROG Strix SCAR 16"), &hw(&["ASUE1416:00"]), None).unwrap();
+        assert_eq!(r.id(), "g614");
+        assert_eq!(r.source, SkuSource::Hardware);
+        assert!(matches!(&r.verdict, DmiVerdict::MatchHardware(m) if m.starts_with("ASUE1416")));
+        assert!(r.allows_run());
+        // 模组不认识 → 通用配置
+        let r = resolve(
+            &dmi("ROG Strix SCAR 16"),
+            &hw(&["PNP0C50", "HID-SENSOR-2000"]),
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.source, SkuSource::Fallback);
+        assert!(r.allows_run());
+    }
+
+    #[test]
+    fn manual_selection_overrides_detection() {
+        // 手动指定优先于 DMI：读错硬件信息时这是唯一的逃生通道
+        let r = resolve(
+            &dmi("ROG Strix SCAR 16 G634JY_G634JY"),
+            &no_hw(),
+            Some("gx550"),
+        )
+        .unwrap();
+        assert_eq!(r.id(), "gx550");
+        assert_eq!(r.source, SkuSource::Manual);
+        assert!(r.allows_run());
+        assert_eq!(r.detail.as_deref(), Some("gx550"));
+        // 大小写与空白不敏感
+        let r = resolve(&no_identity(), &no_hw(), Some("  GX550 ")).unwrap();
+        assert_eq!(r.id(), "gx550");
+        // 手动指定 universal = 明确要通用配置
+        let r = resolve(&no_identity(), &no_hw(), Some("universal")).unwrap();
+        assert_eq!(r.id(), "universal");
+        assert_eq!(r.verdict, DmiVerdict::NotEnforced);
+        assert!(r.allows_run());
+        // 空字符串等同没指定
+        let r = resolve(&dmi("ROG Strix SCAR 16 G634JY"), &no_hw(), Some("   ")).unwrap();
+        assert_eq!(r.source, SkuSource::Dmi);
+    }
+
+    #[test]
+    fn manual_unknown_id_is_an_error() {
+        let err = resolve(&no_identity(), &no_hw(), Some("g999")).unwrap_err();
+        assert_eq!(err, UnknownSku("g999".to_string()));
+    }
+
+    fn no_identity() -> DmiIdentity {
+        DmiIdentity::default()
     }
 
     #[test]
     fn proart_p16_is_not_numpad() {
         // ProArt P16（H7606）触控板是 ASUS DialPad 智能旋钮，官方规格 support DialPad，
-        // 不是 NumberPad：任何机型包都不应该把它当适配对象，且要给出准确原因。
-        for sku_id in ["g615", "g614", "g533", "gx550", "ux582"] {
-            let v = verdict_for(
-                by_id(sku_id).unwrap(),
-                Some("ASUS ProArt P16 H7606WI_H7606WI"),
-            );
-            assert!(
-                matches!(&v, DmiVerdict::NotNumberPad { model, reason }
-                    if model == "H7606" && reason.contains("DialPad")),
-                "{sku_id}: v={v:?}"
-            );
-            assert!(!v.allows_run(), "{sku_id} 不应放行 ProArt");
-        }
-        assert_eq!(
-            verdict_for(by_id("universal").unwrap(), Some("ASUS ProArt P16 H7606WI")),
-            DmiVerdict::NotEnforced
+        // 不是 NumberPad：自动识别不该把它挑成任何机型配置，且要给出准确原因。
+        let r = resolve(&dmi("ASUS ProArt P16 H7606WI_H7606WI"), &no_hw(), None).unwrap();
+        assert!(
+            matches!(&r.verdict, DmiVerdict::NotNumberPad { model, reason }
+            if model == "H7606" && reason.contains("DialPad"))
         );
+        assert!(!r.allows_run());
         // 型号只落在 board_name 上也能认出来
-        let identity = DmiIdentity {
-            sys_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
-            board_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
-            product_name: Some("ASUS ProArt P16".to_string()),
-            board_name: Some("H7606WI".to_string()),
-            product_family: None,
-        };
-        assert!(matches!(
-            verdict_for_identity(by_id("g615").unwrap(), &identity),
-            DmiVerdict::NotNumberPad { .. }
-        ));
-        // 真实的枪神/魔霸型号不能因为这条规则被误伤
-        for dmi in [
-            "ROG Strix SCAR 16 G615LR_G615LR",
-            "ROG Strix SCAR 16 G635LX_G635LX",
-            "ROG Strix SCAR 16 G634JY_G634JY",
-        ] {
-            let v = verdict_for(by_id("g615").unwrap(), Some(dmi));
-            assert!(
-                !matches!(v, DmiVerdict::NotNumberPad { .. }),
-                "{dmi}: v={v:?}"
-            );
-        }
+        let r = resolve(
+            &ident(Some("ASUS ProArt P16"), Some("H7606WI"), None),
+            &no_hw(),
+            None,
+        )
+        .unwrap();
+        assert!(matches!(r.verdict, DmiVerdict::NotNumberPad { .. }));
     }
 
     #[test]
-    fn g533_pack_covers_strix_g513() {
-        // 魔霸6 15 英寸（G513）与枪神6（G533）同代同平台，模组 ASUE1403 / ELAN1403 同族
-        let g533 = by_id("g533").unwrap();
-        for dmi in [
-            "ROG Strix G15 G513RM_G513RM",
-            "ROG Strix SCAR 15 G533ZW_G533ZW",
-        ] {
-            assert_eq!(verdict_for(g533, Some(dmi)), DmiVerdict::Match, "{dmi}");
-        }
-        // 同代 18 英寸 Plus 仍是物理数字键
-        assert!(matches!(
-            verdict_for(g533, Some("ROG Strix G18 G814JZ_G814JZ")),
-            DmiVerdict::NotNumberPad { .. }
-        ));
-    }
-
-    #[test]
-    fn g713_is_physical_numpad_not_numberpad() {
-        // 17 英寸 G17（G713）机身自带物理数字键，官方规格 NumberPad 一栏为 N/A，
-        // 触控板没有虚拟数字键盘。任何机型包都不应把它认成 NumberPad 机器，
-        // 尤其不能继承曾经并入 g533 的做法。
-        for dmi in [
+    fn physical_numpad_models_are_not_numberpad() {
+        // 18 英寸 Plus（G834 / G814）与 17 英寸 G17（G713）机身自带物理数字键，
+        // 触控板没有虚拟数字键盘，官方规格 NumberPad 一栏为 N/A。
+        for product in [
+            "ROG Strix SCAR 18 G834JY_G834JY",
+            "ROG Strix G18 G814JZ_G814JZ",
             "ROG Strix G17 G713RC_G713RC",
             "ROG Strix G17 G713RM_G713RM",
             "ROG Strix G17 G713QR_G713QR",
         ] {
-            for id in ["g533", "g614", "g615", "gx550", "ux582"] {
-                let v = verdict_for(by_id(id).unwrap(), Some(dmi));
-                assert!(
-                    matches!(v, DmiVerdict::NotNumberPad { .. }),
-                    "{dmi} 在 {id} 包下应判 NotNumberPad，实际 {v:?}"
-                );
-            }
+            let r = resolve(&dmi(product), &no_hw(), None).unwrap();
+            assert!(
+                matches!(r.verdict, DmiVerdict::NotNumberPad { .. }),
+                "{product}: {:?}",
+                r.verdict
+            );
+            assert!(!r.allows_run(), "{product} 不应放行");
         }
     }
 
     #[test]
-    fn missing_dmi_does_not_block() {
-        let sku = by_id("g615").unwrap();
-        assert_eq!(verdict_for(sku, None), DmiVerdict::Unknown);
-        assert_eq!(verdict_for(sku, Some("   ")), DmiVerdict::Unknown);
-        assert!(verdict_for(sku, None).allows_run());
+    fn real_gaming_models_are_not_caught_by_reject_rules() {
+        for product in [
+            "ROG Strix SCAR 16 G615LR_G615LR",
+            "ROG Strix SCAR 16 G635LX_G635LX",
+            "ROG Strix SCAR 16 G634JY_G634JY",
+        ] {
+            let r = resolve(&dmi(product), &no_hw(), None).unwrap();
+            assert!(
+                !matches!(r.verdict, DmiVerdict::NotNumberPad { .. }),
+                "{product}: {:?}",
+                r.verdict
+            );
+            assert_ne!(r.id(), "universal", "{product} 应认出具体配置");
+        }
     }
 
     #[test]
-    fn universal_pack_never_blocks() {
-        let sku = by_id("universal").unwrap();
-        assert_eq!(
-            verdict_for(sku, Some("Anything G999ZZ")),
-            DmiVerdict::NotEnforced
+    fn non_asus_vendor_is_reported_as_non_asus() {
+        let id = DmiIdentity {
+            sys_vendor: Some("LENOVO".to_string()),
+            board_vendor: Some("LENOVO".to_string()),
+            product_name: Some("Legion 7 16IRX8H".to_string()),
+            board_name: Some("LNVNB161216".to_string()),
+            product_family: None,
+        };
+        let r = resolve(&id, &no_hw(), None).unwrap();
+        assert_eq!(r.id(), "universal");
+        assert!(matches!(&r.verdict, DmiVerdict::NonAsus(v) if v.contains("LENOVO")));
+        assert!(!r.allows_run());
+    }
+
+    #[test]
+    fn unreadable_dmi_falls_back_instead_of_blocking() {
+        // 读不到 DMI 不等于装错机器：落通用配置照常跑，运行期还有布局闸门兜底
+        let r = resolve(&no_identity(), &no_hw(), None).unwrap();
+        assert_eq!(r.id(), "universal");
+        assert_eq!(r.source, SkuSource::Fallback);
+        assert_eq!(r.verdict, DmiVerdict::Unknown);
+        assert!(r.allows_run());
+        // 型号不在机型表里（新机型）同样不拦
+        let r = resolve(&dmi("ROG Strix SCAR 16 G999ZZ"), &no_hw(), None).unwrap();
+        assert_eq!(r.id(), "universal");
+        assert!(r.allows_run());
+    }
+
+    #[test]
+    fn placeholders_count_as_unreadable() {
+        // BIOS 没填真值：占位串不能被当成「别的机型」
+        let id = ident(
+            Some("System Product Name"),
+            Some("To Be Filled By O.E.M."),
+            Some("Default string"),
         );
-        assert!(verdict_for(sku, Some("Anything G999ZZ")).allows_run());
+        assert!(id.haystacks().is_empty());
+        let r = resolve(&id, &no_hw(), None).unwrap();
+        assert_eq!(r.verdict, DmiVerdict::Unknown);
+        assert!(r.allows_run());
+        assert!(DmiIdentity::default().haystacks().is_empty());
     }
 
     #[test]
-    fn dmi_file_read_and_mismatch_path() {
+    fn dmi_file_read_and_auto_selection() {
         let root = std::env::temp_dir().join("asus-numpad-dmi-selftest");
         let dir = root.join("class/dmi/id");
         std::fs::create_dir_all(&dir).unwrap();
@@ -972,310 +1102,16 @@ mod tests {
             dmi_product_name_at(&root).as_deref(),
             Some("ROG Strix SCAR 16 G634JY_G634JY")
         );
-        // 同一台机器，合并后的 g614 包放行，g615 包拒绝
-        let dmi = dmi_product_name_at(&root);
-        assert_eq!(
-            verdict_for(by_id("g614").unwrap(), dmi.as_deref()),
-            DmiVerdict::Match
-        );
-        assert!(!verdict_for(by_id("g615").unwrap(), dmi.as_deref()).allows_run());
+        // 只有 product_name 时也能自动选中对应配置
+        let r = resolve(&dmi("ROG Strix SCAR 16 G634JY_G634JY"), &no_hw(), None).unwrap();
+        assert_eq!(r.id(), "g614");
 
         // 空文件视为未知，不拦
         std::fs::write(dir.join("product_name"), "  \n").unwrap();
         assert_eq!(dmi_product_name_at(&root), None);
-        assert!(verdict_for(by_id("g614").unwrap(), None).allows_run());
+        let r = resolve(&no_identity(), &no_hw(), None).unwrap();
+        assert!(r.allows_run());
 
         let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn dual_screen_and_proart_packs_match_their_dmi() {
-        // 冰刃双屏 15 英寸（GX550 / GX551）
-        let gx550 = by_id("gx550").unwrap();
-        for dmi in [
-            "ROG Zephyrus Duo 15 GX550LXS_GX550LXS",
-            "ROG Zephyrus Duo 15 SE GX551QS_GX551QS",
-        ] {
-            assert_eq!(verdict_for(gx550, Some(dmi)), DmiVerdict::Match, "{dmi}");
-        }
-        // 冰刃 6 / 7 双屏 16 英寸（GX650）已并入同一包
-        assert_eq!(
-            verdict_for(gx550, Some("ROG Zephyrus Duo 16 GX650PZ_GX650PZ")),
-            DmiVerdict::Match
-        );
-        // 灵耀双屏（UX582 / UX482）
-        let ux582 = by_id("ux582").unwrap();
-        for dmi in [
-            "ASUS Zenbook Duo UX582LR_UX582LR",
-            "ASUS Zenbook Duo UX482EG_UX482EG",
-        ] {
-            assert_eq!(verdict_for(ux582, Some(dmi)), DmiVerdict::Match, "{dmi}");
-        }
-        // ProArt P16（H7606）不是 NumberPad：触控板是 DialPad 智能旋钮，已从机型号召剔除
-        let g615 = by_id("g615").unwrap();
-        for dmi in [
-            "ROG Strix G16 G615LR_G615LR",
-            "ROG Strix SCAR 16 G635LX_G635LX",
-        ] {
-            assert_eq!(verdict_for(g615, Some(dmi)), DmiVerdict::Match, "{dmi}");
-        }
-        assert!(matches!(
-            verdict_for(g615, Some("ASUS ProArt P16 H7606WI_H7606WI")),
-            DmiVerdict::NotNumberPad { .. }
-        ));
-        // 跨包互不误放：冰刃双屏包不认枪神，枪神包不认冰刃
-        assert!(!verdict_for(gx550, Some("ROG Strix SCAR 16 G634JY_G634JY")).allows_run());
-        assert!(!verdict_for(
-            by_id("g614").unwrap(),
-            Some("ROG Zephyrus Duo 16 GX650PZ_GX650PZ")
-        )
-        .allows_run());
-    }
-
-    fn ident(product: Option<&str>, board: Option<&str>, family: Option<&str>) -> DmiIdentity {
-        DmiIdentity {
-            sys_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
-            board_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
-            product_name: product.map(str::to_string),
-            board_name: board.map(str::to_string),
-            product_family: family.map(str::to_string),
-        }
-    }
-
-    #[test]
-    fn placeholders_count_as_unreadable() {
-        // BIOS 没填真值：占位串不能被当成「别的机型」拦下
-        let id = ident(
-            Some("System Product Name"),
-            Some("To Be Filled By O.E.M."),
-            Some("Default string"),
-        );
-        assert!(id.haystacks().is_empty());
-        assert_eq!(
-            verdict_for_identity(by_id("g614").unwrap(), &id),
-            DmiVerdict::Unknown
-        );
-        assert!(DmiIdentity::default().haystacks().is_empty());
-    }
-
-    #[test]
-    fn model_id_found_in_board_or_family_field() {
-        let g614 = by_id("g614").unwrap();
-        // 产品名只有营销名，编号在主板名里
-        let id = ident(Some("ROG Strix SCAR 16"), Some("G614JY"), None);
-        assert_eq!(
-            verdict_for_identity(g614, &id),
-            DmiVerdict::Match,
-            "{:?}",
-            id.label()
-        );
-        // 编号只在产品家族里
-        let id = ident(Some("ROG Strix SCAR 16"), None, Some("G614JZ"));
-        assert_eq!(
-            verdict_for_identity(g614, &id),
-            DmiVerdict::Match,
-            "{:?}",
-            id.label()
-        );
-        // 只有营销名、没有编号 → 认不出，按「别的机型」拦下（有值但认不出就不该放行）
-        let id = ident(Some("ROG Strix SCAR 16"), None, None);
-        assert!(matches!(
-            verdict_for_identity(g614, &id),
-            DmiVerdict::Mismatch(_)
-        ));
-    }
-
-    #[test]
-    fn non_asus_vendor_is_reported_as_non_asus() {
-        let id = DmiIdentity {
-            sys_vendor: Some("LENOVO".to_string()),
-            board_vendor: Some("LENOVO".to_string()),
-            product_name: Some("21KVCTO1WW".to_string()),
-            ..Default::default()
-        };
-        match verdict_for_identity(by_id("g614").unwrap(), &id) {
-            DmiVerdict::NonAsus(vendor) => assert!(vendor.contains("LENOVO"), "{vendor}"),
-            other => panic!("expected NonAsus, got {other:?}"),
-        }
-        assert!(!verdict_for_identity(by_id("g614").unwrap(), &id).allows_run());
-        // 厂商字段读不全时不硬判「不是 ASUS」
-        let id = DmiIdentity {
-            sys_vendor: None,
-            board_vendor: None,
-            product_name: Some("21KVCTO1WW".to_string()),
-            ..Default::default()
-        };
-        assert!(matches!(
-            verdict_for_identity(by_id("g614").unwrap(), &id),
-            DmiVerdict::Mismatch(_)
-        ));
-    }
-
-    #[test]
-    fn suggest_picks_the_neighbouring_generation() {
-        // 本机是 G615，装的是 g614 包 → 建议 g615
-        let id = ident(Some("ROG Strix G16 G615LR_G615LR"), None, None);
-        let hit = suggest_for(&id).expect("should suggest a package");
-        assert_eq!(hit.id, "g615", "suggested {}", hit.id);
-        // 读不到 DMI 时没有建议
-        assert!(suggest_for(&DmiIdentity::default()).is_none());
-    }
-
-    #[test]
-    fn normalize_module_strips_instance_suffix() {
-        assert_eq!(
-            normalize_module("ASUE1416:00\n").as_deref(),
-            Some("ASUE1416")
-        );
-        assert_eq!(
-            normalize_module(" ASUE1416:00 04F3:3275 Touchpad ").as_deref(),
-            Some("ASUE1416")
-        );
-        assert_eq!(
-            normalize_module("ROG STRIX SCAR 16"),
-            None,
-            "营销名不是模组"
-        );
-        assert_eq!(normalize_module("PNP0C50"), None, "ACPI 码不是模组");
-        assert_eq!(normalize_module(""), None);
-    }
-
-    #[test]
-    fn hardware_rescues_placeholder_dmi() {
-        // DMI 全是占位串（白牌 / 刷过 BIOS 的机器），过去只能放行到 Unknown；
-        // 现在触摸板模组能直接把机型认出来。
-        let identity = DmiIdentity {
-            sys_vendor: Some("System manufacturer".to_string()),
-            product_name: Some("System Product Name".to_string()),
-            ..Default::default()
-        };
-        let hw = HardwareProbe {
-            modules: vec!["ASUE1416".to_string()],
-        };
-        assert!(identity.haystacks().is_empty(), "占位串不算有效型号");
-        assert_eq!(
-            verdict_full(by_id("g614").unwrap(), &identity, &hw),
-            DmiVerdict::MatchHardware("ASUE1416".to_string())
-        );
-        // 换了机型包就不该被同一块触摸板救活
-        assert!(!verdict_full(by_id("g615").unwrap(), &identity, &hw).allows_run());
-    }
-
-    #[test]
-    fn hardware_does_not_override_explicit_dmi_mismatch() {
-        // DMI 明确是 G615，硬件也没挂错：装 g614 包仍然拒绝
-        let identity = DmiIdentity {
-            sys_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
-            product_name: Some("ROG Strix SCAR 16 G615JY_G615JY".to_string()),
-            ..Default::default()
-        };
-        let hw = HardwareProbe {
-            modules: vec!["ASUE1416".to_string()],
-        };
-        let v = verdict_full(by_id("g614").unwrap(), &identity, &hw);
-        assert!(!v.allows_run(), "{v:?}");
-        let v = verdict_full(by_id("g615").unwrap(), &identity, &hw);
-        assert_eq!(v, DmiVerdict::Match);
-    }
-
-    #[test]
-    fn hardware_probe_reads_i2c_and_input_tables() {
-        let root = std::env::temp_dir().join("asus-numpad-hw-selftest");
-        let i2c = root.join("bus/i2c/devices/i2c-ASUE1416:00");
-        std::fs::create_dir_all(&i2c).unwrap();
-        std::fs::write(i2c.join("name"), "ASUE1416:00\n").unwrap();
-        let hid = root.join("bus/hid/devices/0003:04F3:3275.0001");
-        std::fs::create_dir_all(&hid).unwrap();
-        std::fs::write(hid.join("HID_NAME"), "ASUE1416:00 04F3:3275 Touchpad\n").unwrap();
-        let input = root.join("proc-input-devices");
-        std::fs::write(
-            &input,
-            "I: Bus=0018\nN: Name=\"ASUE1416:00 04F3:3275 Touchpad\"\n",
-        )
-        .unwrap();
-
-        let hw = probe_hardware_at(&root, &input);
-        assert!(hw.matches(by_id("g614").unwrap()), "{:?}", hw);
-        assert!(!hw.matches(by_id("g615").unwrap()));
-        assert_eq!(hw.label(), "ASUE1416");
-
-        // 目录不存在时不 panic，返回空探测
-        let empty = probe_hardware_at(&root.join("nope"), &root.join("nope-input"));
-        assert!(empty.is_empty());
-        assert_eq!(empty.label(), "unknown");
-    }
-
-    #[test]
-    fn unknown_build_sku_falls_back_to_universal() {
-        let sku = build_sku();
-        assert!(by_id(sku.id).is_some());
-    }
-
-    #[test]
-    fn model_tokens_drop_marketing_words() {
-        assert_eq!(
-            model_tokens("ROG Strix SCAR 16 G614JY_G614JY"),
-            vec!["G614JY".to_string()]
-        );
-        assert_eq!(model_tokens("ROG STRIX SCAR 16"), Vec::<String>::new());
-        assert_eq!(
-            model_tokens("ASUS ProArt P16 H7606WI"),
-            vec!["H7606WI".to_string()]
-        );
-    }
-
-    #[test]
-    fn token_prefix_does_not_swallow_longer_numbers() {
-        // G614 包不能把 G6140 之类更长的编号当成自家机型
-        let id = ident(Some("Generic Chassis G6140XY"), None, None);
-        assert!(matches!(
-            verdict_for_identity(by_id("g614").unwrap(), &id),
-            DmiVerdict::Mismatch(_)
-        ));
-        // 但同代后缀（G614JY / G614JVR）要能认
-        for name in ["G614JY", "G614JVR", "G614JV_G614JV"] {
-            let id = ident(Some(&format!("ROG Strix SCAR 16 {name}")), None, None);
-            assert_eq!(
-                verdict_for_identity(by_id("g614").unwrap(), &id),
-                DmiVerdict::Match,
-                "{name} 应归 g614"
-            );
-        }
-    }
-
-    #[test]
-    fn marketing_only_pool_falls_back_to_substring() {
-        // 抽不出型号代号的字段沿用整体子串匹配，不能因为令牌化就判死
-        let id = ident(Some("ASUS G615"), None, None);
-        assert_eq!(
-            verdict_for_identity(by_id("g615").unwrap(), &id),
-            DmiVerdict::Match
-        );
-    }
-
-    #[test]
-    fn board_name_rescues_marketing_product_name() {
-        // 产品名只有营销名时，主板名 / 家族里的编号要能兜住
-        let id = ident(Some("ROG Strix SCAR 16"), Some("G614JY"), None);
-        assert_eq!(
-            verdict_for_identity(by_id("g614").unwrap(), &id),
-            DmiVerdict::Match
-        );
-    }
-
-    #[test]
-    fn suggest_all_lists_strongest_first() {
-        let id = ident(Some("ROG Strix G16 G615LR_G615LR"), None, None);
-        let all = suggest_all_for(&id);
-        assert!(!all.is_empty(), "应有候选");
-        assert_eq!(all[0].id, "g615", "最强的候选应排第一");
-        // 候选去重
-        let mut ids: Vec<&str> = all.iter().map(|s| s.id).collect();
-        let n = ids.len();
-        ids.sort_unstable();
-        ids.dedup();
-        assert_eq!(ids.len(), n);
-        // 读不到 DMI 时无候选
-        assert!(suggest_all_for(&DmiIdentity::default()).is_empty());
     }
 }

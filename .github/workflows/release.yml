@@ -54,8 +54,7 @@ jobs:
             packaging/build.sh packaging/lib/common.sh \
             packaging/deb/make-deb.sh packaging/rpm/make-rpm.sh \
             packaging/arch/make-arch.sh packaging/arch/PKGBUILD \
-            packaging/arch/asus-numpad.install packaging/build-skus.sh \
-            packaging/install-sku.sh tools/repo-gen.sh \
+            packaging/arch/asus-numpad.install tools/repo-gen.sh \
             packaging/tarball/make-tarball.sh packaging/alpine/make-alpine.sh
       - name: shellcheck（POSIX sh 部分）
         run: |

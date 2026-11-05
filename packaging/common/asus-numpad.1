@@ -21,6 +21,10 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .B asus-numpad
 .RI [ 选项 ] " " lang
 .RI [ zh-CN|zh-TW|en|auto ]
+.br
+.B asus-numpad
+.RI [ 选项 ] " " sku
+.RI [ list|auto|机型 id ]
 .SH 描述
 在 ASUS 笔记本的触摸板上模拟数字小键盘。参数取自官方
 .I AsusNUMPADFilter.inf
@@ -68,6 +72,20 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .TP
 .B lang auto
 删掉语言设置，改为跟随系统 locale（\fILC_ALL\fP > \fILC_MESSAGES\fP > \fILANG\fP > \fILANGUAGE\fP）。
+.TP
+.B sku
+打印本机识别到的机型配置、判定依据（DMI 身份与触摸板模组）。机型在运行时自动识别，
+正常情况不需要手动干预。
+.TP
+.B sku list
+列出全部可选的机型 id 与对应机型。
+.TP
+.BI sku " 机型 id"
+手动指定机型，写进配置文件长期生效，优先于自动识别。用于虚拟机、白牌机箱、BIOS 占位串
+等读不到正确硬件信息的机器。
+.TP
+.B sku auto
+删掉手动指定的机型，恢复自动识别。
 .SH 选项
 .TP
 .BI \-\-config " 文件"
@@ -76,6 +94,9 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .TP
 .BI \-\-lang " zh-CN|zh-TW|en|auto"
 本次运行的界面语言，临时覆盖配置文件，不写盘。
+.TP
+.BI \-\-sku " 机型 id"
+本次运行强制使用该机型配置，临时覆盖自动识别与配置文件，不写盘。
 .TP
 .BI \-\-device " /dev/input/eventX"
 指定触摸板事件设备，跳过自动探测。

@@ -29,6 +29,8 @@ struct Opts {
     i2c_transfer: Option<String>,
     key_mode: Option<String>,
     layout: Option<String>,
+    /// 手动指定机型配置（`--sku`），只对本次生效、不写配置文件
+    sku: Option<String>,
     allow_unverified: bool,
     allow_sku_mismatch: bool,
     numlock: Option<String>,
@@ -67,6 +69,10 @@ enum Cmd {
     Layout {
         name: Option<String>,
         ids: bool,
+    },
+    /// 机型配置：查看识别结果 / 列出可选机型 / 手动指定。
+    Sku {
+        id: Option<String>,
     },
 }
 
@@ -283,6 +289,13 @@ fn build_cli() -> Command {
                 .action(ArgAction::SetTrue)
                 .help(t("cli.allow_sku_mismatch.help")),
         )
+        .arg(
+            Arg::new("sku")
+                .long("sku")
+                .global(true)
+                .value_name("ID")
+                .help(t("cli.sku.help")),
+        )
         .subcommand(
             Command::new("layout")
                 .about(t("cli.cmd.layout"))
@@ -298,6 +311,12 @@ fn build_cli() -> Command {
                         .action(ArgAction::SetTrue)
                         .help(t("cli.cmd.layout.ids")),
                 ),
+        )
+        .subcommand(
+            Command::new("sku")
+                .about(t("cli.cmd.sku"))
+                .long_about(t("cli.cmd.sku.long"))
+                .arg(Arg::new("id").value_name("ID").help(t("cli.cmd.sku.id"))),
         )
         .subcommand(
             Command::new("lang")
@@ -323,6 +342,7 @@ fn opts_from(matches: &ArgMatches) -> Opts {
         i2c_transfer: matches.get_one::<String>("i2c_transfer").cloned(),
         key_mode: matches.get_one::<String>("key_mode").cloned(),
         layout: matches.get_one::<String>("layout").cloned(),
+        sku: matches.get_one::<String>("sku").cloned(),
         allow_unverified: matches.get_flag("allow_unverified"),
         allow_sku_mismatch: matches.get_flag("allow_sku_mismatch"),
         numlock: matches.get_one::<String>("numlock").cloned(),
@@ -355,6 +375,9 @@ fn opts_from(matches: &ArgMatches) -> Opts {
         Some(("layout", sub)) => Cmd::Layout {
             name: sub.get_one::<String>("name").cloned(),
             ids: sub.get_flag("ids"),
+        },
+        Some(("sku", sub)) => Cmd::Sku {
+            id: sub.get_one::<String>("id").cloned(),
         },
         _ => Cmd::Run,
     };
@@ -400,6 +423,11 @@ fn build_config(cli: &Opts) -> (Config, Vec<String>, std::path::PathBuf) {
     }
     if let Some(v) = &cli.layout {
         cfg.layout_name = v.clone();
+    }
+    // `--sku` 只覆盖本次运行；要长期生效用 `asus-numpad sku <id>` 写进配置。
+    // 取值非法时由后面的 sanitize 丢弃并提示，不让手误把驱动卡在启动阶段。
+    if let Some(v) = &cli.sku {
+        cfg.sku = Some(v.clone());
     }
     if cli.allow_unverified {
         cfg.allow_unverified_layout = true;
@@ -512,7 +540,7 @@ fn fallback_geometry(cfg: &Config) -> Geometry {
 fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     println!("{}", banner());
     println!();
-    println!("{}", sku_block());
+    println!("{}", sku_block(cfg));
     println!();
     if !notes.is_empty() {
         println!("{}", i18n::t("check.notes_title"));
@@ -1616,21 +1644,37 @@ fn cmd_dump(cfg: &Config) -> Result<i32> {
     }
 }
 
-/// 机型闸门：本包不是给这台机器的就停下，别等用户发现按键无反应。
+/// 机型闸门：这台机器根本跑不起来的，就在启动前说清楚。
 ///
-/// 返回 `Some(退出码)` 表示已拦下，`None` 表示放行。
-fn sku_gate(allow_mismatch: bool) -> Option<i32> {
-    let verdict = sku::current_verdict();
-    if allow_mismatch || verdict.allows_run() {
+/// 自动识别上线后「装错包」不再是问题，剩下的拦截只有两种：厂商明确不是 ASUS，
+/// 以及 DMI 命中「结构上没有 NumberPad」的机型（ProArt 的 DialPad 旋钮、
+/// 18 英寸的物理数字键）。返回 `Some(退出码)` 表示已拦下，`None` 表示放行。
+fn sku_gate(cfg: &Config, allow_mismatch: bool) -> Option<i32> {
+    let identity = sku::dmi_identity();
+    let hw = sku::probe_hardware();
+    let resolved = match sku::resolve(&identity, &hw, cfg.sku.as_deref()) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("{}", banner());
+            println!(
+                "{}",
+                i18n::tf(
+                    "sku.bad_id",
+                    &[("id", &e.0), ("ids", &sku::known_ids().join(", "))]
+                )
+            );
+            return Some(2);
+        }
+    };
+    if allow_mismatch || resolved.allows_run() {
         return None;
     }
-    let pack = sku::build_sku();
     println!("{}", banner());
-    println!("{}", sku_block());
+    println!("{}", sku_block(cfg));
     println!();
-    // 「确定没有 NumberPad」的机器（ProArt 的 DialPad 旋钮、18 英寸物理数字键）单独给
-    // 退出码与文案：它既不是装错包，也没有「该装的包」，笼统报机型不匹配会把用户带偏。
-    if let sku::DmiVerdict::NotNumberPad { model, reason } = &verdict {
+    // 「确定没有 NumberPad」的机器单独给退出码与文案：它既不是认错机型，
+    // 也没有「该改的配置」，笼统报机型不符会把用户带偏。
+    if let sku::DmiVerdict::NotNumberPad { model, reason } = &resolved.verdict {
         println!(
             "{}",
             i18n::tf(
@@ -1640,28 +1684,39 @@ fn sku_gate(allow_mismatch: bool) -> Option<i32> {
         );
         return Some(4);
     }
-    println!(
-        "{}",
-        i18n::tf(
-            "err.sku_mismatch",
-            &[("sku", pack.display), ("pkg", sku::build_package_name()),]
-        )
-    );
-    Some(3)
+    if let sku::DmiVerdict::NonAsus(vendor) = &resolved.verdict {
+        println!("{}", i18n::tf("err.not_asus", &[("vendor", vendor)]));
+        return Some(3);
+    }
+    None
 }
 
-/// 输出本安装包的机型与本机 DMI 的比对结果。
-fn sku_block() -> String {
-    let pack = sku::build_sku();
+/// 输出「本机用哪套机型配置 + 凭什么判定」。
+fn sku_block(cfg: &Config) -> String {
     let identity = sku::dmi_identity();
     let hw = sku::probe_hardware();
-    let verdict = sku::verdict_full(pack, &identity, &hw);
+    let resolved = match sku::resolve(&identity, &hw, cfg.sku.as_deref()) {
+        Ok(r) => r,
+        Err(e) => {
+            return i18n::tf(
+                "sku.bad_id",
+                &[("id", &e.0), ("ids", &sku::known_ids().join(", "))],
+            )
+        }
+    };
     let mut out = i18n::tf(
-        "sku.pack",
-        &[("sku", pack.display), ("pkg", sku::build_package_name())],
+        "sku.model",
+        &[
+            ("sku", resolved.sku.display),
+            ("source", &i18n::t(resolved.source.i18n_key())),
+        ],
     );
     out.push('\n');
-    out.push_str(&i18n::tf("sku.note", &[("note", pack.note)]));
+    if let Some(detail) = &resolved.detail {
+        out.push_str(&i18n::tf("sku.detail", &[("detail", detail)]));
+        out.push('\n');
+    }
+    out.push_str(&i18n::tf("sku.note", &[("note", resolved.sku.note)]));
     out.push('\n');
     if identity.haystacks().is_empty() {
         out.push_str(&i18n::t("sku.dmi_unknown"));
@@ -1673,7 +1728,7 @@ fn sku_block() -> String {
         out.push_str(&i18n::tf("sku.hw", &[("hw", &hw.label())]));
         out.push('\n');
     }
-    let verdict_text = match &verdict {
+    let verdict_text = match &resolved.verdict {
         sku::DmiVerdict::Match => i18n::t("sku.verdict.match"),
         sku::DmiVerdict::MatchHardware(m) => i18n::tf("sku.verdict.match_hw", &[("module", m)]),
         sku::DmiVerdict::Mismatch(d) => i18n::tf("sku.verdict.mismatch", &[("dmi", d)]),
@@ -1686,63 +1741,72 @@ fn sku_block() -> String {
     };
     out.push_str(&i18n::tf("sku.verdict", &[("verdict", &verdict_text)]));
     // 「这台没有 NumberPad」时把原因讲清楚，并明说不用装哪个包——用户最容易在这里白折腾
-    if let sku::DmiVerdict::NotNumberPad { reason, .. } = &verdict {
+    if let sku::DmiVerdict::NotNumberPad { reason, .. } = &resolved.verdict {
         out.push('\n');
         out.push_str(&i18n::tf("sku.not_numpad_reason", &[("reason", *reason)]));
     }
-    // 装错包时直接给出该装的包，省掉用户自己翻机型表
-    if matches!(
-        verdict,
-        sku::DmiVerdict::Mismatch(_) | sku::DmiVerdict::NonAsus(_)
-    ) {
-        // 同一代机型常常只差一位，候选全列出来让用户按自己机器的完整型号挑
-        let cands: Vec<&sku::Sku> = sku::suggest_all_for(&identity)
-            .into_iter()
-            .filter(|s| s.id != pack.id)
-            .take(3)
-            .collect();
-        if !cands.is_empty() {
-            let names = cands
-                .iter()
-                .map(|s| s.display)
-                .collect::<Vec<_>>()
-                .join(" / ");
-            let pkgs = cands
-                .iter()
-                .map(|s| format!("asus-numpad-{}", s.id))
-                .collect::<Vec<_>>()
-                .join(" / ");
-            out.push('\n');
-            out.push_str(&i18n::tf("sku.suggest", &[("sku", &names), ("pkg", &pkgs)]));
-        } else {
-            // 候选为空说明这台机器的代号在机型表里根本没有，
-            // 别让用户以为是自己装错，得明确告知「表里没有你这台」
-            out.push('\n');
-            out.push_str(&i18n::t("sku.no_candidate"));
-        }
-    }
-    // 兼容包不知道自己是给哪台机器的：既然 DMI 认得出，顺手告诉用户还能装更精确的包。
-    // 精确包的价值是默认布局与机型备注直接对口，不必靠运行期探测兜底。
-    if matches!(verdict, sku::DmiVerdict::NotEnforced) {
-        if let Some(s) = sku::suggest_all_for(&identity)
-            .into_iter()
-            .find(|s| !s.models.is_empty())
-        {
-            out.push('\n');
-            out.push_str(&i18n::tf(
-                "sku.tip_precise",
-                &[
-                    ("sku", s.display),
-                    ("pkg", &format!("asus-numpad-{}", s.id)),
-                ],
-            ));
-        }
+    // 没认出机型时补一句手动通道：读不到 DMI 的机器（虚拟机、白牌机箱、占位串）
+    // 只能靠人指定，这是本功能存在的意义。
+    if !resolved.is_detected() && resolved.allows_run() {
+        out.push('\n');
+        out.push_str(&i18n::tf(
+            "sku.manual_hint",
+            &[("ids", &sku::known_ids().join(", "))],
+        ));
     }
     out
 }
 
+/// `sku` 子命令：查看自动识别结果 / 列出可选机型 / 手动指定或恢复自动识别。
+fn cmd_sku(cfg: &Config, cfg_path: &Path, arg: Option<&str>) -> Result<i32> {
+    let ids = sku::known_ids().join(", ");
+    match arg.map(str::trim).filter(|a| !a.is_empty()) {
+        None => {
+            println!("{}", sku_block(cfg));
+            Ok(0)
+        }
+        Some(a) if a.eq_ignore_ascii_case("list") => {
+            println!("{}", i18n::tf("sku.list", &[("ids", &ids)]));
+            for entry in sku::SKUS {
+                println!("  {:<10} {}", entry.id, entry.display);
+            }
+            Ok(0)
+        }
+        Some(a) if a.eq_ignore_ascii_case("auto") => {
+            let target = Config::writable_path(cfg_path);
+            persist_config_keys(cfg_path, &[("sku", serde_json::Value::Null)])?;
+            println!(
+                "{}",
+                i18n::tf("sku.clear", &[("path", &target.display().to_string())])
+            );
+            Ok(0)
+        }
+        Some(a) => match sku::by_id(a) {
+            Some(entry) => {
+                let target = Config::writable_path(cfg_path);
+                persist_config_keys(cfg_path, &[("sku", serde_json::json!(entry.id))])?;
+                println!(
+                    "{}",
+                    i18n::tf(
+                        "sku.set",
+                        &[
+                            ("sku", entry.display),
+                            ("path", &target.display().to_string()),
+                        ]
+                    )
+                );
+                Ok(0)
+            }
+            None => {
+                eprintln!("{}", i18n::tf("sku.bad_id", &[("id", a), ("ids", &ids)]));
+                Ok(2)
+            }
+        },
+    }
+}
+
 fn cmd_run(cfg: Config, verbose: bool, allow_sku_mismatch: bool) -> Result<i32> {
-    if let Some(code) = sku_gate(allow_sku_mismatch) {
+    if let Some(code) = sku_gate(&cfg, allow_sku_mismatch) {
         return Ok(code);
     }
     println!("{}", banner());
@@ -1806,6 +1870,7 @@ fn main() -> Result<()> {
         Cmd::Led { value } => cmd_led(&cfg, value.as_deref())?,
         Cmd::Lang { code } => cmd_lang(&cfg_path, code.as_deref())?,
         Cmd::Layout { name, ids } => cmd_layout(&cfg, &cfg_path, name.as_deref(), ids)?,
+        Cmd::Sku { id } => cmd_sku(&cfg, &cfg_path, id.as_deref())?,
         Cmd::Run => cmd_run(cfg, opts.verbose, allow_sku_mismatch)?,
     };
     if code != 0 {

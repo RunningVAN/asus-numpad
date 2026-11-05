@@ -1,26 +1,19 @@
-# 机型分包 spec：默认出「全机型兼容包」，加 --define 'sku g634' 就出该机型专属包。
+# 单一包 spec：一个二进制覆盖全部机型，机型配置在运行期自动识别。
 #   rpmbuild -bb asus-numpad.spec
-#   rpmbuild -bb --define 'sku g634' asus-numpad.spec
 # 实际出包走的是 tools/rpmgen/build_rpm.py（Mac/Linux 都能跑，不需要 rpmbuild），
 # 这份 spec 保持与之等价，供发行版官方构建使用。
-%global all_skus g533 g614 g615 g634 g635 gx550 gx650 ux582
-%{!?sku:%global sku universal}
 
 %{!?version:%global version @VERSION@}
 
-%if "%{sku}" == "universal"
 Name:           asus-numpad
 Summary:        ASUS 触摸板数字小键盘（NumberPad）用户态驱动
-%else
-Name:           asus-numpad-%{sku}
-Summary:        ASUS 触摸板数字小键盘（NumberPad）用户态驱动 — %{sku} 机型包
-# 机型包互斥：一台机器只装一个机型包，装错时 dnf 直接报冲突而不是静默覆盖
-%for s %all_skus
-%if "%{s}" != "%{sku}"
-Conflicts:      asus-numpad-%{s}
-%endif
+# 旧版按机型分包（asus-numpad-g614 等）已被单一包取代：升级时由本包接管，
+# 装过任意机型包的机器 dnf upgrade 会自动换过来，不会因为共用 /usr/bin/asus-numpad 报文件冲突。
+%global old_skus g533 g614 g615 g634 g635 gx550 gx650 ux582 universal
+%for s %old_skus
+Provides:       asus-numpad-%{s} = %{version}-%{release}
+Obsoletes:      asus-numpad-%{s} < %{version}-%{release}
 %endfor
-%endif
 
 Version:        %{version}
 Release:        @RELEASE@%{?dist}
@@ -35,7 +28,12 @@ BuildRequires:  systemd-rpm-macros
 ASUS 触摸板数字小键盘（NumberPad）用户态驱动。参数取自官方 AsusNUMPADFilter.inf
 的 AlgoParameters 原值，evdev/uinput 实现，不替换内核模块、不改 ACPI 表。
 
-本包机型：%{sku}。启动比对 DMI，对不上拒绝启动（退出码 3）；强制运行加 --allow-sku-mismatch。
+机型配置在运行期自动识别：读 DMI 型号与触摸板模组挑对应的键表，不需要按机型选包。
+硬件信息读不出来时可手动指定（写进配置长期生效）：
+
+    asus-numpad sku            # 看本机识别到哪套配置、凭什么
+    asus-numpad sku list       # 列出可选机型
+    asus-numpad sku g614       # 手动指定，asus-numpad sku auto 恢复自动识别
 
 %prep
 %autosetup -n asus-numpad-%{version}
@@ -43,10 +41,9 @@ ASUS 触摸板数字小键盘（NumberPad）用户态驱动。参数取自官方
 %build
 # 发行版构建环境默认禁网：有 Cargo.lock 才用 --locked，没有就让 cargo 自行解析
 if [ -f Cargo.lock ]; then
-    ASUS_NUMPAD_SKU=%{sku} cargo build --release --locked --offline || \
-        ASUS_NUMPAD_SKU=%{sku} cargo build --release --locked
+    cargo build --release --locked --offline || cargo build --release --locked
 else
-    ASUS_NUMPAD_SKU=%{sku} cargo build --release
+    cargo build --release
 fi
 
 %install
@@ -74,15 +71,6 @@ cat > %{buildroot}%{_sysconfdir}/asus-numpad/asus-numpad.json <<'JSON'
 }
 JSON
 
-# 机型自证：装完 rpm -ql 就能看到这包是给哪台机器的
-cat > %{buildroot}%{_datadir}/asus-numpad/sku.json <<SKUJSON
-{
-  "sku": "%{sku}",
-  "package": "%{name}",
-  "version": "%{version}-%{release}"
-}
-SKUJSON
-
 %files
 %doc README.md
 %license LICENSE
@@ -97,7 +85,6 @@ SKUJSON
 %{_datadir}/asus-numpad/lang/zh_CN.lang
 %{_datadir}/asus-numpad/lang/zh_TW.lang
 %{_datadir}/asus-numpad/lang/en.lang
-%{_datadir}/asus-numpad/sku.json
 %dir %{_sysconfdir}/asus-numpad
 %config(noreplace) %{_sysconfdir}/asus-numpad/asus-numpad.json
 

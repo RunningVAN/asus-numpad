@@ -243,11 +243,15 @@ common.list_sep = 、
 
 # ---- 布局（v8：跨机型通用） ----
 cli.allow_unverified.help = 允许使用尚未真机验证的布局出键（默认拦下，避免按错键）
-cli.allow_sku_mismatch.help = 允许在机型对不上时也启动（默认拦下，避免装错机型的包）
+cli.allow_sku_mismatch.help = 即使本机不像 ASUS NumberPad 机型也启动（跳过机型校验）
 cli.cmd.layout = 布局：查看官方布局表 / 按 HID 硬件 ID 自动识别 / 写死布局
 cli.cmd.layout.long = 不带参数列出全部官方布局与支持级别；`layout auto` 恢复自动识别；`layout GH3XLNDZ` 写死布局；`layout --ids` 列出 HID 硬件 ID 对照表
 cli.cmd.layout.name = 布局名（GH3XLNDZ / GH2XLNDZ / GH4XLNDZ / auto）
 cli.cmd.layout.ids = 同时列出触摸板 HID 硬件 ID → 布局的对照表
+cli.sku.help = 手动指定机型配置，跳过自动识别（机型 id 用 `asus-numpad sku` 查看）
+cli.cmd.sku = 机型配置：查看自动识别结果、列出可选机型、手动指定
+cli.cmd.sku.long = 不带参数时显示识别出的机型、判定依据、本机 DMI 身份与触摸板模组；`sku list` 列出全部可选机型；`sku g614` 手动指定；`sku auto` 恢复自动识别
+cli.cmd.sku.id = 机型 id，或 auto / list
 layout.current = 当前布局：配置 {layout}，实际生效 {resolved}（{support}）
 layout.list_title = 官方 AsusNUMPADFilter.inf 收录的布局（* 已验证 / ~ 同族未验证 / - 结构不同）：
 layout.legend = * 已验证   ~ 同族未验证（需 --allow-unverified）   - 不支持
@@ -279,22 +283,28 @@ check.led_probe_i2c = 背光 i2c: bus={bus} addr=0x{addr}
 check.led_probe_i2c_none = 背光 i2c: 未发现 0x38/0x15 设备
 
 # ---- 机型（SKU）分包 ----
-sku.pack = 本安装包机型：{sku}（包名 {pkg}）
+sku.model = 当前机型配置：{sku} —— {source}
+sku.source.manual = 手动指定
+sku.source.dmi = 由 DMI 型号自动识别
+sku.source.hardware = 由触摸板模组自动识别
+sku.source.fallback = 未识别到机型，使用通用配置
+sku.detail = 判定依据：{detail}
 sku.note = 机型备注：{note}
 sku.dmi = 本机 DMI 身份：{dmi}
 sku.dmi_unknown = 本机 DMI 身份：读不到（非 Linux 或 /sys/class/dmi/id 不可读）
 sku.hw = 本机触摸板模组：{hw}
-sku.verdict.non_asus = 不匹配——本机厂商是 {vendor}，不是 ASUS，装错包了
 sku.verdict = 机型校验：{verdict}
 sku.verdict.match = 匹配，继续
 sku.verdict.match_hw = 匹配（按触摸板模组 {module} 判定），继续
-sku.verdict.mismatch = 不匹配——本机是 {dmi}，装错包了
 sku.verdict.not_numpad = 不适用——本机 {model} 的触控板不是 NumberPad 虚拟数字键盘
 sku.not_numpad_reason = 原因：{reason}。这台不用装 asus-numpad。
-sku.verdict.unknown = 无法判定，按放行处理（读不到 DMI 不等于机型不对）
-sku.verdict.not_enforced = 未启用（兼容包不校验机型）
-sku.suggest = 建议改装：{sku}（{pkg}）
-sku.tip_precise = 本机可识别为 {sku}，改装 {pkg} 可获得该机型的默认布局与备注
-sku.no_candidate = 机型表未收录本机代号，可用 --allow-sku-mismatch 强行运行，或到仓库提 issue 补充该机型
-err.sku_mismatch = 本包只服务「{sku}」，与本机不符，已停止启动。请改装 {pkg}；强制运行加 --allow-sku-mismatch。
+sku.verdict.unknown = 机型表里没有这台，按通用配置运行（键表仍由实际触摸板模组决定）
+sku.verdict.not_enforced = 使用通用配置（不绑定具体机型）
+sku.list = 可选择机型：{ids}
+sku.manual_hint = 硬件信息读不准时手动指定：asus-numpad sku <id>
+sku.set = 已指定机型 {sku}（{path}），重启服务生效
+sku.clear = 已取消手动指定，恢复自动识别（{path}）
+sku.bad_id = 没有机型「{id}」，可选：{ids}
+note.sku_unknown = 机型 id「{id}」不在机型表里（已忽略，仍按自动识别）。可选：{ids}
+err.not_asus = 本机厂商是 {vendor}，不像 ASUS 机器，已停止启动。确认无误就加 --allow-sku-mismatch 强制运行。
 err.not_numpad = 本机 {model} 不需要 asus-numpad：{reason}。已停止启动（退出码 4）。

@@ -9,14 +9,22 @@ Alpine 的 apk，以及 Gentoo、Nix/NixOS 和任意发行版都能用的静态 
   `zypper update` / `pacman -Syu` 跟着升级。
 - **直接装包**：从 [Releases](https://github.com/RunningVAN/asus-numpad/releases) 下载本机格式安装一次，升级要自己重复。
 
-包按机型拆分，装错会拒绝启动（退出码 3）。装之前先确认机型：
+只有一个包，机型配置由程序在运行期自动识别，装之前不必查机型表，也不会装错包。装完想确认
+识别结果：
 
 ```bash
-cat /sys/class/dmi/id/product_name    # 例如 G634JY → 装 g614 包
+asus-numpad sku          # 识别到哪套配置、依据是什么
 ```
 
-机型与包名的对应关系见 [README 机型表](../README.md#机型)，模组与键表的对应见
-[machines.md](machines.md)。拿不准就装 `asus-numpad`（兼容包，不校验机型）。
+硬件信息读不准（虚拟机、白牌机箱、BIOS 占位串）时手动指定，写进配置长期生效：
+
+```bash
+asus-numpad sku list     # 可选机型 id
+asus-numpad sku g614     # 手动指定
+asus-numpad sku auto     # 恢复自动识别
+```
+
+机型与模组、键表的对应见 [README 机型表](../README.md#支持机型) 与 [machines.md](machines.md)。
 
 ## 软件源
 
@@ -53,7 +61,7 @@ Fedora / openSUSE Leap 16 / Tumbleweed，逐个跑 `--version`，有一处装不
 echo "deb [trusted=yes] https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update
-sudo apt install asus-numpad          # 或 asus-numpad-g614 等机型包
+sudo apt install asus-numpad
 ```
 
 `trusted=yes` 表示跳过 GPG 校验；`apt` 仍会按 `Release` 里的 SHA256 校验包体。
@@ -78,7 +86,7 @@ sudo dnf install asus-numpad
 ```bash
 sudo zypper addrepo --no-gpgcheck --refresh \
   "https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
-sudo zypper install asus-numpad          # 或 asus-numpad-g614 等机型包
+sudo zypper install asus-numpad
 ```
 
 `--no-gpgcheck` 对应 dnf 侧的 `gpgcheck=0`：仓库不签名。源里和 Release 里就只有

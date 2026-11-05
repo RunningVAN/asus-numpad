@@ -53,7 +53,6 @@ for f in \
     "$PREFIX/usr/share/asus-numpad/lang/zh_CN.lang" \
     "$PREFIX/usr/share/asus-numpad/lang/zh_TW.lang" \
     "$PREFIX/usr/share/asus-numpad/lang/en.lang" \
-    "$PREFIX/usr/share/asus-numpad/sku.json" \
     "$PREFIX/usr/share/doc/asus-numpad/README.md" \
     "$PREFIX/usr/share/doc/asus-numpad/copyright"
 do

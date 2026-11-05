@@ -158,18 +158,6 @@ JSON
 }
 
 # 机型自证文件：装完 `rpm -ql` / `pacman -Ql` / `dpkg -L` 就能看出这包属于哪台机器
-install_sku_json() {
-    local destdir="$1" version="$2" sku="${3:-universal}" pkg="${4:-$PKG_NAME}"
-    install -d "$destdir/usr/share/asus-numpad"
-    cat > "$destdir/usr/share/asus-numpad/sku.json" <<JSON
-{
-  "sku": "$sku",
-  "package": "$pkg",
-  "version": "$version"
-}
-JSON
-}
-
 # 版本号 -> 打包用的整数（deb/rpm 要求数字开头、arch 与 alpine 只要求干净字符串）
 version_is_semver() {
     [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]

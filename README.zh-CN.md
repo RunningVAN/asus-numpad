@@ -161,9 +161,9 @@ Tumbleweed：spec 只用标准宏，运行时只依赖 glibc 与 systemd，仓�
 
 CI 在每个目标发行版的干净容器里安装每个包并执行 `--version`，装不上的包会挡住发布。
 
-机型包与机器不符时以退出码 3 拒绝，并直接给出应装的包名，装之前不必自己查机型表。
-
-`asus-numpad` 是不做机型检查的包。运行依赖：glibc，Alpine 上为 musl。
+只有一个包，机型配置由程序在运行期自动识别：同一份二进制读 DMI 型号与触摸板模组，挑对应的
+键表，不必查机型表、也不存在装错包的问题。硬件信息读不准（虚拟机、白牌机箱、BIOS 占位串）时
+可手动指定，见[机型识别](#机型识别)。运行依赖：glibc，Alpine 上为 musl。
 
 ## 使用
 
@@ -206,10 +206,11 @@ asus-numpad --lang en check     # 仅本次生效
 | `brightness_levels` | 数组 | 硬件档位，默认 `0x41`..`0x48` |
 | `brightness_poll_ms` | 毫秒 | 轮询间隔，默认 `500` |
 | `allow_unverified_layout` | `true` / `false` | 接受已知家族中未收录的布局 |
+| `sku` | 机型 id / `null` | 手动指定机型，跳过自动识别；`null` 为自动 |
 
 ## 支持机型
 
-| 包名 | 机型 |
+| 机型 id | 机型 |
 | --- | --- |
 | `g533` | 枪神 15 / Strix G15（2022）：`G533`、`G513` |
 | `g614` | 枪神 16 / Strix G16（2023）：`G614`、`G634` |
@@ -220,30 +221,40 @@ asus-numpad --lang en check     # 仅本次生效
 **实测机型只有 `G634`**（枪神 16 2023）。表中其余机型依据触摸板模组、键表与厂商资料支持，
 均未上真机验证，属理论支持。其他机型的实测反馈欢迎提交。
 
-DMI 中的机型代码为准，市场名仅供对照。一个包服务一个触摸板模组家族，不是单个 SKU。合并过的
-包名留在 `Obsoletes` 中，机型包之间声明 `Conflicts`。
+DMI 中的机型代码为准，市场名仅供对照。每个机型 id 对应一个触摸板模组家族、一套键表，不是单个
+SKU。旧版按机型拆分的包名（`asus-numpad-g614` 等）留在 `Obsoletes` 中，升级时由 `asus-numpad`
+接管。
 
 ### 机型识别
 
 识别取 DMI 的 `product_name`、`board_name`、`product_family` 三者的并集。BIOS 占位字符串按缺失
-处理，不阻塞启动；明确不是 ASUS 的厂商字段会阻塞启动。装了不匹配的包时，`check` 会打印与最长
-公共机型前缀相符的包名。
+处理，不阻塞启动；明确不是 ASUS 的厂商字段会阻塞启动。
 
 触摸板模组名（如 `ASUE1416`，来自 i2c-hid 与 HID）是第二判据，在 DMI 没有可用机型时启用。DMI
-给出已知机型但不属于本包时，不会被模组名覆盖。各机型的模组与键表见
+给出已知机型但不属于 NumberPad 时，不会被模组名覆盖。各机型的模组与键表见
 [docs/machines.md](docs/machines.md)。
+
+读不到正确硬件信息时手动指定：
+
+```bash
+asus-numpad sku            # 看识别到哪套配置、凭什么
+asus-numpad sku list       # 列出可选机型 id
+asus-numpad sku g614       # 手动指定，写进配置长期生效
+asus-numpad sku auto       # 恢复自动识别
+```
+
+配置里的 `sku` 键优先于自动识别，`--sku g614` 只对本次运行生效。
 
 ## 构建
 
 ```bash
 ./packaging/build.sh                        # 当前发行版
 ./packaging/build.sh deb rpm tarball        # 指定目标（deb/rpm/arch/alpine/tarball）
-./packaging/build-skus.sh g614              # 单个机型
 ./tools/repo-gen.sh                         # dist/ 生成本地仓库到 repo/（apt/rpm/pacman/apk）
 ```
 
 ```bash
-ASUS_NUMPAD_SKU=g614 RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
+RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
   cargo build --target x86_64-unknown-linux-musl --release
 ```
 

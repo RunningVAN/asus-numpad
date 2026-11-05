@@ -9,8 +9,6 @@
 ```
 packaging/
 ├── build.sh          统一入口：编译一次，按目标出包
-├── build-skus.sh     按 skus.tsv 批量出各机型包
-├── install-sku.sh    本机装包辅助
 ├── lib/common.sh     共用函数（版本读取、目录布置、日志）
 ├── common/           service / udev 规则 / man page
 ├── deb/              dpkg-deb 直接打包（不走 dh）
@@ -78,7 +76,6 @@ rpm 的编译在 spec 的 `%build` 里，`make-rpm.sh` 只有 `--check`（`rpmbu
 
 ```bash
 shellcheck -x -S warning packaging/build.sh packaging/lib/common.sh \
-    packaging/build-skus.sh packaging/install-sku.sh \
     packaging/deb/make-deb.sh packaging/rpm/make-rpm.sh packaging/arch/make-arch.sh \
     packaging/arch/PKGBUILD packaging/arch/asus-numpad.install \
     packaging/alpine/make-alpine.sh packaging/tarball/make-tarball.sh \

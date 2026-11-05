@@ -244,11 +244,15 @@ common.list_sep = ,\s
 
 # ---- Layouts (v8: cross-model support) ----
 cli.allow_unverified.help = Allow keys from layouts not yet verified on real hardware (blocked by default to avoid wrong keys)
-cli.allow_sku_mismatch.help = Also start when the machine model does not match (blocked by default to avoid wrong-model packages)
+cli.allow_sku_mismatch.help = Start even when this machine does not look like an ASUS NumberPad laptop (skips the model check)
 cli.cmd.layout = Layout: list official layouts / auto-detect by HID hardware ID / pin a layout
 cli.cmd.layout.long = Without arguments it lists every official layout with its support level; `layout auto` restores auto-detection; `layout GH3XLNDZ` pins a layout; `layout --ids` also prints the HID hardware ID table
 cli.cmd.layout.name = Layout name (GH3XLNDZ / GH2XLNDZ / GH4XLNDZ / auto)
 cli.cmd.layout.ids = Also list the touchpad HID hardware ID -> layout table
+cli.sku.help = Force a model config, skipping auto-detection (run `asus-numpad sku` for the ids)
+cli.cmd.sku = Model config: show what was detected, list the ids, or pick one by hand
+cli.cmd.sku.long = Without arguments it shows the detected model config, how it was chosen, plus the DMI identity and touchpad module; `sku list` lists every id; `sku g614` pins one by hand; `sku auto` goes back to auto-detection
+cli.cmd.sku.id = Model id, or auto / list
 layout.current = Layout: configured {layout}, effective {resolved} ({support})
 layout.list_title = Layouts recorded in the official AsusNUMPADFilter.inf (* verified / ~ family unverified / - different structure):
 layout.legend = * verified   ~ same family, unverified (needs --allow-unverified)   - unsupported
@@ -283,22 +287,28 @@ check.led_probe_i2c = Backlight i2c: bus={bus} addr=0x{addr}
 check.led_probe_i2c_none = Backlight i2c: no device at 0x38/0x15
 
 # ---- 机型（SKU）分包 ----
-sku.pack = This package is built for: {sku} (package {pkg})
+sku.model = Model config: {sku} — {source}
+sku.source.manual = set by hand
+sku.source.dmi = detected from the DMI model string
+sku.source.hardware = detected from the touchpad module
+sku.source.fallback = no model matched, using the generic defaults
+sku.detail = Matched: {detail}
 sku.note = Model note: {note}
 sku.dmi = Local DMI identity: {dmi}
 sku.dmi_unknown = Local DMI identity: unavailable (not Linux or /sys/class/dmi/id unreadable)
 sku.hw = Local touchpad module: {hw}
-sku.verdict.non_asus = Mismatch: this machine's vendor is {vendor}, not ASUS - wrong package
 sku.verdict = Model check: {verdict}
 sku.verdict.match = match, continuing
 sku.verdict.match_hw = match (by touchpad module {module}), continuing
-sku.verdict.mismatch = mismatch — this machine is {dmi}, wrong package
 sku.verdict.not_numpad = not applicable — the touchpad on this {model} is not a NumberPad virtual keypad
 sku.not_numpad_reason = Reason: {reason}. This machine does not need asus-numpad.
-sku.verdict.unknown = cannot tell, allowing run (unreadable DMI does not mean wrong model)
-sku.verdict.not_enforced = not enforced (the universal package skips the model check)
-sku.suggest = Suggested package: {sku} ({pkg})
-sku.tip_precise = Detected {sku}; installing {pkg} gives you that model's default layout
-sku.no_candidate = This machine is not in the model table; run with --allow-sku-mismatch, or file an issue to add it
-err.sku_mismatch = This package only serves "{sku}" and does not match this machine; startup stopped. Install {pkg} instead, or add --allow-sku-mismatch to force.
+sku.verdict.unknown = model not in the table; running with the generic defaults (the key table still follows the real touchpad)
+sku.verdict.not_enforced = using the generic defaults (not bound to one model)
+sku.list = Known models: {ids}
+sku.manual_hint = If the hardware info is wrong or unreadable, set the model by hand: asus-numpad sku <id>
+sku.set = Model set to {sku} ({path}); restart the service to apply
+sku.clear = Manual choice cleared, back to automatic detection ({path})
+sku.bad_id = Unknown model "{id}"; available: {ids}
+note.sku_unknown = Model id "{id}" is not in the model table (ignored, automatic detection stays on). Known ids: {ids}
+err.not_asus = This machine's vendor is {vendor}, not ASUS, so asus-numpad was not started. Add --allow-sku-mismatch to force.
 err.not_numpad = This {model} does not need asus-numpad: {reason}. Startup stopped (exit code 4).
