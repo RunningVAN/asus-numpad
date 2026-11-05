@@ -177,11 +177,8 @@ distribution. Native packages are also on
 CI installs every package in a clean container for each target distribution and runs `--version`;
 a package that fails to install blocks the release.
 
-Model packages refuse a mismatched machine with exit code 3. Check the model code first:
-
-```bash
-cat /sys/class/dmi/id/product_name      # e.g. G634JY, use the g614 package
-```
+Model packages refuse a mismatched machine with exit code 3 and name the package that fits the
+machine, so the model table never has to be consulted beforehand.
 
 `asus-numpad` is the package without a model check. Runtime dependency: glibc, or musl on Alpine.
 
@@ -245,17 +242,6 @@ as theoretical support. Reports from other models are welcome.
 The model code in DMI is authoritative; marketing names are for orientation only. A package serves
 one touchpad module family, not one machine SKU. Merged package names stay in `Obsoletes` and model
 packages declare `Conflicts` against each other.
-
-### Models without a NumberPad
-
-These machines have no virtual numpad in the touchpad. The driver and `packaging/install-sku.sh`
-refuse with exit code `4` and a reason.
-
-| Model | Reason |
-| --- | --- |
-| ProArt P16 `H7606` | Touchpad is the ASUS DialPad; the spec lists DialPad, which uses the knob HID usage instead of backlight FEATURE `0x0d` |
-| Strix G17 `G713`, 17-inch | Physical numpad on the keyboard; the spec lists `NumberPad` as `N/A` |
-| 18-inch Plus: `G834`, `G835`, `G814`, `G815`, `G813` | Physical numpad on the keyboard |
 
 ### Model detection
 

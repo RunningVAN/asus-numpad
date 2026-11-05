@@ -161,11 +161,7 @@ Tumbleweed：spec 只用标准宏，运行时只依赖 glibc 与 systemd，仓�
 
 CI 在每个目标发行版的干净容器里安装每个包并执行 `--version`，装不上的包会挡住发布。
 
-机型包与机器不符时以退出码 3 拒绝。先确认机型代码：
-
-```bash
-cat /sys/class/dmi/id/product_name      # 例如 G634JY，对应 g614 包
-```
+机型包与机器不符时以退出码 3 拒绝，并直接给出应装的包名，装之前不必自己查机型表。
 
 `asus-numpad` 是不做机型检查的包。运行依赖：glibc，Alpine 上为 musl。
 
@@ -226,16 +222,6 @@ asus-numpad --lang en check     # 仅本次生效
 
 DMI 中的机型代码为准，市场名仅供对照。一个包服务一个触摸板模组家族，不是单个 SKU。合并过的
 包名留在 `Obsoletes` 中，机型包之间声明 `Conflicts`。
-
-### 不含小键盘的机型
-
-这些机器的触摸板里没有虚拟小键盘。驱动与 `packaging/install-sku.sh` 以退出码 `4` 拒绝并给出原因。
-
-| 机型 | 原因 |
-| --- | --- |
-| ProArt P16 `H7606` | 触摸板为 ASUS DialPad；规格书写的是 DialPad，用旋钮 HID usage 而非背光 FEATURE `0x0d` |
-| 枪神 17 英寸 `G713` | 键盘自带物理小键盘；规格书写 `NumberPad` 为 `N/A` |
-| 18 英寸 Plus：`G834`、`G835`、`G814`、`G815`、`G813` | 键盘自带物理小键盘 |
 
 ### 机型识别
 
