@@ -34,6 +34,8 @@
   AlmaLinux 9、Fedora、openSUSE、Arch、Alpine）各自 `apt/dnf/zypper/pacman/apk` 装包，
   再跑 `asus-numpad --version` 与 udev 规则落地检查；任一个装不上就不发版。基线包跨发行版
   装到更老的系统这一步，正是 glibc 没兜住时报 `GLIBC_2.xx not found` 的地方。
+- 删掉 tag 重发时，旧 Release 会失去 tag 关联从网页上消失（GitHub 把它退化成草稿）。
+  发布流程现在会把它重新绑回 tag 并置为已发布，不用手动去网页点。
 - 出包失败的容器日志现在直接贴在 Actions 输出里，不用再下载 artifact 才能复盘。
 
 ## 1.2.0

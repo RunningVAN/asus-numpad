@@ -67,7 +67,13 @@ sudo dnf install asus-numpad
 ```
 
 openSUSE 把 `dnf` 换成 `zypper install asus-numpad` 即可，仓库文件通用
-（`/etc/zypp/repos.d/` 下同样识别这种 `.repo`）。
+（`/etc/zypp/repos.d/` 下同样识别这种 `.repo`）。源里放的这份是 el9 基线包，
+Tumbleweed / Leap 上照装（只依赖 glibc）；要 openSUSE 原生构建的那份，去
+Releases 下 `.suse.x86_64.rpm`。
+
+装之前不必自己验一遍：每次发版 CI 都会在 9 个干净容器（Debian 12/13、
+Ubuntu 22.04/24.04、AlmaLinux 9、Fedora、openSUSE、Arch、Alpine）里真装一次、
+跑一遍 `--version`，有一个装不上就不发版。
 
 ### Arch / Manjaro
 
