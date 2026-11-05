@@ -6,10 +6,10 @@ Version: 1.0.0
 Architectures: amd64 arm64
 Components: main
 Description: ASUS NumberPad userspace driver for Linux
-Date: Thu, 05 Nov 2026 19:48:49 UTC
+Date: Thu, 05 Nov 2026 21:18:48 UTC
 SHA256:
- b9ac0189c41573f49092da2e408faeb7355c4e55a2f6cf0fa549ea18402a29c2 682 dists/stable/main/binary-amd64/Packages
- c20c922996150792a71e331ad6dbeed2e7b59f0bd82b4a3e3048fc53289a7faf 516 dists/stable/main/binary-amd64/Packages.gz
+ cda1e473de6aac2d4a2af1dbdbfee92abf0a7e3a3e27665eeec96cd04a78c60f 682 dists/stable/main/binary-amd64/Packages
+ e4592faca058f8bf73b0e47576e097bd30eab766a7e1c9ae07cb9f9e7e4d6372 519 dists/stable/main/binary-amd64/Packages.gz
 MD5Sum:
- 739bbd6d2518cc1981111db32456f069 682 dists/stable/main/binary-amd64/Packages
- f3be35c8adf79a4ab0bcba4f6a184d93 516 dists/stable/main/binary-amd64/Packages.gz
+ 38b998f09b310d4311b4259e1be3ff51 682 dists/stable/main/binary-amd64/Packages
+ ce492d70e1e6a3647017df0b25ff3ffe 519 dists/stable/main/binary-amd64/Packages.gz
