@@ -30,6 +30,10 @@
   全仓统一改成 `${VERSION}` 形式。
 - **Alpine 源索引去掉 `--rewrite-arch`**：apk-tools 3 删了这个选项，带上它
   `apk index` 直接报错，仓库生成整步失败；包架构本来就在 `.PKGINFO` 里。
+- **发版前在每个目标发行版里真装一遍**：9 个容器（Debian 12 / 13、Ubuntu 22.04 / 24.04、
+  AlmaLinux 9、Fedora、openSUSE、Arch、Alpine）各自 `apt/dnf/zypper/pacman/apk` 装包，
+  再跑 `asus-numpad --version` 与 udev 规则落地检查；任一个装不上就不发版。基线包跨发行版
+  装到更老的系统这一步，正是 glibc 没兜住时报 `GLIBC_2.xx not found` 的地方。
 - 出包失败的容器日志现在直接贴在 Actions 输出里，不用再下载 artifact 才能复盘。
 
 ## 1.2.0

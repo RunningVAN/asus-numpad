@@ -223,6 +223,88 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # 出包成功不等于装得上。这里在每个目标发行版里真装一遍再跑 --version：
+  # 基线包（jammy 编的 deb、el9 编的 rpm）会装到更老的系统上，
+  # glibc 版本没兜住的话，这一步会以 "GLIBC_2.xx not found" 直接红。
+  install-check:
+    name: 安装验证 (${{ matrix.name }})
+    needs: [package]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: debian-12,     image: debian:12,                  artifact: pkg-deb-ubuntu-jammy, pick: '\.deb$' }
+          - { name: ubuntu-22.04,  image: ubuntu:22.04,               artifact: pkg-deb-ubuntu-jammy, pick: '\.deb$' }
+          - { name: ubuntu-24.04,  image: ubuntu:24.04,               artifact: pkg-deb-ubuntu-jammy, pick: '\.deb$' }
+          - { name: debian-trixie, image: debian:trixie,              artifact: pkg-deb-ubuntu-jammy, pick: '\.deb$' }
+          - { name: almalinux-9,   image: almalinux:9,                artifact: pkg-rpm-el9,          pick: '\.rpm$' }
+          - { name: fedora,        image: fedora:latest,              artifact: pkg-rpm-fedora,       pick: '\.rpm$' }
+          - { name: opensuse,      image: opensuse/tumbleweed:latest, artifact: pkg-rpm-opensuse,     pick: '\.rpm$' }
+          - { name: arch,          image: archlinux:latest,           artifact: pkg-arch,             pick: 'asus-numpad-[0-9].*pkg\.tar\.zst$' }
+          - { name: alpine,        image: alpine:latest,              artifact: pkg-alpine,           pick: 'asus-numpad-[0-9].*apk$' }
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist
+
+      - name: 装包并执行（${{ matrix.name }}）
+        run: |
+          set -o pipefail
+          if ! docker run --rm -v "$PWD/dist:/dist:ro" "${{ matrix.image }}" sh -c '
+            set -eux
+            cd /dist
+            pkg=$(ls | grep -E "${{ matrix.pick }}" | head -n 1)
+            echo "待装包: $pkg"
+            case "$pkg" in
+              *.deb)
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update -qq
+                apt-get install -y -qq --no-install-recommends "./$pkg"
+                ;;
+              *.rpm)
+                if command -v dnf >/dev/null 2>&1; then
+                  dnf install -y --nogpgcheck "./$pkg"
+                else
+                  # openSUSE 上不走 zypper：它装本地包前会先 refresh 全部软件源，
+                  # 容器里常常卡在这一步。rpm 直接装本地包，依赖照样校验。
+                  rpm -Uvh --nosignature --replacepkgs "./$pkg"
+                fi
+                ;;
+              *.pkg.tar.*)
+                pacman -Sy --noconfirm --needed glibc >/dev/null 2>&1 || true
+                pacman -U --noconfirm "./$pkg"
+                ;;
+              *.apk)
+                apk add --no-cache --allow-untrusted "./$pkg"
+                ;;
+            esac
+            echo "--- 版本 ---"
+            asus-numpad --version
+            echo "--- 命令可用 ---"
+            asus-numpad --help >/dev/null
+            echo "--- udev 规则已落地 ---"
+            # 不用 find：openSUSE 的精简镜像里连 find 都没有
+            hit=0
+            for d in /usr/lib/udev/rules.d /lib/udev/rules.d /usr/local/lib/udev/rules.d; do
+              if [ -f "$d/99-asus-numpad.rules" ]; then echo "规则: $d/99-asus-numpad.rules"; hit=1; fi
+            done
+            [ "$hit" = 1 ]
+            echo "OK: 装得上、跑得起来"
+          ' 2>&1 | tee /tmp/install.log; then
+            # 失败时把原因打成 annotation：公开仓库不用登录也能看到
+            grep -aE "错误|失败|Error|error|failed|not found|No such|denied|conflict|依赖" /tmp/install.log \
+              | tail -n 15 | cut -c1-800 | while IFS= read -r line; do
+                echo "::error::[${{ matrix.name }}] $line"
+              done
+            echo "---- tail ----"
+            tail -n 40 /tmp/install.log | cut -c1-800 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
+
   # Actions 日志在没有 token 的情况下读不到，把出包日志推回一个分支才能复盘。
   diagnose:
     needs: [package]
@@ -281,8 +363,8 @@ jobs:
 
   # 汇总：生成四套仓库索引 → 发 Release → 提交 repo/ 回 main
   publish:
-    needs: [package, tarball]
-    if: needs.package.result == 'success' && needs.tarball.result == 'success'
+    needs: [package, tarball, install-check]
+    if: needs.package.result == 'success' && needs.tarball.result == 'success' && needs.install-check.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -434,6 +516,9 @@ jobs:
           V="${{ steps.ver.outputs.version }}"
           if gh release view "v$V" >/dev/null 2>&1; then
             gh release upload "v$V" baseline/* extras/* --clobber
+            # 重打 tag 时旧 Release 会失去 tag 关联、退化成草稿（网页上看不到），
+            # 这里强制把它绑回当前 tag 并置为已发布。
+            gh release edit "v$V" --tag "v$V" --draft=false
           elif [ -f CHANGELOG.md ]; then
             gh release create "v$V" baseline/* extras/* --title "asus-numpad $V" \
               --notes-file CHANGELOG.md --target main

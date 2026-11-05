@@ -121,6 +121,10 @@ cat /sys/class/dmi/id/product_name      # 例如 G634JY → 装 g614 包
 
 拿不准就装 `asus-numpad`（兼容包，不校验机型）。
 
+每个包里只依赖 glibc（Alpine 是 musl），不拉 Rust 运行时。发版前 CI 会在
+每个目标发行版的干净容器里真装一遍再跑 `--version`，装不上就不发版——所以
+源里的包不会出现「新系统能装、老系统报 GLIBC_2.38 not found」。
+
 ## 用法
 
 ```bash

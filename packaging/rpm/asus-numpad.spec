@@ -115,12 +115,16 @@ udevadm settle >/dev/null 2>&1 || true
 # 开 linger：用户级单元在开机阶段即被拉起，不必先登录桌面
 _installer="${SUDO_USER:-}"
 if [ -z "$_installer" ]; then
-    _installer=$(loginctl list-users --no-legend 2>/dev/null | awk '$1 >= 1000 {print $2; exit}')
+    # 不用 awk：最小化安装的容器里可能没有它
+    _installer=$(loginctl list-users --no-legend 2>/dev/null | while read -r _u _uid _rest; do
+        case "$_uid" in ''|*[!0-9]*) continue ;; esac
+        if [ "$_uid" -ge 1000 ]; then echo "$_u"; break; fi
+    done)
 fi
 if [ -n "$_installer" ] && [ "$_installer" != "root" ]; then
     loginctl enable-linger "$_installer" >/dev/null 2>&1 || :
 fi
-for u in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $1}'); do
+loginctl list-users --no-legend 2>/dev/null | while read -r u _rest; do
     uid=$(id -u "$u" 2>/dev/null) || continue
     [ -d "/run/user/$uid" ] || continue
     su "$u" -s /bin/sh -c "XDG_RUNTIME_DIR=/run/user/$uid systemctl --user daemon-reload; XDG_RUNTIME_DIR=/run/user/$uid systemctl --user enable --now asus-numpad.service" >/dev/null 2>&1 || :
@@ -128,7 +132,7 @@ done
 
 %preun
 if [ $1 -eq 0 ]; then
-    for u in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $1}'); do
+    loginctl list-users --no-legend 2>/dev/null | while read -r u _rest; do
         uid=$(id -u "$u" 2>/dev/null) || continue
         [ -d "/run/user/$uid" ] || continue
         su "$u" -s /bin/sh -c "XDG_RUNTIME_DIR=/run/user/$uid systemctl --user disable --now asus-numpad.service" >/dev/null 2>&1 || :
@@ -139,7 +143,7 @@ fi
 
 %postun
 if [ $1 -ge 1 ]; then
-    for u in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $1}'); do
+    loginctl list-users --no-legend 2>/dev/null | while read -r u _rest; do
         uid=$(id -u "$u" 2>/dev/null) || continue
         [ -d "/run/user/$uid" ] || continue
         su "$u" -s /bin/sh -c "XDG_RUNTIME_DIR=/run/user/$uid systemctl --user daemon-reload; XDG_RUNTIME_DIR=/run/user/$uid systemctl --user try-restart asus-numpad.service" >/dev/null 2>&1 || :

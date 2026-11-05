@@ -1,0 +1,15 @@
+Origin: asus-numpad
+Label: asus-numpad
+Suite: stable
+Codename: stable
+Version: 1.2.1
+Architectures: amd64 arm64
+Components: main
+Description: ASUS NumberPad userspace driver for Linux
+Date: Thu, 05 Nov 2026 03:34:25 UTC
+SHA256:
+ c9f61dcf87cf4c7b9efc96882f08bbf68021e75a24455a20beb3e6ca9aad8d86 681 dists/stable/main/binary-amd64/Packages
+ a25227296f21025b8260d79c05305a24f5161202cb36c694678ba2d643cc5862 526 dists/stable/main/binary-amd64/Packages.gz
+MD5Sum:
+ 954fda36759748b05b1c99911096ade6 681 dists/stable/main/binary-amd64/Packages
+ 073139a8a431ab4e19e06001524c54b8 526 dists/stable/main/binary-amd64/Packages.gz
