@@ -93,24 +93,33 @@ sudo pacman -Sy asus-numpad
 
 ### Arch / Manjaro：AUR
 
-不想加第三方 pacman 源、或者想跟着自己系统的滚动版走，用 AUR 包 `asus-numpad-rs`：
+不想加第三方 pacman 源、或者想跟着自己系统的滚动版走，用源码包 `asus-numpad-rs`：
 
 ```bash
-# 用惯用的 AUR helper
-yay -S asus-numpad-rs
-
-# 或者手工
-git clone https://aur.archlinux.org/asus-numpad-rs.git
-cd asus-numpad-rs && makepkg -si
+# 立刻可用：从 Release 下 PKGBUILD 与 asus-numpad-rs.install 到空目录
+mkdir asus-numpad-rs && cd asus-numpad-rs
+curl -fLO https://github.com/RunningVAN/asus-numpad/releases/latest/download/PKGBUILD
+curl -fLO https://github.com/RunningVAN/asus-numpad/releases/latest/download/asus-numpad-rs.install
+makepkg -si
 ```
+
+AUR 收录后（包名 `asus-numpad-rs`，维护者推一次即生效）：
+
+```bash
+yay -S asus-numpad-rs
+# 或 git clone https://aur.archlinux.org/asus-numpad-rs.git && cd asus-numpad-rs && makepkg -si
+```
+
+想自己往 AUR 提交，`PKGBUILD` 与 `asus-numpad-rs.SRCINFO` 每次发版都随 Release
+发布，`git clone ssh://aur@aur.archlinux.org/asus-numpad-rs.git` 后把 `SRCINFO`
+改名为 `.SRCINFO` 一起推上去即可。
 
 包名带 `-rs` 是因为 AUR 上的 `asus-numpad` 已被另一个 Python 实现的项目占用；
 二进制名仍是 `asus-numpad`，PKGBUILD 用 `provides` / `conflicts` 声明了替代关系。
 
 AUR 包是**源码包**：`makepkg` 直接拉 GitHub 的 tag tarball 现编，所以装出来的
 是针对你本机工具链的原生二进制。每次发版 CI 都会在 Arch 容器里用同一个
-PKGBUILD 真编真装一遍才发版。不想等 AUR 同步的，可以从 Release 页面下
-`PKGBUILD` 与 `.SRCINFO` 放进一个空目录 `makepkg -si`。
+PKGBUILD 真编真装、跑 `--version` 并校验 systemd 单元与 udev 规则落地后才发版。
 
 ### Alpine
 

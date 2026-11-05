@@ -108,7 +108,10 @@ Server = https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/arch
 EOF
 sudo pacman -Sy asus-numpad
 
-# Arch / Manjaro（AUR，源码包，跟滚动版走）
+# Arch / Manjaro（源码包 asus-numpad-rs，跟滚动版走）
+# 不等 AUR：把 Release 里的 PKGBUILD 与 asus-numpad-rs.install 放同一目录后
+makepkg -si
+# AUR 收录后（包名 asus-numpad-rs）
 yay -S asus-numpad-rs
 ```
 
