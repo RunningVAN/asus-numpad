@@ -7,17 +7,33 @@
 
 Name:           asus-numpad
 Summary:        ASUS 触摸板数字小键盘（NumberPad）用户态驱动
+Version:        %{version}
+Release:        @RELEASE@%{?dist}
 # 旧版按机型分包（asus-numpad-g614 等）已被单一包取代：升级时由本包接管，
 # 装过任意机型包的机器 dnf upgrade 会自动换过来，不会因为共用 /usr/bin/asus-numpad 报文件冲突。
 # 这里的名单只为接管历史包名，不代表机型支持范围。
-%global old_skus g533 g614 g615 g634 g635 gx550 gx650 ux582 universal
-%for s %old_skus
-Provides:       asus-numpad-%{s} = %{version}-%{release}
-Obsoletes:      asus-numpad-%{s} < %{version}-%{release}
-%endfor
-
-Version:        %{version}
-Release:        @RELEASE@%{?dist}
+#
+# 两个坑：① %for 是 Fedora 补的扩展宏，RHEL 9 / openSUSE 的 rpm 4.16 直接报
+# 「Unknown tag: %for」，只能平铺写死；② %{release} 要等 Release 标签解析出来才有值，
+# 这段放在 Version/Release 之前会被 rpm 判成「Possible unexpanded macro」。
+Provides:       asus-numpad-g533 = %{version}-%{release}
+Obsoletes:      asus-numpad-g533 < %{version}-%{release}
+Provides:       asus-numpad-g614 = %{version}-%{release}
+Obsoletes:      asus-numpad-g614 < %{version}-%{release}
+Provides:       asus-numpad-g615 = %{version}-%{release}
+Obsoletes:      asus-numpad-g615 < %{version}-%{release}
+Provides:       asus-numpad-g634 = %{version}-%{release}
+Obsoletes:      asus-numpad-g634 < %{version}-%{release}
+Provides:       asus-numpad-g635 = %{version}-%{release}
+Obsoletes:      asus-numpad-g635 < %{version}-%{release}
+Provides:       asus-numpad-gx550 = %{version}-%{release}
+Obsoletes:      asus-numpad-gx550 < %{version}-%{release}
+Provides:       asus-numpad-gx650 = %{version}-%{release}
+Obsoletes:      asus-numpad-gx650 < %{version}-%{release}
+Provides:       asus-numpad-ux582 = %{version}-%{release}
+Obsoletes:      asus-numpad-ux582 < %{version}-%{release}
+Provides:       asus-numpad-universal = %{version}-%{release}
+Obsoletes:      asus-numpad-universal < %{version}-%{release}
 License:        GPL-3.0-or-later
 URL:            https://github.com/RunningVAN/asus-numpad
 Source0:        asus-numpad-%{version}.tar.gz

@@ -19,6 +19,13 @@
 - 判定不变的部分：非 ASUS 厂商仍以退出码 `3` 拒绝；「这台没有 NumberPad」的机型不再单独
   拦截（见下节）。
 
+### 打包
+
+- **rpm spec 不再用 `%for` 展开旧机型包名**：`%for` 是 Fedora 给 rpm 打的补丁，RHEL 9 /
+  openSUSE 的 rpm 4.16 解析到就报 `Unknown tag: %for`，出包直接失败；改为平铺写死九组
+  `Provides` / `Obsoletes`。同一段还从 `Version` / `Release` 之前挪到之后——`%{release}`
+  在 Release 标签解析出来之前没有值，位置在前会被判成 `Possible unexpanded macro`。
+
 ### 按代际排除旧款机型
 
 - **2021 代的枪神5 / 魔霸5 不再被识别成 `g533`**：`G533Q*`（枪神5）、`G513Q*` / `G513I*`
