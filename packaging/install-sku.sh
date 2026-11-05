@@ -5,7 +5,8 @@
 #   sudo ./install-sku.sh --dry-run    # 只说会装哪个
 #   sudo ./install-sku.sh --from ~/rpm # 指定包目录
 #
-# 判断依据：/sys/class/dmi/id/product_name。18 英寸 Plus 机型是物理数字键，直接拒绝。
+# 判断依据：/sys/class/dmi/id/product_name。17 英寸 G17（G713）与 18 英寸 Plus 是物理数字键，
+# ProArt P16（H7606）是 DialPad 旋钮，都在开头直接拒绝。
 set -euo pipefail
 
 FROM_DIR=""
@@ -34,6 +35,11 @@ case "$DMI" in
         echo "这台是 18 英寸 Plus 机型，触控板没有虚拟数字键盘（物理数字键），不需要装 asus-numpad。" >&2
         exit 4
         ;;
+    *G713*)
+        # 17 英寸 Strix G17：官方规格 NumberPad 一栏是 N/A，机身自带物理数字键
+        echo "这台是 17 英寸 G17（G713），机身自带物理数字键，触控板没有虚拟数字键盘，不需要装 asus-numpad。" >&2
+        exit 4
+        ;;
     *H7606*)
         # ProArt P16：触控板是 ASUS DialPad 智能旋钮（官方规格 support DialPad）
         echo "这台是 ProArt P16（H7606），触控板是 ASUS DialPad 智能旋钮，不是 NumberPad 虚拟数字键盘，不需要装 asus-numpad。" >&2
@@ -43,7 +49,7 @@ esac
 
 SKU=""
 case "$DMI" in
-    *G533*|*G513*|*G713*) SKU=g533 ;;
+    *G533*|*G513*) SKU=g533 ;;
     *G614*) SKU=g614 ;;
     *G615*) SKU=g615 ;;
     *G634*) SKU=g634 ;;

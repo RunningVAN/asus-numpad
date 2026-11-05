@@ -49,8 +49,10 @@ pub struct Sku {
 /// 模组名相同（如 `ASUE1416` / `ASUF1416`）就一定是同一份键表、同一套几何。
 ///
 /// * `g614` 吸收 `g634`：同一块 ELAN 触摸板（04F3:3275 / ASUE1416），键表 GH3XLNDZ；
-/// * `g533` 吸收 `g513` / `g713`：枪神6 与魔霸6 同代同平台，官方支持页同样提供
-///   ASUS NumberPad 驱动，模组 ASUE1403 / ELAN1403 → GH2XLNDZ 同族；
+/// * `g533` 吸收 `g513`：魔霸6 15 英寸与枪神6 同代同平台，模组 ASUE1403 / ELAN1403
+///   → GH2XLNDZ 同族（G513 只有部分配置带 NumberPad，没有该模组的机器由硬件探测兜底）；
+///   17 英寸 `g713` **不并入**：G17 机身自带物理数字键，触控板没有虚拟数字键盘
+///   （官方规格 `NumberPad` 一栏为 `N/A`），落入 [`NON_NUMPAD_MODELS`] 直接拒绝；
 /// * `g615` 吸收 `g635`：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ 同族；
 /// * `gx550` 吸收 `gx650`：两代冰刃双屏同属 gx551 键位族。
 ///
@@ -66,10 +68,10 @@ pub struct Sku {
 pub const SKUS: &[Sku] = &[
     Sku {
         id: "g533",
-        display: "ASUS 枪神6 / 魔霸6（G533 / G513 / G713）",
-        models: &["G533", "G513", "G713"],
+        display: "ASUS 枪神6 / 魔霸6 15 英寸（G533 / G513）",
+        models: &["G533", "G513"],
         modules: &["ASUE1403", "ELAN1403"],
-        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）；枪神6（G533）与魔霸6（G513 / G713）同代同平台，官方支持页都提供 ASUS NumberPad 驱动",
+        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）；枪神6（G533）与魔霸6 15 英寸（G513）同代同平台，官方规格里 G513 只有部分配置写 Support NumberPad，没这块触摸板的机器由硬件探测兜底。17 英寸 G713 是物理数字键，不并入",
     },
     Sku {
         id: "g614",
@@ -125,6 +127,10 @@ pub const NON_NUMPAD_MODELS: &[(&str, &str)] = &[
     (
         "H7606",
         "ProArt P16 的触控板是 ASUS DialPad 智能旋钮（官方规格 support DialPad），不是 NumberPad 虚拟数字键盘",
+    ),
+    (
+        "G713",
+        "17 英寸 Strix G17 机身自带物理数字键，触控板没有虚拟数字键盘（官方规格 NumberPad 一栏为 N/A）",
     ),
     (
         "G834",
@@ -808,7 +814,8 @@ mod tests {
         assert_eq!(ids.len(), n, "SKU id 必须唯一");
         assert!(by_id("universal").is_some(), "必须保留 universal 兜底");
         assert!(by_id("G614").is_some(), "机型查询应忽略大小写");
-        // g513 / g713 并进 g533，h7606 从机型号召直接剔除（ProArt 是 DialPad 旋钮）
+        // g513 并进 g533；g713 不并入任何包（17 英寸物理数字键，落 NON_NUMPAD_MODELS）；
+        // h7606 从机型号召直接剔除（ProArt 是 DialPad 旋钮）
         for merged in ["g634", "g635", "gx650", "g513", "g713", "h7606"] {
             assert!(
                 by_id(merged).is_none(),
@@ -895,12 +902,11 @@ mod tests {
     }
 
     #[test]
-    fn g533_pack_covers_strix_g513_g713() {
-        // 魔霸6（G513 / G713）与枪神6（G533）同代同平台，官方支持页都提供 NumberPad 驱动
+    fn g533_pack_covers_strix_g513() {
+        // 魔霸6 15 英寸（G513）与枪神6（G533）同代同平台，模组 ASUE1403 / ELAN1403 同族
         let g533 = by_id("g533").unwrap();
         for dmi in [
             "ROG Strix G15 G513RM_G513RM",
-            "ROG Strix G17 G713RC_G713RC",
             "ROG Strix SCAR 15 G533ZW_G533ZW",
         ] {
             assert_eq!(verdict_for(g533, Some(dmi)), DmiVerdict::Match, "{dmi}");
@@ -910,6 +916,26 @@ mod tests {
             verdict_for(g533, Some("ROG Strix G18 G814JZ_G814JZ")),
             DmiVerdict::NotNumberPad { .. }
         ));
+    }
+
+    #[test]
+    fn g713_is_physical_numpad_not_numberpad() {
+        // 17 英寸 G17（G713）机身自带物理数字键，官方规格 NumberPad 一栏为 N/A，
+        // 触控板没有虚拟数字键盘。任何机型包都不应把它认成 NumberPad 机器，
+        // 尤其不能继承曾经并入 g533 的做法。
+        for dmi in [
+            "ROG Strix G17 G713RC_G713RC",
+            "ROG Strix G17 G713RM_G713RM",
+            "ROG Strix G17 G713QR_G713QR",
+        ] {
+            for id in ["g533", "g614", "g615", "gx550", "ux582"] {
+                let v = verdict_for(by_id(id).unwrap(), Some(dmi));
+                assert!(
+                    matches!(v, DmiVerdict::NotNumberPad { .. }),
+                    "{dmi} 在 {id} 包下应判 NotNumberPad，实际 {v:?}"
+                );
+            }
+        }
     }
 
     #[test]
