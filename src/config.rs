@@ -102,6 +102,29 @@ pub fn manual_level_allowed(v: u8) -> bool {
         || (VAL_BRIGHTNESS_BASE + 1..=VAL_BRIGHTNESS_BASE + VAL_BRIGHTNESS_MAX).contains(&v)
 }
 
+/// 默认手动档位表：四档「从熄灭线性拉到最亮」= `0x00 / 0x43 / 0x45 / 0x48`。
+///
+/// 与 1.2.2 之前「不配置时现算线性等分」的结果逐字节相同，区别只是**写进默认配置**：
+/// 用户打开 JSON 就能看到每一档的字节值，按档改成任意硬件支持的亮度
+/// （`0x00` 或 `0x41..=0x48`）即可，不必再自己推算线性关系。
+pub const DEFAULT_MANUAL_LEVELS: [u8; 4] = [VAL_OFF, 0x43, 0x45, 0x48];
+
+/// `manual_brightness_levels` 的默认值（配置里不写这一项时用）。
+fn default_manual_brightness_levels() -> Option<Vec<u8>> {
+    Some(DEFAULT_MANUAL_LEVELS.to_vec())
+}
+
+/// 单档改写失败的原因（由 [`Config::set_manual_level`] 返回，CLI 侧映射成文案）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LevelSetError {
+    /// 亮度值不是硬件支持的 `0x00` 或 `0x41..=0x48`
+    Value,
+    /// 档号越界：必须 `1..=当前档数`，且不超过 [`MANUAL_BRIGHTNESS_MAX_STEPS`]
+    Step,
+    /// 改完破坏了「从暗到亮」的顺序（允许相邻相等，但不允许后一档比前一档暗）
+    Order,
+}
+
 pub const PROC_INPUT_DEVICES: &str = "/proc/bus/input/devices";
 /// 配置文件正式路径（与 rpm 包内安装路径一致）。
 pub const CONFIG_PATH: &str = "/etc/asus-numpad/asus-numpad.json";
@@ -295,14 +318,16 @@ pub struct Config {
     /// 手动调光的固定档（0 = 熄灭；1..= [`Config::manual_steps`] 从最暗到最亮）。
     /// 仅在「不跟随键盘背光」时作为常亮档使用；`asus-numpad bright N` 会写入这里。
     pub manual_brightness_step: u8,
-    /// 自定义手动档位表（从暗到亮），留空 = 按 `manual_brightness_steps` 在
-    /// `brightness_levels` 上线性等分。
+    /// 手动档位表（从暗到亮）：**默认显式给出四档** `[0, 0x43, 0x45, 0x48]`
+    /// （0x00 灭 → 0x48 最亮，线性等分）。
     ///
-    /// 允许的取值只有硬件的 `0x41..=0x48` 八档，长度 1..=8；档数由长度决定，
-    /// 例如 `[65, 68, 72]` → `bright 1|2|3`。这一项让「四档」不必是等分——
-    /// 想把 90% 亮度压在最后一档，直接写 `[65, 66, 67, 72]` 即可。
+    /// 每一项都可以换成任意一个硬件支持的亮度：`0x00` 或 `0x41..=0x48`（共 8 个亮档）；
+    /// 档数由长度决定（1..=8），所以 `bright 1|2|…|N` 的 N 跟着表长走。
+    /// 改单档可以直接用 `asus-numpad levels <N> <VALUE>`，也可以手改这里，
+    /// 例如 `[65, 65, 67, 72]`（前两档一样亮）、`[65, 66, 67, 68, 72]`（五档更细）。
+    /// 显式写 `null` = 交回驱动按线性等分现算（与默认表数值相同）。
     #[serde(
-        default,
+        default = "default_manual_brightness_levels",
         skip_serializing_if = "Option::is_none",
         deserialize_with = "de_opt_brightness_levels"
     )]
@@ -364,7 +389,7 @@ impl Default for Config {
             brightness_levels: default_brightness_levels(),
             brightness_poll_ms: 500,
             manual_brightness_step: MANUAL_BRIGHTNESS_STEPS,
-            manual_brightness_levels: None,
+            manual_brightness_levels: default_manual_brightness_levels(),
             i2c_transfer: "i2ctransfer".to_string(),
             i2c_bus: None,
             i2c_addr: None,
@@ -518,6 +543,33 @@ impl Config {
         }
     }
 
+    /// 把第 `step` 档（**1 起**）改成任意一个硬件支持的亮度值，返回改后的整表。
+    ///
+    /// 这是「每个档位都能指定任意支持亮度」的落地点：
+    /// * `value` 只接受 `0x00`（熄灭）或 `0x41..=0x48`（硬件的 8 个亮档）；
+    /// * `step` 必须落在 `1..=manual_steps()`，且不超过 [`MANUAL_BRIGHTNESS_MAX_STEPS`]；
+    /// * 未配置档表时（`manual_brightness_levels = null`）先把当前生效的线性表**落成实表**
+    ///   再改单档，避免「改一档 → 表只剩一档」把其余档位弄丢；
+    /// * 改完仍要求非递减：允许相邻两档相同（硬件就 8 个刻度，重复值只是看不出变化），
+    ///   但不允许后一档比前一档暗，否则 `bright up` 会越按越黑。
+    ///
+    /// 只改内存里的配置，落盘由调用方负责（CLI 走 `persist_config_keys`）。
+    pub fn set_manual_level(&mut self, step: usize, value: u8) -> Result<Vec<u8>, LevelSetError> {
+        if !manual_level_allowed(value) {
+            return Err(LevelSetError::Value);
+        }
+        let mut levels = self.manual_levels();
+        if step == 0 || step > levels.len() || step > MANUAL_BRIGHTNESS_MAX_STEPS {
+            return Err(LevelSetError::Step);
+        }
+        levels[step - 1] = value;
+        if !levels.windows(2).all(|w| w[0] <= w[1]) {
+            return Err(LevelSetError::Order);
+        }
+        self.manual_brightness_levels = Some(levels.clone());
+        Ok(levels)
+    }
+
     /// 本机布局对应的 NumLock 长按帧数（NUMPAD_GH3XLNDZ_01 = 62）。
     pub fn numlock_frames(&self) -> u32 {
         // 按「实际生效的布局」取长按帧数：auto 会解析成具体布局名，
@@ -605,12 +657,16 @@ impl Config {
                 ));
                 kept.truncate(MANUAL_BRIGHTNESS_MAX_STEPS);
             }
-            // 档位必须从暗到亮严格递增：否则 `bright 2` 可能比 `bright 1` 更暗，
-            // 与「档位越大越亮」的直觉相反。写错就整表丢弃，回落线性等分。
+            // 档位必须「从暗到亮」：否则 `bright 2` 可能比 `bright 1` 更暗，与「档位越大
+            // 越亮」的直觉相反。允许相邻两档相等——硬件只有 8 个刻度，用户把两档设成
+            // 同一个值只是看不出变化，属于合法写法（每档都可任意指定）。写错就整表丢弃，
+            // 回落到默认四档（与线性等分数值相同）。
             if kept.is_empty() {
                 notes.push(crate::i18n::t("note.manual_levels_reset"));
-            } else if !kept.windows(2).all(|w| w[0] < w[1]) {
+                self.manual_brightness_levels = default_manual_brightness_levels();
+            } else if !kept.windows(2).all(|w| w[0] <= w[1]) {
                 notes.push(crate::i18n::t("note.manual_levels_not_increasing"));
+                self.manual_brightness_levels = default_manual_brightness_levels();
             } else {
                 self.manual_brightness_levels = Some(kept);
             }
@@ -1100,11 +1156,91 @@ mod tests {
         };
         let notes = c.sanitize();
         assert!(!notes.is_empty(), "倒序表应给出告警");
-        // 丢弃自定义后回落到默认线性四档（首档为熄灭）
-        assert!(c.manual_brightness_levels.is_none());
+        // 丢弃非法表后回落到默认四档（数值与线性等分一致，首档为熄灭）
+        assert_eq!(
+            c.manual_brightness_levels,
+            Some(DEFAULT_MANUAL_LEVELS.to_vec())
+        );
         assert_eq!(c.manual_steps(), MANUAL_BRIGHTNESS_STEPS);
         assert_eq!(c.level_for_step(1), Some(VAL_OFF));
         assert_eq!(c.level_for_step(4), Some(0x48));
+    }
+
+    #[test]
+    fn default_manual_levels_are_linear_four() {
+        // 默认档表显式写在配置里，且与「线性等分现算」逐字节一致（升级不改观感）
+        let c = Config::default();
+        assert_eq!(
+            c.manual_brightness_levels,
+            Some(vec![0x00, 0x43, 0x45, 0x48])
+        );
+        assert_eq!(
+            c.manual_levels(),
+            crate::brightness::linear_levels_from_off(&c.brightness_levels, 4)
+        );
+        // 序列化时该项一定要写出来，用户才看得到每档的字节值
+        let json: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap();
+        assert_eq!(
+            json["manual_brightness_levels"],
+            serde_json::json!([0, 67, 69, 72])
+        );
+    }
+
+    #[test]
+    fn manual_level_accepts_any_supported_value() {
+        let mut c = Config::default();
+        // 每档都能单独指定：把第 2 档压到 0x41（最暗亮档），第 3 档保持 0x45
+        assert_eq!(
+            c.set_manual_level(2, 0x41),
+            Ok(vec![0x00, 0x41, 0x45, 0x48])
+        );
+        assert_eq!(c.level_for_step(2), Some(0x41));
+        // 允许把中间档设成 0x48（等于最亮），末档同步抬到 0x48 也合法（相邻相等）
+        assert_eq!(
+            c.set_manual_level(3, 0x48),
+            Ok(vec![0x00, 0x41, 0x48, 0x48])
+        );
+        // 灭档也可以挪走：第 1 档改成 0x41 → 四档全是亮的
+        assert_eq!(
+            c.set_manual_level(1, 0x41),
+            Ok(vec![0x41, 0x41, 0x48, 0x48])
+        );
+        // 非法值 / 越界档 / 破坏顺序都要拒绝，且不改动已生效的表
+        let before = c.manual_brightness_levels.clone();
+        assert_eq!(c.set_manual_level(2, 0x49), Err(LevelSetError::Value));
+        assert_eq!(c.set_manual_level(2, 0x30), Err(LevelSetError::Value));
+        assert_eq!(c.set_manual_level(0, 0x41), Err(LevelSetError::Step));
+        assert_eq!(c.set_manual_level(5, 0x48), Err(LevelSetError::Step));
+        assert_eq!(c.set_manual_level(2, 0x00), Err(LevelSetError::Order));
+        assert_eq!(c.manual_brightness_levels, before);
+    }
+
+    #[test]
+    fn manual_level_materializes_linear_table_first() {
+        // 表未显式配置（null）时改单档，应先把线性表落成实表，不能只剩一档
+        let mut c = Config {
+            manual_brightness_levels: None,
+            ..Config::default()
+        };
+        assert_eq!(
+            c.set_manual_level(2, 0x42),
+            Ok(vec![0x00, 0x42, 0x45, 0x48])
+        );
+        assert_eq!(c.manual_steps(), 4);
+    }
+
+    #[test]
+    fn manual_level_supports_non_power_of_two_step_counts() {
+        // 档数由表长决定：五档表每档都能任意指定
+        let mut c = Config {
+            manual_brightness_levels: Some(vec![0x41, 0x42, 0x43, 0x44, 0x48]),
+            ..Config::default()
+        };
+        assert_eq!(
+            c.set_manual_level(5, 0x47),
+            Ok(vec![0x41, 0x42, 0x43, 0x44, 0x47])
+        );
+        assert_eq!(c.manual_steps(), 5);
     }
 
     #[test]
@@ -1201,21 +1337,31 @@ mod tests {
             notes.iter().any(|n| n.contains("manual_brightness_levels")),
             "notes={notes:?}"
         );
-        // 全越界 → 放弃自定义，回落线性等分
+        // 全越界 → 放弃自定义，回落默认四档
         let mut c: Config =
             serde_json::from_str(r#"{"manual_brightness_levels":["0x30","0xff"]}"#).unwrap();
         let notes = c.sanitize();
-        assert_eq!(c.manual_brightness_levels, None);
+        assert_eq!(
+            c.manual_brightness_levels,
+            Some(DEFAULT_MANUAL_LEVELS.to_vec())
+        );
         assert_eq!(c.manual_levels().len(), MANUAL_BRIGHTNESS_STEPS as usize);
         assert_eq!(notes.len(), 2, "越界剔除 + 回落各一条提示: {notes:?}");
-        // 超长表：硬件只有 8 个物理档，10 档截断后必然出现重复值 → 判非递增 → 回落
+        // 超长表：硬件只有 8 个亮档，超过 8 档就截断；重复值属于合法写法（相邻相等允许），
+        // 所以 10 档同值截断后仍是 8 档，不再被判成非法而整表丢弃
         let mut c: Config =
             serde_json::from_str(r#"{"manual_brightness_levels":[65,65,65,65,65,65,65,65,65,65]}"#)
                 .unwrap();
         let notes = c.sanitize();
-        assert!(c.manual_brightness_levels.is_none());
-        assert_eq!(c.manual_levels().len(), MANUAL_BRIGHTNESS_STEPS as usize);
-        assert!(notes.len() >= 2, "截断 + 非递增各一条提示: {notes:?}");
+        assert_eq!(
+            c.manual_brightness_levels,
+            Some(vec![65; MANUAL_BRIGHTNESS_MAX_STEPS])
+        );
+        assert_eq!(c.manual_steps() as usize, MANUAL_BRIGHTNESS_MAX_STEPS);
+        assert!(
+            notes.iter().any(|n| n.contains("manual_brightness_levels")),
+            "notes={notes:?}"
+        );
     }
 
     #[test]

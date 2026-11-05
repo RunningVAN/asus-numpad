@@ -3,7 +3,7 @@
 #   rpmbuild -bb --define 'sku g634' asus-numpad.spec
 # 实际出包走的是 tools/rpmgen/build_rpm.py（Mac/Linux 都能跑，不需要 rpmbuild），
 # 这份 spec 保持与之等价，供发行版官方构建使用。
-%global all_skus g533 g614 g615 g634 g635 gx550 gx650 ux582 h7606
+%global all_skus g533 g614 g615 g634 g635 gx550 gx650 ux582
 %{!?sku:%global sku universal}
 
 %{!?version:%global version @VERSION@}

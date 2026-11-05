@@ -35,6 +35,10 @@ cli.cmd.bright = 亮度調節：四段手動調光（0~最大線性可調、可�
 cli.cmd.bright.long = 例：`bright 0|1|2|3|4`（0 = 熄滅，1 = 最暗，4 = 最亮，預設線性等分）、`bright up|down|cycle`（逐段/循環）、`bright follow on|off`、`bright status`；段位可用設定項 `manual_brightness_levels` 自行定義
 cli.cmd.bright.value = 段位 0/1/2/3/4（自訂段表時以表長為準），或 up / down / cycle / next / follow / status
 cli.cmd.bright.mode = `follow` 的取值：on / off
+cli.cmd.levels = 段位表：檢視每段位元組 / 為某一段指定任意支援亮度 / 還原預設四段
+cli.cmd.levels.long = 例：`levels`（列印目前段表）、`levels 2 0x46`（只改第 2 段，其餘不動，十進位 70 等價）、`levels reset`（還原預設四段 [0,0x43,0x45,0x48]）；每段可填 0x00（熄滅）或 0x41~0x48 八個亮度值，改完仍須由暗到亮（允許相鄰相等）
+cli.cmd.levels.step = 段號 1..N（N = 目前段數，最多 8），或 reset / default
+cli.cmd.levels.value = 該段下發的亮度：0x00 或 0x41~0x48（十進位、十六進位均可）
 cli.cmd.led = 直發背光命令字（排障用，繞過所有狀態機）
 cli.cmd.led.long = 例：led on | led off | led 0x41..0x48（1..8 段）。用來區分「驅動沒發」與「硬體不認這個值」。
 cli.cmd.led.value = on / off / 任意十六進位段位（如 0x41）
@@ -53,7 +57,7 @@ note.invalid_language = language={v} 無法辨識，改以 auto 處理
 note.manual_step_clamped = manual_brightness_step={step} 超出 0..={max}，已收斂至 {max}
 note.levels_dropped = brightness_levels 中有 {n} 項超出 0x{lo}..=0x{hi}，已剔除
 note.manual_levels_dropped = manual_brightness_levels 中有 {n} 項既不是 0（熄滅）也不在 0x{lo}..=0x{hi} 內，已剔除
-note.manual_levels_not_increasing = manual_brightness_levels 必須從暗到亮嚴格遞增，已放棄自訂、回落到線性等分
+note.manual_levels_not_increasing = manual_brightness_levels 必須由暗到亮（允許相鄰兩段相等），已放棄自訂、回落到預設四段 [0,0x43,0x45,0x48]
 note.manual_levels_truncated = manual_brightness_levels 有 {n} 段，超過硬體上限 {max} 段，已截斷
 note.manual_levels_reset = manual_brightness_levels 剔除越界值後為空，已放棄自訂、回落到線性等分
 note.numlock_zone = numlock_zone={v} 已不再支援，改以整格 cell 處理
@@ -114,6 +118,14 @@ bright.follow_off = 關（使用手動固定檔）
 bright.status_dir = 鍵盤背光目錄：{dir}（輪詢 {ms} ms）
 bright.status_step = 手動固定檔：{step}/{steps}（0=滅，1=最暗，{steps}=最亮）
 bright.status_map = 段位對應：0→0x{off}（滅）；{table}
+levels.table = 目前段表（{steps} 段，由暗到亮）：{table}
+levels.range = 每段可填 0x00（熄滅）或 0x41~0x48；跟隨鍵盤背光時用它自己的對應，來源目錄 {src}
+levels.wrote = 第 {step} 段已設為 0x{level}，已寫入 {path}（備份 {backup}）
+levels.reset = 段位表已還原預設四段 [0, 0x43, 0x45, 0x48]，已寫入 {path}（備份 {backup}）
+levels.err_step = 段號必須是 1~{steps} 之間的整數，收到：{step}
+levels.err_value = 亮度值只能是 0x00 或 0x41~0x48（十進位 65~72），收到：{value}
+levels.err_order = 第 {step} 段改成這個值會比前一段暗，已拒絕；先調後面的段，或 levels reset 重來
+levels.usage = 用法：`levels`（檢視）/ `levels <段號> <亮度>`（如 `levels 2 0x46`）/ `levels reset`
 bright.status_effective = 生效點燈值：{text}
 bright.measured = 鍵盤背光實測：{kbd}/{max} → 數字區 0x{cur}
 bright.measure_failed = 鍵盤背光實測：讀不到 {dir}（非 ASUS 機型 / asus-wmi 未載入）
@@ -281,9 +293,12 @@ sku.verdict = 機型校驗：{verdict}
 sku.verdict.match = 相符，繼續
 sku.verdict.match_hw = 相符（依觸控板模組 {module} 判定），繼續
 sku.verdict.mismatch = 不相符——本機是 {dmi}，裝錯套件了
+sku.verdict.not_numpad = 不適用——本機 {model} 的觸控板不是 NumberPad 虛擬數字鍵盤
+sku.not_numpad_reason = 原因：{reason}。這台不用裝 asus-numpad。
 sku.verdict.unknown = 無法判定，按放行處理（讀不到 DMI 不等於機型不對）
 sku.verdict.not_enforced = 未啟用（相容套件不校驗機型）
 sku.suggest = 建議改裝：{sku}（{pkg}）
 sku.tip_precise = 本機可辨識為 {sku}，改裝 {pkg} 可取得該機型的預設佈局與備註
 sku.no_candidate = 機型表未收錄本機代號，可用 --allow-sku-mismatch 強行執行，或到倉庫提 issue 補充該機型
 err.sku_mismatch = 本套件只服務「{sku}」，與本機不符，已停止啟動。請改裝 {pkg}；強制執行加 --allow-sku-mismatch。
+err.not_numpad = 本機 {model} 不需要 asus-numpad：{reason}。已停止啟動（退出碼 4）。

@@ -9,8 +9,8 @@
 # 旧包名，dnf 升级时自动接管，不会因为共用 /usr/bin/asus-numpad 报文件冲突。
 #
 # id	display	models	dmi_note	merged
-g533	ASUS 枪神6（G533）	G533	15.6 英寸；模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）	
+g533	ASUS 枪神6 / 魔霸6（G533 / G513 / G713）	G533,G513,G713	枪神6 与魔霸6 同代同平台，官方支持页均提供 NumberPad 驱动；模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）	
 g614	ASUS 枪神7 / 魔霸新锐 2023、枪神7 超竞版 16 英寸（G614 / G634）	G614,G634	模组 ASUE1416 / ASUF1416 → 键表 GH3XLNDZ，G614 与 G634 是同一块触摸板	g634
-g615	ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版、ProArt P16（G615 / G635 / H7606）	G615,G635,H7606	模组 ASCP1400 / ASCF1400（PixArt 093A 系列）→ 键表 GH4XLNDZ（同族）	g635,h7606
+g615	ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版（G615 / G635）	G615,G635	模组 ASCP1400 / ASCF1400（PixArt 093A 系列）→ 键表 GH4XLNDZ（同族）；ProArt P16（H7606）是 DialPad 旋钮，不属于 NumberPad	g635
 gx550	ASUS 冰刃双屏 15 / 16 英寸（GX550 / GX551 / GX650）	GX550,GX551,GX650	两代双屏同属键位族 gx551；GX550 模组 ASUE1408 → GVM_A	gx650
 ux582	灵耀双屏（UX582 / UX482）	UX582,UX482	模组 ASUE1406 / ELAN1406 → 键表 NVM	

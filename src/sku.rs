@@ -49,8 +49,14 @@ pub struct Sku {
 /// 模组名相同（如 `ASUE1416` / `ASUF1416`）就一定是同一份键表、同一套几何。
 ///
 /// * `g614` 吸收 `g634`：同一块 ELAN 触摸板（04F3:3275 / ASUE1416），键表 GH3XLNDZ；
-/// * `g615` 吸收 `g635`、`h7606`：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ 同族；
+/// * `g533` 吸收 `g513` / `g713`：枪神6 与魔霸6 同代同平台，官方支持页同样提供
+///   ASUS NumberPad 驱动，模组 ASUE1403 / ELAN1403 → GH2XLNDZ 同族；
+/// * `g615` 吸收 `g635`：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ 同族；
 /// * `gx550` 吸收 `gx650`：两代冰刃双屏同属 gx551 键位族。
+///
+/// 曾经把 ProArt P16（`H7606`）并进 `g615`，是**错的**：那台机器的触控板是 ASUS
+/// DialPad 智能旋钮（官方规格写 `support DialPad`），根本没有 NumberPad 虚拟数字键盘。
+/// 现已从机型号召里剔除，并落入 [`NON_NUMPAD_MODELS`] 显式拒绝，免得用户装了白装。
 ///
 /// 合并只影响「机型闸门」的 DMI 白名单，运行期选哪套键表仍由实际 HID 模组名决定，
 /// 所以合并不改变闸门的保守性：模组不在 `HID_LAYOUTS` 里，照样拒绝启动。
@@ -60,24 +66,24 @@ pub struct Sku {
 pub const SKUS: &[Sku] = &[
     Sku {
         id: "g533",
-        display: "ASUS 枪神6（G533）",
-        models: &["G533"],
+        display: "ASUS 枪神6 / 魔霸6（G533 / G513 / G713）",
+        models: &["G533", "G513", "G713"],
         modules: &["ASUE1403", "ELAN1403"],
-        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）",
+        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）；枪神6（G533）与魔霸6（G513 / G713）同代同平台，官方支持页都提供 ASUS NumberPad 驱动",
     },
     Sku {
         id: "g614",
-        display: "ASUS 枪神7 / 魔霸新锐 2023 / 枪神7 超竞版 16 英寸（G614 / G634）",
+        display: "ASUS 枪神7 / 枪神8 / 魔霸新锐 2023 / 枪神7 超竞版 16 英寸（G614 / G634）",
         models: &["G614", "G634"],
         modules: &["ASUE1416", "ASUF1416"],
         note: "合并包：G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
     },
     Sku {
         id: "g615",
-        display: "ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版、ProArt P16（G615 / G635 / H7606）",
-        models: &["G615", "G635", "H7606"],
+        display: "ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版（G615 / G635）",
+        models: &["G615", "G635"],
         modules: &["ASCP1400", "ASCF1400"],
-        note: "合并包：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）",
+        note: "合并包：PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，已剔除并显式拒绝",
     },
     Sku {
         id: "gx550",
@@ -101,6 +107,58 @@ pub const SKUS: &[Sku] = &[
         note: "仅在不确定机型时兜底使用",
     },
 ];
+
+/// 明确**不是** NumberPad 触摸板的机型：识别到就直说「这台不需要本驱动」。
+///
+/// 只靠 [`SKUS`] 的白名单做不到这件事——不在白名单里只会得到一句「机型不匹配，
+/// 建议改装 asus-numpad-xxx」，而这几类机器**装哪个包都没用**，必须把原因讲清楚：
+///
+/// * ProArt 系（`H7606` = ProArt P16）：触控板是 **ASUS DialPad 智能旋钮**，官方规格
+///   写的是 `support DialPad`，走旋钮的 HID 用法，与 NumberPad 的 `FEATURE 0x0d`
+///   数字区背光完全无关；
+/// * 18 英寸 Plus（`G834` / `G835` / `G814` / `G815` / `G813`）：机身自带物理数字键，
+///   触控板里没有虚拟数字键盘。
+///
+/// 判定与 [`SKUS`] 用同一套多字段 token 匹配，所以 `product_name` 写营销名、型号只落在
+/// `board_name` 的机器同样能认出来。
+pub const NON_NUMPAD_MODELS: &[(&str, &str)] = &[
+    (
+        "H7606",
+        "ProArt P16 的触控板是 ASUS DialPad 智能旋钮（官方规格 support DialPad），不是 NumberPad 虚拟数字键盘",
+    ),
+    (
+        "G834",
+        "18 英寸 Plus 机身自带物理数字键，触控板没有虚拟数字键盘",
+    ),
+    (
+        "G835",
+        "18 英寸 Plus 机身自带物理数字键，触控板没有虚拟数字键盘",
+    ),
+    (
+        "G814",
+        "18 英寸 Plus 机身自带物理数字键，触控板没有虚拟数字键盘",
+    ),
+    (
+        "G815",
+        "18 英寸 Plus 机身自带物理数字键，触控板没有虚拟数字键盘",
+    ),
+    (
+        "G813",
+        "18 英寸 Plus 机身自带物理数字键，触控板没有虚拟数字键盘",
+    ),
+];
+
+/// 该 DMI 身份是否命中「明确没有 NumberPad」的机型；命中返回 `(型号, 原因)`。
+pub fn non_numpad_hit(identity: &DmiIdentity) -> Option<(&'static str, &'static str)> {
+    let pools = identity.haystacks();
+    if pools.is_empty() {
+        return None;
+    }
+    NON_NUMPAD_MODELS
+        .iter()
+        .find(|(model, _)| matches_model(model, &pools))
+        .map(|(model, why)| (*model, *why))
+}
 
 /// 编译期由 `build.rs` 生成的机型常量（见仓库根 `build.rs`）。
 pub mod build {
@@ -254,6 +312,9 @@ pub enum DmiVerdict {
     MatchHardware(String),
     /// DMI 明确是别的（ASUS）机型
     Mismatch(String),
+    /// DMI 命中「结构上没有 NumberPad」的机型（ProArt 的 DialPad 旋钮、18 英寸物理数字键），
+    /// 附型号与原因，用于直接告知「这台不用装」，而不是含糊地报「不匹配」
+    NotNumberPad { model: String, reason: &'static str },
     /// DMI 厂商字段表明这不是 ASUS 机器
     NonAsus(String),
     /// 读不到 DMI（非 Linux、容器、权限受限、BIOS 只给了占位串）
@@ -283,6 +344,7 @@ impl DmiVerdict {
             DmiVerdict::Match => "match",
             DmiVerdict::MatchHardware(_) => "match-hw",
             DmiVerdict::Mismatch(_) => "mismatch",
+            DmiVerdict::NotNumberPad { .. } => "not-numpad",
             DmiVerdict::NonAsus(_) => "non-asus",
             DmiVerdict::Unknown => "unknown",
             DmiVerdict::NotEnforced => "not-enforced",
@@ -321,6 +383,14 @@ pub fn verdict_for_identity(sku: &Sku, identity: &DmiIdentity) -> DmiVerdict {
     }
     if sku.models.iter().any(|m| matches_model(m, &pools)) {
         return DmiVerdict::Match;
+    }
+    // 白名单没命中，但命中了「确定没有 NumberPad」的机型：给出准确原因，
+    // 不要落进 Mismatch 里让用户去试别的包。
+    if let Some((model, reason)) = non_numpad_hit(identity) {
+        return DmiVerdict::NotNumberPad {
+            model: model.to_string(),
+            reason,
+        };
     }
     if identity.is_asus() == Some(false) {
         let vendor = identity
@@ -516,6 +586,14 @@ pub fn verdict_full(sku: &Sku, identity: &DmiIdentity, hw: &HardwareProbe) -> Dm
     }
     if pools.is_empty() {
         return DmiVerdict::Unknown;
+    }
+    // 命中「确定没有 NumberPad」的机型（ProArt 的 DialPad、18 英寸物理数字键）：
+    // 明确告知这台不用装，也不给「改装哪个包」的建议——装哪个都没用。
+    if let Some((model, reason)) = non_numpad_hit(identity) {
+        return DmiVerdict::NotNumberPad {
+            model: model.to_string(),
+            reason,
+        };
     }
     if identity.is_asus() == Some(false) {
         let vendor = identity
@@ -730,7 +808,8 @@ mod tests {
         assert_eq!(ids.len(), n, "SKU id 必须唯一");
         assert!(by_id("universal").is_some(), "必须保留 universal 兜底");
         assert!(by_id("G614").is_some(), "机型查询应忽略大小写");
-        for merged in ["g634", "g635", "gx650", "h7606"] {
+        // g513 / g713 并进 g533，h7606 从机型号召直接剔除（ProArt 是 DialPad 旋钮）
+        for merged in ["g634", "g635", "gx650", "g513", "g713", "h7606"] {
             assert!(
                 by_id(merged).is_none(),
                 "{merged} 已并入同族包，不应再单独存在"
@@ -752,11 +831,85 @@ mod tests {
     }
 
     #[test]
-    fn plus_18inch_is_mismatch_for_16inch_pack() {
+    fn plus_18inch_is_not_numpad() {
         let sku = by_id("g614").unwrap();
         let v = verdict_for(sku, Some("ROG Strix SCAR 18 G834JY_G834JY"));
-        assert!(matches!(v, DmiVerdict::Mismatch(_)));
+        // 18 英寸是物理数字键：不是「装错包」，而是根本没有 NumberPad
+        assert!(
+            matches!(&v, DmiVerdict::NotNumberPad { model, .. } if model == "G834"),
+            "v={v:?}"
+        );
         assert!(!v.allows_run());
+        // 通用包不校验机型，照旧放行（用户自选兜底）
+        assert!(verdict_for(
+            by_id("universal").unwrap(),
+            Some("ROG Strix SCAR 18 G834JY")
+        )
+        .allows_run());
+    }
+
+    #[test]
+    fn proart_p16_is_not_numpad() {
+        // ProArt P16（H7606）触控板是 ASUS DialPad 智能旋钮，官方规格 support DialPad，
+        // 不是 NumberPad：任何机型包都不应该把它当适配对象，且要给出准确原因。
+        for sku_id in ["g615", "g614", "g533", "gx550", "ux582"] {
+            let v = verdict_for(
+                by_id(sku_id).unwrap(),
+                Some("ASUS ProArt P16 H7606WI_H7606WI"),
+            );
+            assert!(
+                matches!(&v, DmiVerdict::NotNumberPad { model, reason }
+                    if model == "H7606" && reason.contains("DialPad")),
+                "{sku_id}: v={v:?}"
+            );
+            assert!(!v.allows_run(), "{sku_id} 不应放行 ProArt");
+        }
+        assert_eq!(
+            verdict_for(by_id("universal").unwrap(), Some("ASUS ProArt P16 H7606WI")),
+            DmiVerdict::NotEnforced
+        );
+        // 型号只落在 board_name 上也能认出来
+        let identity = DmiIdentity {
+            sys_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
+            board_vendor: Some("ASUSTeK COMPUTER INC.".to_string()),
+            product_name: Some("ASUS ProArt P16".to_string()),
+            board_name: Some("H7606WI".to_string()),
+            product_family: None,
+        };
+        assert!(matches!(
+            verdict_for_identity(by_id("g615").unwrap(), &identity),
+            DmiVerdict::NotNumberPad { .. }
+        ));
+        // 真实的枪神/魔霸型号不能因为这条规则被误伤
+        for dmi in [
+            "ROG Strix SCAR 16 G615LR_G615LR",
+            "ROG Strix SCAR 16 G635LX_G635LX",
+            "ROG Strix SCAR 16 G634JY_G634JY",
+        ] {
+            let v = verdict_for(by_id("g615").unwrap(), Some(dmi));
+            assert!(
+                !matches!(v, DmiVerdict::NotNumberPad { .. }),
+                "{dmi}: v={v:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn g533_pack_covers_strix_g513_g713() {
+        // 魔霸6（G513 / G713）与枪神6（G533）同代同平台，官方支持页都提供 NumberPad 驱动
+        let g533 = by_id("g533").unwrap();
+        for dmi in [
+            "ROG Strix G15 G513RM_G513RM",
+            "ROG Strix G17 G713RC_G713RC",
+            "ROG Strix SCAR 15 G533ZW_G533ZW",
+        ] {
+            assert_eq!(verdict_for(g533, Some(dmi)), DmiVerdict::Match, "{dmi}");
+        }
+        // 同代 18 英寸 Plus 仍是物理数字键
+        assert!(matches!(
+            verdict_for(g533, Some("ROG Strix G18 G814JZ_G814JZ")),
+            DmiVerdict::NotNumberPad { .. }
+        ));
     }
 
     #[test]
@@ -832,15 +985,18 @@ mod tests {
         ] {
             assert_eq!(verdict_for(ux582, Some(dmi)), DmiVerdict::Match, "{dmi}");
         }
-        // ProArt P16（H7606）已并入 g615（同为 PixArt ASCP/ASCF 模组族）
+        // ProArt P16（H7606）不是 NumberPad：触控板是 DialPad 智能旋钮，已从机型号召剔除
         let g615 = by_id("g615").unwrap();
         for dmi in [
-            "ASUS ProArt P16 H7606WI_H7606WI",
             "ROG Strix G16 G615LR_G615LR",
             "ROG Strix SCAR 16 G635LX_G635LX",
         ] {
             assert_eq!(verdict_for(g615, Some(dmi)), DmiVerdict::Match, "{dmi}");
         }
+        assert!(matches!(
+            verdict_for(g615, Some("ASUS ProArt P16 H7606WI_H7606WI")),
+            DmiVerdict::NotNumberPad { .. }
+        ));
         // 跨包互不误放：冰刃双屏包不认枪神，枪神包不认冰刃
         assert!(!verdict_for(gx550, Some("ROG Strix SCAR 16 G634JY_G634JY")).allows_run());
         assert!(!verdict_for(

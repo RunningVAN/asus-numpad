@@ -27,17 +27,23 @@ fi
 DMI="$(tr -d '\n\r' < "$DMI_FILE" | sed 's/[[:space:]]*$//')"
 echo "本机 DMI 型号：$DMI"
 
-# 18 英寸 Plus：官方规格是物理 Num-key（with Num-key），没有虚拟数字键盘
+# 明确没有 NumberPad 的机型：直接告知不需要装，装哪个包都没用（退出码 4）
 case "$DMI" in
     *G834*|*G835*|*G815*|*G814*|*G813*)
+        # 18 英寸 Plus：官方规格是物理 Num-key（with Num-key）
         echo "这台是 18 英寸 Plus 机型，触控板没有虚拟数字键盘（物理数字键），不需要装 asus-numpad。" >&2
+        exit 4
+        ;;
+    *H7606*)
+        # ProArt P16：触控板是 ASUS DialPad 智能旋钮（官方规格 support DialPad）
+        echo "这台是 ProArt P16（H7606），触控板是 ASUS DialPad 智能旋钮，不是 NumberPad 虚拟数字键盘，不需要装 asus-numpad。" >&2
         exit 4
         ;;
 esac
 
 SKU=""
 case "$DMI" in
-    *G533*) SKU=g533 ;;
+    *G533*|*G513*|*G713*) SKU=g533 ;;
     *G614*) SKU=g614 ;;
     *G615*) SKU=g615 ;;
     *G634*) SKU=g634 ;;
@@ -45,7 +51,6 @@ case "$DMI" in
     *GX550*|*GX551*) SKU=gx550 ;;
     *GX650*) SKU=gx650 ;;
     *UX582*|*UX482*) SKU=ux582 ;;
-    *H7606*) SKU=h7606 ;;
 esac
 
 if [ -z "$SKU" ]; then
@@ -74,7 +79,7 @@ echo "使用安装包：$PKG"
 
 # 已装其它机型包时先提示（两个包互相 Conflicts，dnf 自己也会拦）
 if command -v rpm >/dev/null 2>&1; then
-    for other in g533 g614 g615 g634 g635 gx550 gx650 ux582 h7606 universal; do
+    for other in g533 g614 g615 g634 g635 gx550 gx650 ux582 universal; do
         [ "$other" = "$SKU" ] && continue
         if rpm -q "asus-numpad-$other" >/dev/null 2>&1; then
             echo "注意：当前已装 asus-numpad-${other}，安装前需要先卸载它（sudo dnf remove asus-numpad-${other}）"

@@ -144,10 +144,10 @@ sudo apk add --allow-untrusted asus-numpad
 | 任意 x86_64 | `asus-numpad-<ver>-x86_64.tar.gz` |
 
 ```bash
-sudo apt install ./asus-numpad_1.2.2_amd64.deb
-sudo dnf install ./asus-numpad-1.2.2-1.el9.x86_64.rpm
-sudo pacman -U asus-numpad-1.2.2-1-x86_64.pkg.tar.zst
-sudo apk add --allow-untrusted ./asus-numpad-1.2.2-r0.apk
+sudo apt install ./asus-numpad_1.2.3_amd64.deb
+sudo dnf install ./asus-numpad-1.2.3-1.el9.x86_64.rpm
+sudo pacman -U asus-numpad-1.2.3-1-x86_64.pkg.tar.zst
+sudo apk add --allow-untrusted ./asus-numpad-1.2.3-r0.apk
 ```
 
 发版同时产出 `SHA256SUMS`，校验方式：

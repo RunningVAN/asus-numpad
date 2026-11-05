@@ -176,7 +176,7 @@ asus-numpad --lang en check     # 仅本次生效
 | `led_kind` | `auto` / `hidraw` / `i2c` / `none` | 背光通道 |
 | `follow_keyboard_brightness` | `true` / `false` | 是否跟随键盘背光，默认 `true` |
 | `manual_brightness_step` | `0`..`4` | 手动档（0=灭，1..4 线性递增），仅跟随关闭时生效 |
-| `manual_brightness_levels` | 数组 | 自定义四档下发值，默认按 `brightness_levels` 线性等分；每项取 `0`（熄灭）或 `0x41`..`0x48`，须从暗到亮严格递增 |
+| `manual_brightness_levels` | 数组 | 自定义档位下发值，默认按 `brightness_levels` 线性等分成四档（`0`、`0x43`、`0x45`、`0x48`）；**每档可独立指定**任意硬件支持值——`0`（熄灭）或 `0x41`..`0x48`，长度 1..8 即档数，允许重复值，越界项整表回落到默认四档 |
 | `brightness_levels` | 数组 | 硬件全档下发值，默认 `0x41`..`0x48`（1..8 档） |
 | `brightness_poll_ms` | 毫秒 | 轮询间隔，默认 `500` |
 | `allow_unverified_layout` | `true` / `false` | 放行未收录键表的同族布局 |
@@ -187,11 +187,21 @@ asus-numpad --lang en check     # 仅本次生效
 
 | 包 | 机型 |
 | --- | --- |
-| `g533` | 枪神6（G533） |
+| `g533` | 枪神6 / 魔霸6（G533、G513、G713） |
 | `g614` | 枪神7 / 魔霸新锐 2023 / 超竞版 16"（G614、G634） |
-| `g615` | 枪神9/10 16"、魔霸新锐 2025、ProArt P16（G615、G635、H7606） |
+| `g615` | 枪神9/10 16"、魔霸新锐 2025（G615、G635） |
 | `gx550` | 冰刃双屏 15/16"（GX550、GX551、GX650） |
 | `ux582` | 灵耀双屏（UX582、UX482） |
+
+### 明确不适用的机型
+
+这几类机器**机身里没有 NumberPad 虚拟数字键盘**，装哪个包都没用，驱动与
+`packaging/install-sku.sh` 都会直接拒绝并说明原因（退出码 `4`）：
+
+| 机型 | 原因 |
+| --- | --- |
+| ProArt P16（H7606） | 触控板是 ASUS **DialPad 智能旋钮**，官方规格写 `support DialPad`，走旋钮的 HID 用法，与 NumberPad 的 `FEATURE 0x0d` 数字区背光无关 |
+| 18" Plus（G834、G835、G814、G815、G813） | 机身自带**物理数字键**，触控板里没有虚拟数字键盘 |
 
 一个包 = 一个触控板模组族，不是一个整机 SKU；被合并的旧包名保留在 `Obsoletes` 里，
 升级自动接管。机型包之间互相 `Conflicts`。

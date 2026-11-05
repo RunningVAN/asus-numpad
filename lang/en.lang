@@ -35,6 +35,10 @@ cli.cmd.bright = Brightness: four manual steps (0..max, linear or custom) / foll
 cli.cmd.bright.long = e.g. `bright 0|1|2|3|4` (0 = off, 1 = darkest, 4 = brightest, linearly spaced by default), `bright up|down|cycle`, `bright follow on|off`, `bright status`; define your own steps with the `manual_brightness_levels` config key
 cli.cmd.bright.value = Step 0/1/2/3/4 (bounded by a custom step table), or up / down / cycle / next / follow / status
 cli.cmd.bright.mode = Value for `follow`: on / off
+cli.cmd.levels = Step table: show per-step bytes / set any step to any supported level / restore defaults
+cli.cmd.levels.long = e.g. `levels` (print the current table), `levels 2 0x46` (change step 2 only, 70 decimal works too), `levels reset` (back to the default [0,0x43,0x45,0x48]); each step accepts 0x00 (off) or any of 0x41..0x48, and the table must stay non-decreasing
+cli.cmd.levels.step = Step 1..N (N = current step count, max 8), or reset / default
+cli.cmd.levels.value = Level for that step: 0x00 or 0x41..0x48 (decimal or hex)
 cli.cmd.led = Send a raw backlight command byte (bypasses every state machine; for diagnosis)
 cli.cmd.led.long = e.g. led on | led off | led 0x41..0x48 (levels 1..8). Separates "never sent" from "hardware rejects".
 cli.cmd.led.value = on / off / any hex level (e.g. 0x41)
@@ -53,7 +57,7 @@ note.invalid_language = language={v} is not recognised, falling back to auto
 note.manual_step_clamped = manual_brightness_step={step} is outside 0..={max}, clamped to {max}
 note.levels_dropped = {n} entr(y/ies) in brightness_levels are outside 0x{lo}..=0x{hi} and were dropped
 note.manual_levels_dropped = {n} entr(y/ies) in manual_brightness_levels are neither 0 (off) nor inside 0x{lo}..=0x{hi} and were dropped
-note.manual_levels_not_increasing = manual_brightness_levels must increase strictly from dim to bright; custom table dropped, falling back to linear spacing
+note.manual_levels_not_increasing = manual_brightness_levels must be non-decreasing from dim to bright; custom table dropped, falling back to the default [0,0x43,0x45,0x48]
 note.manual_levels_truncated = manual_brightness_levels has {n} steps, above the hardware limit of {max}; truncated
 note.manual_levels_reset = manual_brightness_levels is empty after dropping out-of-range values; falling back to linear spacing
 note.numlock_zone = numlock_zone={v} is no longer supported, treating it as a whole cell
@@ -114,6 +118,14 @@ bright.follow_off = off (uses the manual fixed step)
 bright.status_dir = Keyboard backlight dir: {dir} (polling {ms} ms)
 bright.status_step = Manual fixed step: {step}/{steps} (0=off, 1=darkest, {steps}=brightest)
 bright.status_map = Step mapping: 0→0x{off} (off); {table}
+levels.table = Current step table ({steps} steps, dim to bright): {table}
+levels.range = Every step accepts 0x00 (off) or 0x41..0x48; while following the keyboard backlight its own mapping is used, source dir {src}
+levels.wrote = Step {step} set to 0x{level}; written to {path} (backup {backup})
+levels.reset = Step table restored to the default [0, 0x43, 0x45, 0x48]; written to {path} (backup {backup})
+levels.err_step = Step must be an integer within 1..{steps}, got: {step}
+levels.err_value = Level must be 0x00 or 0x41..0x48 (65..72 decimal), got: {value}
+levels.err_order = Step {step} would be darker than the previous step; rejected. Adjust later steps first or run `levels reset`
+levels.usage = Usage: `levels` (show) / `levels <step> <value>` (e.g. `levels 2 0x46`) / `levels reset`
 bright.status_effective = Effective LED value: {text}
 bright.measured = Measured keyboard backlight: {kbd}/{max} → numpad 0x{cur}
 bright.measure_failed = Measured keyboard backlight: cannot read {dir} (not an ASUS model / asus-wmi not loaded)
@@ -281,9 +293,12 @@ sku.verdict = Model check: {verdict}
 sku.verdict.match = match, continuing
 sku.verdict.match_hw = match (by touchpad module {module}), continuing
 sku.verdict.mismatch = mismatch — this machine is {dmi}, wrong package
+sku.verdict.not_numpad = not applicable — the touchpad on this {model} is not a NumberPad virtual keypad
+sku.not_numpad_reason = Reason: {reason}. This machine does not need asus-numpad.
 sku.verdict.unknown = cannot tell, allowing run (unreadable DMI does not mean wrong model)
 sku.verdict.not_enforced = not enforced (the universal package skips the model check)
 sku.suggest = Suggested package: {sku} ({pkg})
 sku.tip_precise = Detected {sku}; installing {pkg} gives you that model's default layout
 sku.no_candidate = This machine is not in the model table; run with --allow-sku-mismatch, or file an issue to add it
 err.sku_mismatch = This package only serves "{sku}" and does not match this machine; startup stopped. Install {pkg} instead, or add --allow-sku-mismatch to force.
+err.not_numpad = This {model} does not need asus-numpad: {reason}. Startup stopped (exit code 4).

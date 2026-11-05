@@ -52,6 +52,11 @@ enum Cmd {
         value: Option<String>,
         mode: Option<String>,
     },
+    /// 档位表：查看 / 按档指定任意支持亮度 / 恢复默认四档。
+    Levels {
+        step: Option<String>,
+        value: Option<String>,
+    },
     /// 直发背光命令字（排障用）：`on` / `off` / 任意十六进制档位。
     Led {
         value: Option<String>,
@@ -240,6 +245,21 @@ fn build_cli() -> Command {
                 ),
         )
         .subcommand(
+            Command::new("levels")
+                .about(t("cli.cmd.levels"))
+                .long_about(t("cli.cmd.levels.long"))
+                .arg(
+                    Arg::new("step")
+                        .value_name("STEP")
+                        .help(t("cli.cmd.levels.step")),
+                )
+                .arg(
+                    Arg::new("value")
+                        .value_name("VALUE")
+                        .help(t("cli.cmd.levels.value")),
+                ),
+        )
+        .subcommand(
             Command::new("led")
                 .about(t("cli.cmd.led"))
                 .long_about(t("cli.cmd.led.long"))
@@ -321,6 +341,10 @@ fn opts_from(matches: &ArgMatches) -> Opts {
         Some(("bright", sub)) => Cmd::Bright {
             value: sub.get_one::<String>("value").cloned(),
             mode: sub.get_one::<String>("mode").cloned(),
+        },
+        Some(("levels", sub)) => Cmd::Levels {
+            step: sub.get_one::<String>("step").cloned(),
+            value: sub.get_one::<String>("value").cloned(),
         },
         Some(("led", sub)) => Cmd::Led {
             value: sub.get_one::<String>("value").cloned(),
@@ -1082,6 +1106,157 @@ fn apply_step(cfg: &Config, cfg_path: &Path, step: u8) -> Result<i32> {
     Ok(if ok { 0 } else { 1 })
 }
 
+/// 解析一个亮度值：十进制（`65`）或十六进制（`0x41`）。
+fn parse_level_value(raw: &str) -> Option<u8> {
+    let t = raw.trim().to_ascii_lowercase();
+    match t.strip_prefix("0x") {
+        Some(hex) => u8::from_str_radix(hex, 16).ok(),
+        None => t.parse::<u8>().ok(),
+    }
+}
+
+/// 打印当前档位表（每档 → 实际下发的字节）。
+fn print_levels_table(cfg: &Config) {
+    let mut table = Vec::new();
+    for step in 1..=cfg.manual_steps() {
+        let v = cfg.level_for_step(step).unwrap_or(VAL_OFF);
+        table.push(format!("{step}→0x{v:02x}"));
+    }
+    println!(
+        "{}",
+        i18n::tf(
+            "levels.table",
+            &[
+                ("steps", &cfg.manual_steps().to_string()),
+                ("table", &table.join(&i18n::t("common.list_sep"))),
+            ]
+        )
+    );
+    println!(
+        "{}",
+        i18n::tf("levels.range", &[("src", &cfg.keyboard_brightness_dir)])
+    );
+}
+
+/// `levels`：查看档位表 / 给某一档指定任意支持亮度 / 恢复默认四档。
+///
+/// 需求是「每个档位都能指定任意一个支持的亮度，现在的线性四档只作默认」，所以：
+/// * `asus-numpad levels`            → 打印当前档表（要看得出每档到底发多少字节）
+/// * `asus-numpad levels 2 0x46`     → 把第 2 档设成 0x46，其余档不动
+/// * `asus-numpad levels 3 71`       → 十进制写法，等价 0x47
+/// * `asus-numpad levels reset`      → 恢复默认四档 `[0, 0x43, 0x45, 0x48]`
+///
+/// 合法值只有硬件的 `0x00`（熄灭）与 `0x41..=0x48`（八档亮度），改完仍要求非递减，
+/// 否则 `bright up` 会越按越黑。
+fn cmd_levels(
+    cfg: &Config,
+    cfg_path: &Path,
+    step: Option<&str>,
+    value: Option<&str>,
+) -> Result<i32> {
+    let step = step.map(|s| s.trim().to_ascii_lowercase());
+    let step = step.as_deref();
+    match (step, value) {
+        (None, None) => {
+            print_levels_table(cfg);
+            Ok(0)
+        }
+        (Some("reset") | Some("default"), None) => {
+            let levels = config::DEFAULT_MANUAL_LEVELS.to_vec();
+            let backup = persist_config_keys(
+                cfg_path,
+                &[("manual_brightness_levels", serde_json::json!(levels))],
+            )?;
+            println!(
+                "{}",
+                i18n::tf(
+                    "levels.reset",
+                    &[
+                        ("path", &cfg_path.display().to_string()),
+                        ("backup", &backup.display().to_string()),
+                    ]
+                )
+            );
+            print_levels_table(&Config {
+                manual_brightness_levels: Some(levels),
+                ..cfg.clone()
+            });
+            try_restart_service();
+            Ok(0)
+        }
+        (Some(s), Some(raw)) => {
+            let Ok(step_no) = s.parse::<usize>() else {
+                println!(
+                    "{}",
+                    i18n::tf(
+                        "levels.err_step",
+                        &[("step", s), ("steps", &cfg.manual_steps().to_string()),]
+                    )
+                );
+                println!("{}", i18n::t("levels.usage"));
+                return Ok(2);
+            };
+            let Some(level) = parse_level_value(raw) else {
+                println!("{}", i18n::tf("levels.err_value", &[("value", raw)]));
+                return Ok(2);
+            };
+            let mut next = cfg.clone();
+            match next.set_manual_level(step_no, level) {
+                Ok(levels) => {
+                    let backup = persist_config_keys(
+                        cfg_path,
+                        &[("manual_brightness_levels", serde_json::json!(levels))],
+                    )?;
+                    println!(
+                        "{}",
+                        i18n::tf(
+                            "levels.wrote",
+                            &[
+                                ("step", &step_no.to_string()),
+                                ("level", &format!("{level:02x}")),
+                                ("path", &cfg_path.display().to_string()),
+                                ("backup", &backup.display().to_string()),
+                            ]
+                        )
+                    );
+                    print_levels_table(&next);
+                    // 档表变了，常驻服务要重新读配置才生效
+                    try_restart_service();
+                    Ok(0)
+                }
+                Err(config::LevelSetError::Value) => {
+                    println!("{}", i18n::tf("levels.err_value", &[("value", raw)]));
+                    Ok(2)
+                }
+                Err(config::LevelSetError::Step) => {
+                    println!(
+                        "{}",
+                        i18n::tf(
+                            "levels.err_step",
+                            &[
+                                ("step", &step_no.to_string()),
+                                ("steps", &cfg.manual_steps().to_string()),
+                            ]
+                        )
+                    );
+                    Ok(2)
+                }
+                Err(config::LevelSetError::Order) => {
+                    println!(
+                        "{}",
+                        i18n::tf("levels.err_order", &[("step", &step_no.to_string())])
+                    );
+                    Ok(2)
+                }
+            }
+        }
+        _ => {
+            println!("{}", i18n::t("levels.usage"));
+            Ok(2)
+        }
+    }
+}
+
 /// `led`：绕过所有状态机，直接下发一个背光命令字。
 ///
 /// 报「完全不亮」时必须先分清两件事：
@@ -1453,6 +1628,18 @@ fn sku_gate(allow_mismatch: bool) -> Option<i32> {
     println!("{}", banner());
     println!("{}", sku_block());
     println!();
+    // 「确定没有 NumberPad」的机器（ProArt 的 DialPad 旋钮、18 英寸物理数字键）单独给
+    // 退出码与文案：它既不是装错包，也没有「该装的包」，笼统报机型不匹配会把用户带偏。
+    if let sku::DmiVerdict::NotNumberPad { model, reason } = &verdict {
+        println!(
+            "{}",
+            i18n::tf(
+                "err.not_numpad",
+                &[("model", model.as_str()), ("reason", *reason)]
+            )
+        );
+        return Some(4);
+    }
     println!(
         "{}",
         i18n::tf(
@@ -1490,11 +1677,19 @@ fn sku_block() -> String {
         sku::DmiVerdict::Match => i18n::t("sku.verdict.match"),
         sku::DmiVerdict::MatchHardware(m) => i18n::tf("sku.verdict.match_hw", &[("module", m)]),
         sku::DmiVerdict::Mismatch(d) => i18n::tf("sku.verdict.mismatch", &[("dmi", d)]),
+        sku::DmiVerdict::NotNumberPad { model, .. } => {
+            i18n::tf("sku.verdict.not_numpad", &[("model", model.as_str())])
+        }
         sku::DmiVerdict::NonAsus(v) => i18n::tf("sku.verdict.non_asus", &[("vendor", v)]),
         sku::DmiVerdict::Unknown => i18n::t("sku.verdict.unknown"),
         sku::DmiVerdict::NotEnforced => i18n::t("sku.verdict.not_enforced"),
     };
     out.push_str(&i18n::tf("sku.verdict", &[("verdict", &verdict_text)]));
+    // 「这台没有 NumberPad」时把原因讲清楚，并明说不用装哪个包——用户最容易在这里白折腾
+    if let sku::DmiVerdict::NotNumberPad { reason, .. } = &verdict {
+        out.push('\n');
+        out.push_str(&i18n::tf("sku.not_numpad_reason", &[("reason", *reason)]));
+    }
     // 装错包时直接给出该装的包，省掉用户自己翻机型表
     if matches!(
         verdict,
@@ -1604,6 +1799,9 @@ fn main() -> Result<()> {
         Cmd::Dump => cmd_dump(&cfg)?,
         Cmd::Bright { value, mode } => {
             cmd_bright(&cfg, &cfg_path, value.as_deref(), mode.as_deref())?
+        }
+        Cmd::Levels { step, value } => {
+            cmd_levels(&cfg, &cfg_path, step.as_deref(), value.as_deref())?
         }
         Cmd::Led { value } => cmd_led(&cfg, value.as_deref())?,
         Cmd::Lang { code } => cmd_lang(&cfg_path, code.as_deref())?,
