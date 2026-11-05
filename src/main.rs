@@ -1646,9 +1646,8 @@ fn cmd_dump(cfg: &Config) -> Result<i32> {
 
 /// 机型闸门：这台机器根本跑不起来的，就在启动前说清楚。
 ///
-/// 自动识别上线后「装错包」不再是问题，剩下的拦截只有两种：厂商明确不是 ASUS，
-/// 以及 DMI 命中「结构上没有 NumberPad」的机型（ProArt 的 DialPad 旋钮、
-/// 18 英寸的物理数字键）。返回 `Some(退出码)` 表示已拦下，`None` 表示放行。
+/// 自动识别上线后「装错包」不再是问题，剩下的拦截只有一种：厂商明确不是 ASUS。
+/// 返回 `Some(退出码)` 表示已拦下，`None` 表示放行。
 fn sku_gate(cfg: &Config, allow_mismatch: bool) -> Option<i32> {
     let identity = sku::dmi_identity();
     let hw = sku::probe_hardware();
@@ -1672,18 +1671,6 @@ fn sku_gate(cfg: &Config, allow_mismatch: bool) -> Option<i32> {
     println!("{}", banner());
     println!("{}", sku_block(cfg));
     println!();
-    // 「确定没有 NumberPad」的机器单独给退出码与文案：它既不是认错机型，
-    // 也没有「该改的配置」，笼统报机型不符会把用户带偏。
-    if let sku::DmiVerdict::NotNumberPad { model, reason } = &resolved.verdict {
-        println!(
-            "{}",
-            i18n::tf(
-                "err.not_numpad",
-                &[("model", model.as_str()), ("reason", *reason)]
-            )
-        );
-        return Some(4);
-    }
     if let sku::DmiVerdict::NonAsus(vendor) = &resolved.verdict {
         println!("{}", i18n::tf("err.not_asus", &[("vendor", vendor)]));
         return Some(3);
@@ -1732,19 +1719,11 @@ fn sku_block(cfg: &Config) -> String {
         sku::DmiVerdict::Match => i18n::t("sku.verdict.match"),
         sku::DmiVerdict::MatchHardware(m) => i18n::tf("sku.verdict.match_hw", &[("module", m)]),
         sku::DmiVerdict::Mismatch(d) => i18n::tf("sku.verdict.mismatch", &[("dmi", d)]),
-        sku::DmiVerdict::NotNumberPad { model, .. } => {
-            i18n::tf("sku.verdict.not_numpad", &[("model", model.as_str())])
-        }
         sku::DmiVerdict::NonAsus(v) => i18n::tf("sku.verdict.non_asus", &[("vendor", v)]),
         sku::DmiVerdict::Unknown => i18n::t("sku.verdict.unknown"),
         sku::DmiVerdict::NotEnforced => i18n::t("sku.verdict.not_enforced"),
     };
     out.push_str(&i18n::tf("sku.verdict", &[("verdict", &verdict_text)]));
-    // 「这台没有 NumberPad」时把原因讲清楚，并明说不用装哪个包——用户最容易在这里白折腾
-    if let sku::DmiVerdict::NotNumberPad { reason, .. } = &resolved.verdict {
-        out.push('\n');
-        out.push_str(&i18n::tf("sku.not_numpad_reason", &[("reason", *reason)]));
-    }
     // 没认出机型时补一句手动通道：读不到 DMI 的机器（虚拟机、白牌机箱、占位串）
     // 只能靠人指定，这是本功能存在的意义。
     if !resolved.is_detected() && resolved.allows_run() {

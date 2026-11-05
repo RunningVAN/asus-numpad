@@ -231,13 +231,17 @@ use vendor defaults.
 
 | Model id | Models |
 | --- | --- |
+| `g533` | Strix SCAR 15 / Strix G15 (2022): `G533`, `G513` |
 | `g614` | Strix SCAR 16 / Strix G16 (2023): `G614`, `G634` |
-| `universal` | Everything else: vendor defaults, keymap picked by touchpad module |
+| `g615` | Strix SCAR 16 / Strix G16 (2025 and later): `G615`, `G635` |
+| `gx550` | Zephyrus Duo 15 and 16: `GX550`, `GX551`, `GX650` |
+| `ux582` | Zenbook Duo: `UX582`, `UX482` |
+| `universal` | Anything else: vendor defaults, keymap picked by touchpad module |
 
-Two rows only, because one family has been on a physical machine (`G634JY`). Other models are
-neither listed nor rejected: they run on `universal`, and the keymap still comes from the actual
-touchpad module, not from the machine name. Listing a model without hardware behind it is a claim
-nobody can reproduce.
+Model ids are there to switch parameters by hand (`asus-numpad sku <id>`) and to show what
+auto-detection picked; they never block startup. A machine that matches no row simply runs on
+`universal`, with the keymap still chosen by the actual touchpad module. Only `G634` has been on a
+physical machine; the other rows map from touchpad module data and keymap tables.
 
 The model code in DMI is authoritative; marketing names are for orientation only. The old per-model
 package names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades move to `asus-numpad`.
@@ -248,9 +252,9 @@ Detection uses the union of the DMI fields `product_name`, `board_name` and `pro
 placeholder strings count as missing and do not block startup; a vendor field that is clearly not
 ASUS blocks startup.
 
-Touchpad module name (such as `ASUE1416`, read from i2c-hid and HID) is the second signal and is
-used when DMI has no usable model. A known DMI model that is not a NumberPad machine is not
-overridden by it. Module and keymap per model: [docs/machines.md](docs/machines.md).
+Touchpad module name (such as `ASUE1416`, read from i2c-hid and HID) is the second signal, used
+when DMI names no model. Neither signal pointing at a model means `universal`. Module and keymap per
+model: [docs/machines.md](docs/machines.md).
 
 When the hardware cannot be read reliably, pin the model:
 

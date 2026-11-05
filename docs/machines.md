@@ -69,7 +69,7 @@ asus-numpad check
 `check` 里的 `本机触摸板模组` 一行就是硬件层读数：驱动会扫
 `/sys/bus/i2c/devices/*/name`、`/sys/bus/hid/devices/*/HID_NAME` 与
 `/proc/bus/input/devices`，把 `ASUE1416` 这类模组名归一化后与机型表比对。
-DMI 写坏、写成占位串的机器靠这一层仍能认出实测机型。机型表之外的型号不参与机型判定，
+DMI 写坏、写成占位串的机器靠这一层仍能认出机型。机型表之外的型号不参与机型判定，
 一律走通用配置——键表按模组选，不受整机型号影响。
 
 新 PID 加进 `src/led_policy.rs` 的 `KNOWN_NUMPAD_PIDS`；新模组在

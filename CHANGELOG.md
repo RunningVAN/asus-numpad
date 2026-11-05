@@ -16,16 +16,16 @@
 - **打包层收拢**：删掉 `packaging/build-skus.sh`、`install-sku.sh`、`skus.tsv`；spec 与
   `make-rpm.sh` 去掉机型参数与包名互斥，改为 `Obsoletes` / `Provides` 旧机型包名，
   装过 `asus-numpad-g614` 之类的机器 `dnf upgrade` 自动换过来。
-- 判定不变的部分：明确不是 NumberPad 的机型（`G713`、`H7606`、18 英寸 Plus 等）仍以退出码
-  `4` 拒绝并说明原因，非 ASUS 厂商仍以退出码 `3` 拒绝。
+- 判定不变的部分：非 ASUS 厂商仍以退出码 `3` 拒绝；「这台没有 NumberPad」的机型不再单独
+  拦截（见下节）。
 
-### 机型表只收实测机型
+### 去掉「这台没有 NumberPad」的拦截
 
-- `SKUS` 只剩 `g614`（`G614` / `G634`）与兜底的 `universal`。删掉 `g533`（含 `G513`）、
-  `g615`（含 `G635`）、`gx550`（含 `GX551` / `GX650`）、`ux582`（含 `UX482`）四条：键表本来就
-  按触摸板模组选（`HID_LAYOUTS`），这些机器走通用配置，功能不变。
-- `--sku` / 配置 `sku` 填已下架的 id（如 `gx550`）现在按未知 id 处理：退出码 `2` 并列出可选 id。
-- README 双语机型表同步为两行，删掉「理论支持」那一段。
+- 删掉 `NON_NUMPAD_MODELS` 与 `DmiVerdict::NotNumberPad` 及退出码 `4`（ProArt P16 的
+  DialPad 旋钮、18 英寸 Plus、17 英寸 G17 的物理数字键）。这类机器现在落通用配置照常放行，
+  能与不能动硬件由运行期的布局闸门按实际触摸板模组判断，不再靠机型名单预先否掉。
+- 机型表 `SKUS` 六个条目（`g533` / `g614` / `g615` / `gx550` / `ux582` / `universal`）全部
+  保留，作用是自动识别与 `sku` 手动切换，不参与拦截。
 
 ## 1.2.3
 
