@@ -1,6 +1,6 @@
 # asus-numpad
 
-English | [简体中文](README.zh-CN.md)
+English | [简体中文](README.zh-CN.md) · [Website](https://runningvan.github.io/asus-numpad/)
 
 Linux userspace driver for the ASUS NumberPad. The touchpad is grabbed through evdev, contacts
 are mapped to numpad cells, key events are injected through uinput. No kernel module is replaced,
