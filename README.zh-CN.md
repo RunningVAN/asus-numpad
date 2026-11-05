@@ -1,6 +1,6 @@
 # asus-numpad
 
-[English](README.md) | 简体中文 · [官网](https://runningvan.github.io/asus-numpad/)
+[English](README.md) | 简体中文 · [官网](https://asus-numpad.github.io/)
 
 ASUS NumberPad 的 Linux 用户态驱动。通过 evdev 独占触摸板，把触点换算成小键盘格，通过 uinput
 注入按键。不替换内核模块，不打 ACPI 补丁，卸载即恢复原状。
