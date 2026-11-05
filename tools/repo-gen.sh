@@ -48,7 +48,7 @@ VERSION="$(ls "$DIST" | sed -n 's/^asus-numpad_\([0-9][^-]*\)-[0-9]*_[a-z0-9]*\.
 [[ -n "$VERSION" ]] || warn "推不出版本号，索引里的 Date 用当天"
 VERSION="${VERSION:-0.0.0}"
 
-log "版本 $VERSION，产物 $DIST，输出 $OUT"
+log "版本 ${VERSION}，产物 ${DIST}，输出 $OUT"
 mkdir -p "$OUT"
 
 # --------------------------------------------------------------------------- #
@@ -217,7 +217,14 @@ do_alpine() {
         prune "$d"
         if have apk; then
             log "生成 APKINDEX: $(basename "$d")"
-            ( cd "$d" && rm -f APKINDEX.tar.gz && apk index -o APKINDEX.tar.gz --rewrite-arch "$(basename "$d")" ./*.apk >/dev/null )
+            # 不传 --rewrite-arch：apk-tools 3（Alpine 3.22 起）删掉了这个选项，
+            # 包的架构本来就写在 .PKGINFO 里，索引自己会读，用不着改写
+            local out
+            if ! out=$( cd "$d" && apk index --allow-untrusted -o APKINDEX.tar.gz ./*.apk 2>&1 ); then
+                printf '%s\n' "$out" | tail -n 5 >&2
+                warn "apk index 失败（$(basename "$d")）"
+                return 1
+            fi
         else
             warn "缺少 apk 工具，跳过 $(basename "$d") 的索引（apk-tools）"
         fi

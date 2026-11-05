@@ -3,7 +3,7 @@
 rustPlatform.buildRustPackage {
   pname = "asus-numpad";
   # 版本号与 Cargo.toml 保持一致；改动版本时只需改这一处
-  version = "1.2.0";
+  version = "1.2.1";
 
   src = ../.;
 

@@ -103,7 +103,7 @@ cargo_build() {
     else
         warn "缺少 Cargo.lock，本次不加 --locked；发布前请执行 cargo generate-lockfile 并提交"
     fi
-    log "编译 $BIN_NAME（release, $mode）"
+    log "编译 ${BIN_NAME}（release, ${mode}）"
     ( cd "$root" && cargo "${args[@]}" )
     [[ -x "$(built_binary)" ]] || die "编译产物不存在: $(built_binary)"
 }

@@ -2,6 +2,36 @@
 
 版本号跟包版本一致；`-N` 后缀是发版前的构建号。
 
+## 1.2.1
+
+### 出包
+
+- **同时为 7 个发行版出包**：apt 线四个（Ubuntu 22.04 / 24.04、Debian 12 / 13），
+  rpm 线三个（AlmaLinux 9 / Fedora / openSUSE Tumbleweed），加 Arch 与 Alpine。
+- **软件源只收「基线包」**：取编译环境 glibc 最老的那一份——apt 收 22.04 编的、
+  rpm 收 el9 编的。此前 apt 与 rpm 仓库里都是同名包互相覆盖，最后留下哪个发行版编的
+  全看 artifact 下载顺序，`Sources` 里看着正常、在老系统上却可能装不上。
+  其余发行版的原生包照发，只是挂在 Release 而不进源。
+- deb 版本号支持 `~distro` 标签（`1.2.1~jammy`），rpm 的 `Release` 从写死的 `12`
+  改为可传参（`--release`，默认 1），两者都只影响文件名与版本序，包名不变，
+  升级链不断。
+- **修好 Alpine 出包**：两处都是硬性检查——APKBUILD 必须摆在
+  `aports/community/<pkgname>/` 这种以包名命名的目录里，且执行 abuild 的用户必须
+  在 `abuild` 组里，否则第一步装依赖就报 `User builder is not a member of group abuild`。
+  第三处是源码摆放：`source` 里写裸文件名时 abuild 只认 APKBUILD 同级目录，把
+  tarball 放进 SRCDEST 会让它报 `sha512sum FAILED`。此前这三条都没满足，Alpine
+  包从没出成功过。顺带把 `find -printf` 换成 busybox 也认的写法（Alpine 的 find
+  没有这个动作），并在 abuild 跑完后把 `PKGDEST` 与 `REPODEST` 两处都扫一遍收回
+  `.apk`——不同 abuild 版本对这两个变量的优先级不一样，只认一处会出现「abuild
+  成功了但 dist 是空的」。
+- **修掉脚本里「变量后面紧跟中文标点」的坑**：`$VERSION，` 这种写法会被 bash
+  当成名为 `VERSION，` 的变量，脚本开了 `set -u` 就直接 `unbound variable` 退出
+  （`repo-gen.sh` 因此在 CI 里失败），没开 `set -u` 的则静默吞掉内容、日志显示空白。
+  全仓统一改成 `${VERSION}` 形式。
+- **Alpine 源索引去掉 `--rewrite-arch`**：apk-tools 3 删了这个选项，带上它
+  `apk index` 直接报错，仓库生成整步失败；包架构本来就在 `.PKGINFO` 里。
+- 出包失败的容器日志现在直接贴在 Actions 输出里，不用再下载 artifact 才能复盘。
+
 ## 1.2.0
 
 ### 亮度

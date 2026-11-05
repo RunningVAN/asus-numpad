@@ -2,7 +2,11 @@
 # 构建 .deb。用 dpkg-deb 直接打包，不依赖 debhelper —— 项目只有一个二进制
 # 加两个数据文件，走 dh 那套反而要拉一整套构建依赖。
 #
-# 用法: ./packaging/deb/make-deb.sh [--version X] [--no-build] [--out DIR]
+# 用法: ./packaging/deb/make-deb.sh [--version X] [--distro NAME] [--no-build] [--out DIR]
+#
+# --distro 给版本号加 `~NAME` 后缀（如 `1.2.0~jammy`），用于同一次发版里
+# 为多个发行版各出一个包：文件名不同才不会互相覆盖，apt 也认这种版本序
+# （`1.2.0~jammy` < `1.2.0`，升级链不断）。出"通用基线"包时不带这个参数。
 
 set -euo pipefail
 SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,15 +14,17 @@ SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SELF_DIR/../lib/common.sh"
 
 VERSION=""
+DISTRO=""
 DO_BUILD=1
 OUT_DIR=""
 
 while (($#)); do
     case "$1" in
         --version)  VERSION="${2:?}"; shift 2 ;;
+        --distro)   DISTRO="${2:?}"; shift 2 ;;
         --no-build) DO_BUILD=0; shift ;;
         --out)      OUT_DIR="${2:?}"; shift 2 ;;
-        -h|--help)  sed -n '2,7p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help)  sed -n '2,12p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *)          die "未知参数: $1" ;;
     esac
 done
@@ -30,6 +36,10 @@ ROOT="$(repo_root)"
 VERSION="${VERSION:-$(cargo_version)}"
 [[ -n "$VERSION" ]] || die "读不到 Cargo.toml 里的版本号"
 DEB_ARCH="$(arch_deb)"
+# 发行版标签只进版本号，不改包名——包名一变就成了另一个软件包，升级链会断
+if [[ -n "$DISTRO" ]]; then
+    VERSION="${VERSION}~${DISTRO}"
+fi
 OUT_DIR="${OUT_DIR:-$ROOT/dist}"
 if [[ $DO_BUILD -eq 1 ]]; then
     cargo_build

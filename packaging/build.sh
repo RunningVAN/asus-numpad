@@ -69,7 +69,7 @@ done
 # 去重且保序
 mapfile -t EXPANDED < <(printf '%s\n' "${EXPANDED[@]}" | awk '!seen[$0]++')
 
-log "版本 $VERSION，目标 ${EXPANDED[*]}，产物目录 $OUT_DIR"
+log "版本 ${VERSION}，目标 ${EXPANDED[*]}，产物目录 $OUT_DIR"
 
 # --------------------------------------------------------------------------- #
 # 打包前自检：缺文件比缺工具更常见（.spec 里的 %license、service、rules 都一样致命）

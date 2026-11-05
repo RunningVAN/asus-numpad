@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # 构建 RPM。用 rpmbuild 走标准 spec，源码按 tarball 喂进去（%autosetup 依赖它）。
 #
-# 用法: ./packaging/rpm/make-rpm.sh [--version X] [--sku g634] [--check] [--out DIR]
+# 用法: ./packaging/rpm/make-rpm.sh [--version X] [--sku g634] [--release N] [--check] [--out DIR]
+#
+# --release 指定 RPM 的 Release 号（默认 1）。同一次发版要给多个发行版出包时，
+# 用不同的 Release 让文件名互不覆盖；spec 里的 `%{?dist}` 会再补上 .el9 / .fc44 之类的
+# 发行版标记，所以通常不需要手动区分。
 # 不给 --sku 就出全机型兼容包（asus-numpad，不做机型校验）。
 #
 # 注意：编译发生在 spec 的 %build 里，由 rpmbuild 自己完成，所以这里没有
@@ -13,6 +17,7 @@ SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SELF_DIR/../lib/common.sh"
 
 VERSION=""
+RELEASE="1"
 CHECK_ONLY=0
 OUT_DIR=""
 SKU="universal"
@@ -20,10 +25,11 @@ SKU="universal"
 while (($#)); do
     case "$1" in
         --version)  VERSION="${2:?}"; shift 2 ;;
+        --release)  RELEASE="${2:?}"; shift 2 ;;
         --sku)      SKU="${2:?}"; shift 2 ;;
         --check)    CHECK_ONLY=1; shift ;;
         --out)      OUT_DIR="${2:?}"; shift 2 ;;
-        -h|--help)  sed -n '2,9p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help)  sed -n '2,14p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *)          die "未知参数: $1" ;;
     esac
 done
@@ -52,7 +58,8 @@ tar -C "$ROOT" \
 [[ -f "$ROOT/LICENSE" ]] || die "缺少 LICENSE 文件（spec 的 %license 需要它）"
 
 log "机型：$SKU"
-sed "s/@VERSION@/$VERSION/g" "$SELF_DIR/asus-numpad.spec" > "$TOPDIR/SPECS/$PKG_NAME.spec"
+sed -e "s/@VERSION@/$VERSION/g" -e "s/@RELEASE@/$RELEASE/g" \
+    "$SELF_DIR/asus-numpad.spec" > "$TOPDIR/SPECS/$PKG_NAME.spec"
 
 DEFINES=(
     --define "_topdir $TOPDIR"

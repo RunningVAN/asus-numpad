@@ -78,25 +78,43 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: deb-debian
-            image: debian:bookworm
-            deps: |
+          # Ubuntu 22.04 编出来的包是 apt 仓库的「通用基线」：glibc 2.35，
+          # 装得上 22.04 / 24.04、Debian 12 / 13——取这条线里最老的一个当基线，
+          # 才不会出现「新版能装、老版报 GLIBC_2.38 not found」。
+          - name: deb-ubuntu-jammy
+            image: ubuntu:22.04
+            deps: &apt-deps |
               set -eux
               apt-get update
               apt-get install -y --no-install-recommends curl ca-certificates dpkg-dev fakeroot build-essential
               curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
               ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             build: bash ./packaging/deb/make-deb.sh --out dist
-          - name: deb-ubuntu
+          # 另外两条线各出一个带发行版标签的包（版本号加 ~noble / ~bookworm），
+          # 只挂在 Release 里给愿意用「原生编译」版本的人，不进 apt 仓库。
+          - name: deb-ubuntu-noble
             image: ubuntu:24.04
+            deps: *apt-deps
+            build: bash ./packaging/deb/make-deb.sh --distro noble --out dist
+          - name: deb-debian
+            image: debian:trixie
+            deps: *apt-deps
+            build: bash ./packaging/deb/make-deb.sh --distro trixie --out dist
+          - name: deb-debian-bookworm
+            image: debian:bookworm
+            deps: *apt-deps
+            build: bash ./packaging/deb/make-deb.sh --distro bookworm --out dist
+          # 一套 spec 同时覆盖 Fedora / RHEL / openSUSE：不依赖发行版私有宏。
+          # RHEL 9 的 glibc 2.34 是三条线里最老的，它编出来的包就是 rpm 仓库的
+          # 「通用基线」；Fedora 与 openSUSE 的包带各自的 %dist 标记，只挂 Release。
+          - name: rpm-el9
+            image: almalinux:9
             deps: |
               set -eux
-              apt-get update
-              apt-get install -y --no-install-recommends curl ca-certificates dpkg-dev build-essential
-              curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
-              ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
-            build: bash ./packaging/deb/make-deb.sh --out dist
-          # 一套 spec 同时覆盖 Fedora 与 openSUSE：不依赖发行版私有宏
+              dnf install -y 'dnf-command(config-manager)' || true
+              dnf install -y epel-release || true
+              dnf install -y cargo rust gcc gcc-c++ make rpm-build systemd-rpm-macros tar gzip
+            build: bash ./packaging/rpm/make-rpm.sh --out dist
           - name: rpm-fedora
             image: fedora:latest
             deps: |
@@ -108,7 +126,9 @@ jobs:
             deps: |
               set -eux
               zypper --non-interactive install --no-recommends cargo rust gcc gcc-c++ make rpm-build tar gzip
-            build: bash ./packaging/rpm/make-rpm.sh --out dist
+            # openSUSE 的 rpmbuild 不带 %dist 宏，默认会得到 asus-numpad-<ver>-1.x86_64.rpm，
+            # 和别的源混在一起看不出是给谁的；显式写进 Release 段
+            build: bash ./packaging/rpm/make-rpm.sh --release 1.suse --out dist
           - name: arch
             image: archlinux:latest
             deps: |
@@ -126,6 +146,9 @@ jobs:
               set -eux
               apk add --no-cache alpine-sdk cargo rust bash tar gzip sudo
               id builder >/dev/null 2>&1 || adduser -D builder
+              # abuild 要求执行者在 abuild 组里，否则第一步建依赖就报
+              # "User builder is not a member of group abuild"
+              addgroup builder abuild
               mkdir -p /etc/sudoers.d
               echo 'builder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/builder
               chmod 0440 /etc/sudoers.d/builder
@@ -173,7 +196,18 @@ jobs:
 
       - name: 容器日志（${{ matrix.name }}）
         if: always()
-        run: docker logs npbuild > logs/04-docker.log 2>&1 || true
+        run: |
+          docker logs npbuild > logs/04-docker.log 2>&1 || true
+          # 出包失败时把容器内日志整段贴到 Actions 输出里：公开仓库的日志
+          # 无需 token 即可阅读，省掉「下载 artifact 才能复盘」这一步。
+          if true; then
+            echo "=== 出包日志（${{ matrix.name }}）==="
+            for f in logs/*.log; do
+              [ -f "$f" ] || continue
+              echo "--- $f ---"
+              tail -n 120 "$f"
+            done
+          fi
 
       - name: 保存日志
         if: always()
@@ -214,6 +248,11 @@ jobs:
       - name: 推到 ci-logs 分支
         run: |
           set -euo pipefail
+          # 日志目录空时直接退出：否则 orphan 分支上的空提交会把上一次的日志冲掉
+          if [ ! -d ci-logs ] || [ -z "$(find ci-logs -type f -print -quit)" ]; then
+            echo "没有日志可推，保持 ci-logs 分支不动"
+            exit 0
+          fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan ci-logs-tmp
@@ -267,6 +306,50 @@ jobs:
           echo "版本 $V"
           ls -l dist
 
+      # 同一次发版里有多个发行版编出来的同类包（4 个 deb、3 个 rpm）。
+      # 仓库只能收一份：收「基线」——取编译环境 glibc 最老的那个，
+      # 这样 22.04 编的 deb 能装 22.04~24.04 与 Debian 12/13，el9 编的 rpm
+      # 能装 RHEL 9/10、Fedora、openSUSE。其余发行版原生包只挂 Release。
+      - name: 分出基线包与发行版专用包
+        run: |
+          set -euo pipefail
+          mkdir -p baseline extras
+          shopt -s nullglob
+          debs=(dist/*.deb)
+          rpms=(dist/*.rpm)
+          if [ "${#debs[@]}" -ne 1 ] && [ "${#debs[@]}" -gt 0 ]; then
+            # 多于一个「无发行版后缀」的 deb 说明基线不唯一，宁可停下也不发错源
+            base_count=0
+            for f in "${debs[@]}"; do
+              case "$f" in *~*) ;; *) base_count=$((base_count + 1)) ;; esac
+            done
+            if [ "$base_count" -ne 1 ]; then
+              echo "dist 里的 deb：${debs[*]}"
+              echo "::error::apt 基线 deb 不唯一（$base_count 个），检查 matrix 的 --distro 参数"
+              exit 1
+            fi
+          fi
+          for f in "${debs[@]}"; do
+            case "$f" in *~*) mv "$f" extras/ ;; *) mv "$f" baseline/ ;; esac
+          done
+          echo "dist 里的 rpm：${rpms[*]:-无}"
+          el9=0
+          for f in "${rpms[@]}"; do
+            # 注意 rpm 名是 asus-numpad-<ver>-1.el9.x86_64.rpm，el9 在中间，
+            # 用 *el9*.rpm 而不是 *.el9.rpm
+            case "$f" in
+              *el9*.rpm) mv "$f" baseline/; el9=$((el9 + 1)) ;;
+              *)         mv "$f" extras/ ;;
+            esac
+          done
+          if [ "$el9" -ne 1 ]; then
+            echo "::error::rpm 基线包（*el9*.rpm）应恰好 1 个，实际 $el9 个"
+            exit 1
+          fi
+          mv dist/*.pkg.tar.* dist/*.apk dist/*.tar.gz baseline/ 2>/dev/null || true
+          echo "基线："; ls -1 baseline
+          echo "发行版专用："; ls -1 extras
+
       - name: 装索引工具
         run: |
           sudo apt-get update
@@ -298,10 +381,10 @@ jobs:
           set -euo pipefail
           missing=0
           check() { # $1 名字  $2 匹配式
-            if compgen -G "dist/$2" >/dev/null; then
-              echo "OK   $1: $(compgen -G "dist/$2" | wc -l | tr -d ' ') 个"
+            if compgen -G "baseline/$2" >/dev/null || compgen -G "extras/$2" >/dev/null; then
+              echo "OK   $1: $(compgen -G "baseline/$2" | wc -l | tr -d ' ')/$(compgen -G "extras/$2" | wc -l | tr -d ' ') 个（基线/专用）"
             else
-              echo "MISS $1（dist/$2）"
+              echo "MISS $1（base+extras/$2）"
               missing=1
             fi
           }
@@ -316,7 +399,19 @@ jobs:
           fi
 
       - name: 生成仓库
-        run: ./tools/repo-gen.sh --dist dist --out repo --keep 3
+        run: |
+          set -o pipefail
+          # 失败时把最后几十行打成 annotation，公开可查，不必登录看日志
+          if ! bash -x ./tools/repo-gen.sh --dist baseline --out repo --keep 3 2>&1 | tee /tmp/repo-gen.log; then
+            echo "::error::repo-gen.sh 失败，关键行与尾部输出如下"
+            { grep -aE "错误|失败|unrecognized|not found|No such|denied|fatal|invalid" /tmp/repo-gen.log | tail -n 20
+              echo "---- tail ----"
+              tail -n 60 /tmp/repo-gen.log
+            } | cut -c1-900 | while IFS= read -r line; do
+              echo "::error::RG| $line"
+            done
+            exit 1
+          fi
 
       - name: 校验索引没丢东西
         run: |
@@ -329,8 +424,8 @@ jobs:
 
       - name: 生成校验和
         run: |
-          ( cd dist && sha256sum ./* 2>/dev/null | grep -v SHA256SUMS > SHA256SUMS || true )
-          cp dist/SHA256SUMS "dist/asus-numpad-${{ steps.ver.outputs.version }}-SHA256SUMS"
+          ( for d in baseline extras; do ( cd "$d" && sha256sum ./* 2>/dev/null ); done \
+              | grep -v SHA256SUMS > extras/asus-numpad-${{ steps.ver.outputs.version }}-SHA256SUMS || true )
 
       - name: 发 Release
         env:
@@ -338,12 +433,12 @@ jobs:
         run: |
           V="${{ steps.ver.outputs.version }}"
           if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" dist/* --clobber
+            gh release upload "v$V" baseline/* extras/* --clobber
           elif [ -f CHANGELOG.md ]; then
-            gh release create "v$V" dist/* --title "asus-numpad $V" \
+            gh release create "v$V" baseline/* extras/* --title "asus-numpad $V" \
               --notes-file CHANGELOG.md --target main
           else
-            gh release create "v$V" dist/* --title "asus-numpad $V" \
+            gh release create "v$V" baseline/* extras/* --title "asus-numpad $V" \
               --generate-notes --target main
           fi
 

@@ -24,6 +24,24 @@ cat /sys/class/dmi/id/product_name    # 例如 G634JY → 装 g614 包
 密钥轮换的成本和收益不成比例；索引里的哈希校验值齐全，介意完整性的请改用 Release
 里的包手工安装。
 
+### 源里放的是哪个包
+
+同一次发版会为多个发行版各编一份，但**仓库里只收一份「基线包」**——取编译环境
+glibc 最老的那个，这样一条源能覆盖整条线，不会出现「新版能装、老版报
+`GLIBC_2.38 not found`」：
+
+| 生态 | 源里的基线 | 由哪编出 | 覆盖范围 |
+| --- | --- | --- | --- |
+| apt | `asus-numpad_<ver>~jammy_amd64.deb` | Ubuntu 22.04 | Ubuntu 22.04 / 24.04、Debian 12 / 13、Mint 21+ |
+| rpm | `asus-numpad-<ver>-1.el9.x86_64.rpm` | AlmaLinux 9 | RHEL / Rocky / Alma 9 与 10、Fedora、openSUSE |
+| pacman | `asus-numpad-<ver>-1-x86_64.pkg.tar.zst` | Arch | Arch / Manjaro / EndeavourOS |
+| apk | `asus-numpad-<ver>-r0.apk` | Alpine | Alpine 3.19+ |
+
+想用**本发行版原生编译**的包（比如 bookworm / trixie / noble / fedora / openSUSE
+各自的构建），从 Release 页面下带发行版后缀的那一份，文件名里的 `~jammy`、`~noble`、
+`~trixie`、`~bookworm`、`.el9`、`.fc44`、`.suse` 就是编译环境标记。它们和基线包
+是同一个软件，只是编译时用的 C 库版本不同。
+
 ### Debian / Ubuntu / Mint
 
 ```bash
@@ -78,8 +96,8 @@ sudo apk add --allow-untrusted asus-numpad
 
 | 发行版 | 文件 |
 | --- | --- |
-| Debian / Ubuntu | `asus-numpad_<ver>-1_amd64.deb` |
-| Fedora / RHEL / openSUSE | `asus-numpad-<ver>-1.<dist>.x86_64.rpm` |
+| Debian / Ubuntu | `asus-numpad_<ver>~<distro>_amd64.deb`（`~jammy` / `~noble` / `~bookworm` / `~trixie`） |
+| Fedora / RHEL / openSUSE | `asus-numpad-<ver>-1.<dist>.x86_64.rpm`（`.el9` / `.fc44` / `.suse`） |
 | Arch / Manjaro | `asus-numpad-<ver>-1-x86_64.pkg.tar.zst` |
 | Alpine | `asus-numpad-<ver>-r0.apk` |
 | 任意 x86_64 | `asus-numpad-<ver>-x86_64.tar.gz` |
@@ -94,7 +112,7 @@ sudo apk add --allow-untrusted ./asus-numpad-1.2.0-r0.apk
 发版同时产出 `SHA256SUMS`，校验方式：
 
 ```bash
-sha256sum -c asus-numpad-1.2.0-SHA256SUMS --ignore-missing
+sha256sum -c asus-numpad-1.2.1-SHA256SUMS --ignore-missing
 ```
 
 ## tarball（任意发行版）
@@ -103,8 +121,8 @@ sha256sum -c asus-numpad-1.2.0-SHA256SUMS --ignore-missing
 包里带安装脚本，不经过包管理器：
 
 ```bash
-tar xzf asus-numpad-1.2.0-x86_64.tar.gz
-cd asus-numpad-1.2.0
+tar xzf asus-numpad-1.2.1-x86_64.tar.gz
+cd asus-numpad-1.2.1
 sudo ./install.sh --dry-run     # 先看它要做什么
 sudo ./install.sh
 ```
@@ -127,7 +145,7 @@ sudo ./install.sh
 sudo mkdir -p /etc/portage/repos.conf
 # 用本地 overlay 即可：
 sudo mkdir -p /var/db/repos/asus-numpad/sys-apps/asus-numpad
-sudo cp packaging/gentoo/asus-numpad-1.2.0.ebuild /var/db/repos/asus-numpad/sys-apps/asus-numpad/
+sudo cp packaging/gentoo/asus-numpad-1.2.1.ebuild /var/db/repos/asus-numpad/sys-apps/asus-numpad/
 cd /var/db/repos/asus-numpad && sudo repoman manifest 2>/dev/null || sudo pkgdev manifest
 sudo emerge -av sys-apps/asus-numpad
 ```

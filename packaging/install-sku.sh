@@ -21,7 +21,7 @@ done
 
 DMI_FILE="${ASUS_DMI_FILE:-/sys/class/dmi/id/product_name}"
 if [ ! -r "$DMI_FILE" ]; then
-    echo "读不到 $DMI_FILE，不是 Linux 或权限不足（这个脚本只在装了驱动的机器上跑）" >&2
+    echo "读不到 ${DMI_FILE}，不是 Linux 或权限不足（这个脚本只在装了驱动的机器上跑）" >&2
     exit 2
 fi
 DMI="$(tr -d '\n\r' < "$DMI_FILE" | sed 's/[[:space:]]*$//')"
@@ -77,7 +77,7 @@ if command -v rpm >/dev/null 2>&1; then
     for other in g533 g614 g615 g634 g635 gx550 gx650 ux582 h7606 universal; do
         [ "$other" = "$SKU" ] && continue
         if rpm -q "asus-numpad-$other" >/dev/null 2>&1; then
-            echo "注意：当前已装 asus-numpad-$other，安装前需要先卸载它（sudo dnf remove asus-numpad-$other）"
+            echo "注意：当前已装 asus-numpad-${other}，安装前需要先卸载它（sudo dnf remove asus-numpad-${other}）"
         fi
     done
 fi
@@ -99,5 +99,5 @@ fi
 
 echo
 echo "装完先跑这两条确认："
-echo "  asus-numpad sku      # 应显示本包机型 $SKU 与本机 DMI $DMI，判定为 match"
+echo "  asus-numpad sku      # 应显示本包机型 $SKU 与本机 DMI ${DMI}，判定为 match"
 echo "  asus-numpad doctor   # 查触控板与背光节点"

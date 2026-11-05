@@ -23,7 +23,7 @@ Conflicts:      asus-numpad-%{s}
 %endif
 
 Version:        %{version}
-Release:        12%{?dist}
+Release:        @RELEASE@%{?dist}
 License:        GPL-3.0-or-later
 URL:            https://github.com/RunningVAN/asus-numpad
 Source0:        asus-numpad-%{version}.tar.gz

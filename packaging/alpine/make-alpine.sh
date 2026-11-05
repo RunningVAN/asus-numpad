@@ -35,7 +35,9 @@ fi
 # APKBUILD 的 source 指向 GitHub 归档，本地出包时改用当前工作树打出来的 tarball，
 # 这样未发布的改动也能测到
 WORK="$(mktmp)"
-APKROOT="$WORK/aports"
+# abuild 要求 APKBUILD 所在目录名等于 pkgname（它按目录名推导 $pkgname 与产物的
+# 落点），直接把 APKBUILD 丢在 aports/ 根下会被拒绝，所以按 aports 的层级摆好。
+APKROOT="$WORK/aports/community/$PKG_NAME"
 SRCDEST="$WORK/srcdest"
 mkdir -p "$APKROOT" "$SRCDEST"
 
@@ -52,13 +54,29 @@ sed -e "s/^pkgver=.*/pkgver=$VERSION/" \
     -e "s|^source=.*|source=\"$PKG_NAME-\$pkgver.tar.gz\"|" \
     "$SELF_DIR/APKBUILD" > "$APKROOT/APKBUILD"
 install -m 0644 "$SELF_DIR/$PKG_NAME.post-install" "$APKROOT/"
+# source 里写的是裸文件名（不带 URL），abuild 会当成「本地源码」直接在 APKBUILD
+# 所在目录找；只放进 SRCDEST 它会报 sha512sum FAILED。这里复制一份到 startdir。
+cp "$SRCDEST/$PKG_NAME-$VERSION.tar.gz" "$APKROOT/"
 
-log "abuild -r（产物目录 $OUT_DIR）"
+log "abuild -r（产物目录 ${OUT_DIR}）"
 (
     cd "$APKROOT"
     SRCDEST="$SRCDEST" PKGDEST="$OUT_DIR" REPODEST="$WORK/packages" \
         abuild -r -P "$WORK/packages"
 )
 
+# abuild 对产物落点有两套变量：PKGDEST 与 -P 指定的 REPODEST，不同版本优先级
+# 不一样。两边都扫一遍，把 .apk 收进 OUT_DIR，免得「abuild 成功了但 dist 是空的」。
+shopt -s nullglob
+if [ -z "$(echo "$OUT_DIR"/*.apk)" ]; then
+    find "$WORK/packages" -name '*.apk' -exec cp -f {} "$OUT_DIR/" \; 2>/dev/null || true
+fi
+apks=("$OUT_DIR"/*.apk)
+if [ "${#apks[@]}" -eq 0 ]; then
+    die "abuild 跑完了但没找到 .apk（检查 abuild 的输出与 REPODEST）"
+fi
 log "完成，产物："
-find "$OUT_DIR" -maxdepth 1 -name '*.apk' -printf '  %f\n' 2>/dev/null || ls -l "$OUT_DIR"
+# 不用 find -printf：Alpine 带的是 busybox find，没有这个动作
+for f in "${apks[@]}"; do
+    log "  $(basename "$f")"
+done

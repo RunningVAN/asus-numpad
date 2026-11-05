@@ -53,9 +53,9 @@ if [[ $STATIC -eq 1 ]]; then
     require cargo
     if ! rustup target list --installed 2>/dev/null | grep -qx "$MUSL_TRIPLE"; then
         log "安装目标 $MUSL_TRIPLE"
-        rustup target add "$MUSL_TRIPLE" || die "装不上 $MUSL_TRIPLE（需要 rustup）"
+        rustup target add "$MUSL_TRIPLE" || die "装不上 ${MUSL_TRIPLE}（需要 rustup）"
     fi
-    log "静态编译（$MUSL_TRIPLE）"
+    log "静态编译（${MUSL_TRIPLE}）"
     # musl 目标默认自带自包含链接，不再需要 glibc 版本假设
     ( cd "$ROOT" && cargo build --release --locked --target "$MUSL_TRIPLE" ) \
         || ( cd "$ROOT" && cargo build --release --target "$MUSL_TRIPLE" )
