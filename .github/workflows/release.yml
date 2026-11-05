@@ -512,6 +512,9 @@ jobs:
               exit 1
             fi
           done
+          # GitHub 不收以 . 开头的资产名，.SRCINFO 会被存成 default.SRCINFO。
+          # 另存一份正常名字随 Release 发布；makepkg 本身只用 PKGBUILD + .install。
+          cp pkg/.SRCINFO pkg/asus-numpad-rs.SRCINFO
           echo "待发产物："
           ls -1a pkg
 
@@ -599,15 +602,16 @@ jobs:
         run: |
           V="${{ steps.ver.outputs.version }}"
           if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" pkg/* pkg/.SRCINFO --clobber
+            gh release delete-asset "v$V" default.SRCINFO -y >/dev/null 2>&1 || true
+            gh release upload "v$V" pkg/* --clobber
             # 重打 tag 时旧 Release 会失去 tag 关联、退化成草稿（网页上看不到），
             # 这里强制把它绑回当前 tag 并置为已发布。
             gh release edit "v$V" --tag "v$V" --draft=false
           elif [ -f CHANGELOG.md ]; then
-            gh release create "v$V" pkg/* pkg/.SRCINFO --title "asus-numpad $V" \
+            gh release create "v$V" pkg/* --title "asus-numpad $V" \
               --notes-file CHANGELOG.md --target main
           else
-            gh release create "v$V" pkg/* pkg/.SRCINFO --title "asus-numpad $V" \
+            gh release create "v$V" pkg/* --title "asus-numpad $V" \
               --generate-notes --target main
           fi
 
