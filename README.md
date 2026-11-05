@@ -107,11 +107,18 @@ SigLevel = Optional TrustAll
 Server = https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/arch/$arch
 EOF
 sudo pacman -Sy asus-numpad
+
+# Arch / Manjaro（AUR，源码包，跟滚动版走）
+yay -S asus-numpad-rs
 ```
 
+每个生态只出一份通用包：一份 deb 从 Ubuntu 22.04 编出，覆盖 22.04~24.04 与
+Debian 12/13；一份 rpm 从 AlmaLinux 9 编出，覆盖 RHEL/Alma/Rocky 9~10、Fedora
+与 openSUSE。不再按发行版重复出包。
+
 也可以从 [Releases](https://github.com/RunningVAN/asus-numpad/releases) 直接下本机格式的包
-（deb / rpm / pkg.tar.zst / apk / 静态 tarball）。Alpine、Gentoo、Nix/NixOS、tarball
-手工安装、升级卸载，见 **[docs/install.md](docs/install.md)**。
+（deb / rpm / pkg.tar.zst / PKGBUILD+.SRCINFO / apk / 静态 tarball）。Alpine、Gentoo、
+Nix/NixOS、AUR、tarball 手工安装、升级卸载，见 **[docs/install.md](docs/install.md)**。
 
 包按机型拆分，装错会拒启动（退出码 3）。先看机型：
 

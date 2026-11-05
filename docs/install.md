@@ -1,7 +1,7 @@
 # 安装
 
-支持 Debian 系的 apt、Fedora/RHEL/openSUSE 的 dnf/zypper、Arch 的 pacman、Alpine 的 apk，
-以及 Gentoo、Nix/NixOS 和任意发行版都能用的静态 tarball。
+支持 Debian 系的 apt、Fedora/RHEL/openSUSE 的 dnf/zypper、Arch 的 pacman 与 AUR、
+Alpine 的 apk，以及 Gentoo、Nix/NixOS 和任意发行版都能用的静态 tarball。
 
 两种取用方式，任选其一：
 
@@ -26,21 +26,25 @@ cat /sys/class/dmi/id/product_name    # 例如 G634JY → 装 g614 包
 
 ### 源里放的是哪个包
 
-同一次发版会为多个发行版各编一份，但**仓库里只收一份「基线包」**——取编译环境
-glibc 最老的那个，这样一条源能覆盖整条线，不会出现「新版能装、老版报
-`GLIBC_2.38 not found`」：
+**每个生态只出一份通用包**，不按发行版拆。以前 deb 出 4 份（jammy / noble /
+bookworm / trixie）、rpm 出 3 份（el9 / fc44 / suse），但那几份的二进制内容其实
+一样、只差编译环境的 C 库下限，纯属重复。现在改成「在 C 库最老的发行版里编一次，
+靠 glibc 的向后兼容覆盖整条线」：
 
-| 生态 | 源里的基线 | 由哪编出 | 覆盖范围 |
+| 生态 | 包 | 编自 | 覆盖范围 |
 | --- | --- | --- | --- |
-| apt | `asus-numpad_<ver>~jammy_amd64.deb` | Ubuntu 22.04 | Ubuntu 22.04 / 24.04、Debian 12 / 13、Mint 21+ |
-| rpm | `asus-numpad-<ver>-1.el9.x86_64.rpm` | AlmaLinux 9 | RHEL / Rocky / Alma 9 与 10、Fedora、openSUSE |
+| apt | `asus-numpad_<ver>_amd64.deb` | Ubuntu 22.04（glibc 2.35） | Ubuntu 22.04 / 24.04、Debian 12 / 13、Mint 21+ |
+| rpm | `asus-numpad-<ver>-1.el9.x86_64.rpm` | AlmaLinux 9（glibc 2.34） | RHEL / Rocky / Alma 9 与 10、Fedora、openSUSE |
 | pacman | `asus-numpad-<ver>-1-x86_64.pkg.tar.zst` | Arch | Arch / Manjaro / EndeavourOS |
-| apk | `asus-numpad-<ver>-r0.apk` | Alpine | Alpine 3.19+ |
+| apk | `asus-numpad-<ver>-r0.apk` | Alpine（musl） | Alpine 3.19+ |
+| AUR | `asus-numpad-rs`（源码包） | 你自己 makepkg | Arch / Manjaro，随滚动版一起更新 |
 
-想用**本发行版原生编译**的包（比如 bookworm / trixie / noble / fedora / openSUSE
-各自的构建），从 Release 页面下带发行版后缀的那一份，文件名里的 `~jammy`、`~noble`、
-`~trixie`、`~bookworm`、`.el9`、`.fc44`、`.suse` 就是编译环境标记。它们和基线包
-是同一个软件，只是编译时用的 C 库版本不同。
+Arch 与 Alpine 不存在「跨版本通用」这回事——Arch 是滚动版，Alpine 走 musl 独立
+体系，这两份是各自的原生包，不算重复。
+
+「一份包真能通用」由 CI 兜底，不靠嘴说：每次发版会把**同一份** deb 装进
+Debian 12 / 13 与 Ubuntu 22.04 / 24.04，把**同一份** rpm 装进 AlmaLinux 9 /
+Fedora / openSUSE，逐个跑 `--version`，有一处装不上就不发版。
 
 ### Debian / Ubuntu / Mint
 
@@ -67,9 +71,9 @@ sudo dnf install asus-numpad
 ```
 
 openSUSE 把 `dnf` 换成 `zypper install asus-numpad` 即可，仓库文件通用
-（`/etc/zypp/repos.d/` 下同样识别这种 `.repo`）。源里放的这份是 el9 基线包，
-Tumbleweed / Leap 上照装（只依赖 glibc）；要 openSUSE 原生构建的那份，去
-Releases 下 `.suse.x86_64.rpm`。
+（`/etc/zypp/repos.d/` 下同样识别这种 `.repo`）。源里和 Release 里就只有这份
+rpm：spec 只用标准宏、不读发行版私有宏，运行时只依赖 glibc 与 systemd，所以
+Tumbleweed / Leap 上照装。
 
 装之前不必自己验一遍：每次发版 CI 都会在 9 个干净容器（Debian 12/13、
 Ubuntu 22.04/24.04、AlmaLinux 9、Fedora、openSUSE、Arch、Alpine）里真装一次、
@@ -87,6 +91,27 @@ EOF
 sudo pacman -Sy asus-numpad
 ```
 
+### Arch / Manjaro：AUR
+
+不想加第三方 pacman 源、或者想跟着自己系统的滚动版走，用 AUR 包 `asus-numpad-rs`：
+
+```bash
+# 用惯用的 AUR helper
+yay -S asus-numpad-rs
+
+# 或者手工
+git clone https://aur.archlinux.org/asus-numpad-rs.git
+cd asus-numpad-rs && makepkg -si
+```
+
+包名带 `-rs` 是因为 AUR 上的 `asus-numpad` 已被另一个 Python 实现的项目占用；
+二进制名仍是 `asus-numpad`，PKGBUILD 用 `provides` / `conflicts` 声明了替代关系。
+
+AUR 包是**源码包**：`makepkg` 直接拉 GitHub 的 tag tarball 现编，所以装出来的
+是针对你本机工具链的原生二进制。每次发版 CI 都会在 Arch 容器里用同一个
+PKGBUILD 真编真装一遍才发版。不想等 AUR 同步的，可以从 Release 页面下
+`PKGBUILD` 与 `.SRCINFO` 放进一个空目录 `makepkg -si`。
+
 ### Alpine
 
 ```bash
@@ -102,17 +127,18 @@ sudo apk add --allow-untrusted asus-numpad
 
 | 发行版 | 文件 |
 | --- | --- |
-| Debian / Ubuntu | `asus-numpad_<ver>~<distro>_amd64.deb`（`~jammy` / `~noble` / `~bookworm` / `~trixie`） |
-| Fedora / RHEL / openSUSE | `asus-numpad-<ver>-1.<dist>.x86_64.rpm`（`.el9` / `.fc44` / `.suse`） |
+| Debian / Ubuntu / Mint | `asus-numpad_<ver>_amd64.deb` |
+| Fedora / RHEL / openSUSE | `asus-numpad-<ver>-1.el9.x86_64.rpm` |
 | Arch / Manjaro | `asus-numpad-<ver>-1-x86_64.pkg.tar.zst` |
+| Arch / Manjaro（源码） | `PKGBUILD` + `.SRCINFO`（AUR 包的同一份） |
 | Alpine | `asus-numpad-<ver>-r0.apk` |
 | 任意 x86_64 | `asus-numpad-<ver>-x86_64.tar.gz` |
 
 ```bash
-sudo apt install ./asus-numpad_1.2.0-1_amd64.deb
-sudo dnf install ./asus-numpad-1.2.0-1.fc44.x86_64.rpm
-sudo pacman -U asus-numpad-1.2.0-1-x86_64.pkg.tar.zst
-sudo apk add --allow-untrusted ./asus-numpad-1.2.0-r0.apk
+sudo apt install ./asus-numpad_1.2.2_amd64.deb
+sudo dnf install ./asus-numpad-1.2.2-1.el9.x86_64.rpm
+sudo pacman -U asus-numpad-1.2.2-1-x86_64.pkg.tar.zst
+sudo apk add --allow-untrusted ./asus-numpad-1.2.2-r0.apk
 ```
 
 发版同时产出 `SHA256SUMS`，校验方式：

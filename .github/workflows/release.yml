@@ -78,10 +78,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Ubuntu 22.04 编出来的包是 apt 仓库的「通用基线」：glibc 2.35，
-          # 装得上 22.04 / 24.04、Debian 12 / 13——取这条线里最老的一个当基线，
-          # 才不会出现「新版能装、老版报 GLIBC_2.38 not found」。
-          - name: deb-ubuntu-jammy
+          # deb 只出「一份通用包」：在 Ubuntu 22.04（glibc 2.35）里编。
+          # 一份包装得上 Ubuntu 22.04/24.04、Debian 12/13、Mint 21/22 整条 apt 线。
+          # 以前按发行版各编一份（jammy/noble/bookworm/trixie），四份二进制内容
+          # 其实一样、只差 glibc 下限，纯重复，已删掉三条。
+          - name: deb
             image: ubuntu:22.04
             deps: &apt-deps |
               set -eux
@@ -90,24 +91,10 @@ jobs:
               curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
               ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/
             build: bash ./packaging/deb/make-deb.sh --out dist
-          # 另外两条线各出一个带发行版标签的包（版本号加 ~noble / ~bookworm），
-          # 只挂在 Release 里给愿意用「原生编译」版本的人，不进 apt 仓库。
-          - name: deb-ubuntu-noble
-            image: ubuntu:24.04
-            deps: *apt-deps
-            build: bash ./packaging/deb/make-deb.sh --distro noble --out dist
-          - name: deb-debian
-            image: debian:trixie
-            deps: *apt-deps
-            build: bash ./packaging/deb/make-deb.sh --distro trixie --out dist
-          - name: deb-debian-bookworm
-            image: debian:bookworm
-            deps: *apt-deps
-            build: bash ./packaging/deb/make-deb.sh --distro bookworm --out dist
-          # 一套 spec 同时覆盖 Fedora / RHEL / openSUSE：不依赖发行版私有宏。
-          # RHEL 9 的 glibc 2.34 是三条线里最老的，它编出来的包就是 rpm 仓库的
-          # 「通用基线」；Fedora 与 openSUSE 的包带各自的 %dist 标记，只挂 Release。
-          - name: rpm-el9
+          # rpm 同理：AlmaLinux 9（glibc 2.34）编一份，覆盖 RHEL 9/10、Rocky、
+          # Alma、Fedora、openSUSE。spec 只用标准宏、不读发行版私有宏，所以一份
+          # 包能通用；原先的 fedora / opensuse 两条线只是把同样的活重跑一遍。
+          - name: rpm
             image: almalinux:9
             deps: |
               set -eux
@@ -115,20 +102,8 @@ jobs:
               dnf install -y epel-release || true
               dnf install -y cargo rust gcc gcc-c++ make rpm-build systemd-rpm-macros tar gzip
             build: bash ./packaging/rpm/make-rpm.sh --out dist
-          - name: rpm-fedora
-            image: fedora:latest
-            deps: |
-              set -eux
-              dnf install -y cargo rust gcc gcc-c++ make rpm-build systemd-rpm-macros tar gzip
-            build: bash ./packaging/rpm/make-rpm.sh --out dist
-          - name: rpm-opensuse
-            image: opensuse/tumbleweed:latest
-            deps: |
-              set -eux
-              zypper --non-interactive install --no-recommends cargo rust gcc gcc-c++ make rpm-build tar gzip
-            # openSUSE 的 rpmbuild 不带 %dist 宏，默认会得到 asus-numpad-<ver>-1.x86_64.rpm，
-            # 和别的源混在一起看不出是给谁的；显式写进 Release 段
-            build: bash ./packaging/rpm/make-rpm.sh --release 1.suse --out dist
+          # Arch 与 Alpine 不存在「跨版本通用」：Arch 是滚动版，Alpine 走 musl，
+          # 各出一份原生包属于必需品，不算重复。
           - name: arch
             image: archlinux:latest
             deps: |
@@ -223,9 +198,10 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  # 出包成功不等于装得上。这里在每个目标发行版里真装一遍再跑 --version：
-  # 基线包（jammy 编的 deb、el9 编的 rpm）会装到更老的系统上，
-  # glibc 版本没兜住的话，这一步会以 "GLIBC_2.xx not found" 直接红。
+  # 出包成功不等于装得上。这里在每个目标发行版里真装同一个通用包再跑 --version：
+  # 那份 deb 要装到 Ubuntu 22.04 与 Debian 12/13 上，那份 rpm 要装到 RHEL 9、
+  # Fedora、openSUSE 上——「一份包通用」这句话由这一步来证，glibc / 宏差异
+  # 没兜住的话会以 "GLIBC_2.xx not found" 或依赖冲突直接红。
   install-check:
     name: 安装验证 (${{ matrix.name }})
     needs: [package]
@@ -234,13 +210,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: debian-12,     image: debian:12,                  artifact: pkg-deb-ubuntu-jammy, pick: '\.deb$' }
-          - { name: ubuntu-22.04,  image: ubuntu:22.04,               artifact: pkg-deb-ubuntu-jammy, pick: '\.deb$' }
-          - { name: ubuntu-24.04,  image: ubuntu:24.04,               artifact: pkg-deb-ubuntu-jammy, pick: '\.deb$' }
-          - { name: debian-trixie, image: debian:trixie,              artifact: pkg-deb-ubuntu-jammy, pick: '\.deb$' }
-          - { name: almalinux-9,   image: almalinux:9,                artifact: pkg-rpm-el9,          pick: '\.rpm$' }
-          - { name: fedora,        image: fedora:latest,              artifact: pkg-rpm-fedora,       pick: '\.rpm$' }
-          - { name: opensuse,      image: opensuse/tumbleweed:latest, artifact: pkg-rpm-opensuse,     pick: '\.rpm$' }
+          - { name: debian-12,     image: debian:12,                  artifact: pkg-deb           , pick: '\.deb$' }
+          - { name: ubuntu-22.04,  image: ubuntu:22.04,               artifact: pkg-deb           , pick: '\.deb$' }
+          - { name: ubuntu-24.04,  image: ubuntu:24.04,               artifact: pkg-deb           , pick: '\.deb$' }
+          - { name: debian-trixie, image: debian:trixie,              artifact: pkg-deb           , pick: '\.deb$' }
+          - { name: almalinux-9,   image: almalinux:9,                artifact: pkg-rpm,           pick: '\.rpm$' }
+          - { name: fedora,        image: fedora:latest,              artifact: pkg-rpm,           pick: '\.rpm$' }
+          - { name: opensuse,      image: opensuse/tumbleweed:latest, artifact: pkg-rpm,           pick: '\.rpm$' }
           - { name: arch,          image: archlinux:latest,           artifact: pkg-arch,             pick: 'asus-numpad-[0-9].*pkg\.tar\.zst$' }
           - { name: alpine,        image: alpine:latest,              artifact: pkg-alpine,           pick: 'asus-numpad-[0-9].*apk$' }
     steps:
@@ -305,6 +281,103 @@ jobs:
             exit 1
           fi
 
+  # AUR：PKGBUILD 拉 GitHub 的 tag tarball 现场编译，所以「能不能装」只有
+  # 真编真装才算数——这里在 Arch 容器里 makepkg 编一遍、pacman -U 装上、
+  # 跑 --version，顺便让 makepkg 生成 .SRCINFO（这文件只能它生成）。
+  aur:
+    needs: [package]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 计算版本
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ github.event.inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "版本 $V"
+
+      # 用提交者身份当 Maintainer 行，AUR 会校验这一行不能是占位符
+      - name: 渲染 PKGBUILD
+        env:
+          V: ${{ steps.ver.outputs.version }}
+          AUR_MAINTAINER: >-
+            ${{ github.event.head_commit.author.name || 'RunningVAN' }}
+            <${{ github.event.head_commit.author.email || 'runningvan@users.noreply.github.com' }}>
+        run: bash ./packaging/aur/gen-aur.sh --version "$V" --out auraur
+
+      - name: Arch 容器内 makepkg 真编 + 真装
+        run: |
+          set -o pipefail
+          if ! docker run --rm -v "$PWD:/work" -w /work archlinux:latest bash -c '
+            set -eux
+            pacman -Syu --noconfirm --needed base-devel rust sudo
+            id builder >/dev/null 2>&1 || useradd -m builder
+            echo "builder ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/builder
+            chmod 0440 /etc/sudoers.d/builder
+            chown -R builder:builder /work/auraur
+            # makepkg 不允许 root 跑；--syncdeps 会按 makedepends 自己装依赖
+            su builder -c "cd /work/auraur && makepkg -f --noconfirm --syncdeps"
+            su builder -c "cd /work/auraur && makepkg --printsrcinfo > .SRCINFO"
+            echo "--- 产物 ---"
+            ls -la /work/auraur
+            pkg=$(ls /work/auraur/*.pkg.tar.zst | head -n 1)
+            echo "待装包: $pkg"
+            pacman -U --noconfirm "$pkg"
+            echo "--- 版本 ---"
+            asus-numpad --version
+            asus-numpad --help >/dev/null
+            echo "--- udev 规则已落地 ---"
+            test -f /usr/lib/udev/rules.d/99-asus-numpad.rules
+            echo "--- systemd 单元已落地 ---"
+            test -f /usr/lib/systemd/system/asus-numpad.service
+            # post_install 里的备份配置要真被写出来，否则 backup= 声明是空的
+            test -f /etc/asus-numpad/asus-numpad.json
+            echo "OK: AUR 包编得出、装得上、跑得起来"
+          ' 2>&1 | tee /tmp/aur.log; then
+            grep -aE "错误|失败|Error|error|failed|not found|No such|denied|conflict" /tmp/aur.log               | tail -n 15 | cut -c1-800 | while IFS= read -r line; do
+                echo "::error::[aur] $line"
+              done
+            tail -n 40 /tmp/aur.log | cut -c1-800 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
+
+      - name: 校验 .SRCINFO 与 PKGBUILD 一致
+        run: |
+          set -euo pipefail
+          test -f auraur/.SRCINFO
+          grep -q "^pkgname = asus-numpad-rs$" auraur/.SRCINFO
+          grep -q "^pkgver = ${{ steps.ver.outputs.version }}$" auraur/.SRCINFO
+          # AUR 拒收 pkgver 里带 - 的包，这里提前拦
+          ! grep -qE "^pkgver = .*-" auraur/.SRCINFO
+          echo "--- .SRCINFO ---"
+          cat auraur/.SRCINFO
+
+      - name: 保存日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aur-log
+          path: /tmp/aur.log
+          if-no-files-found: ignore
+
+      # 只传 PKGBUILD 与 .SRCINFO：AUR 编出来的 pkg.tar.zst 不能混进
+      # 仓库产物（它会以 asus-numpad-rs 的包名进 pacman 源，和原生包打架）
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-aur
+          path: |
+            auraur/PKGBUILD
+            auraur/.SRCINFO
+          include-hidden-files: true
+          if-no-files-found: error
+
   # Actions 日志在没有 token 的情况下读不到，把出包日志推回一个分支才能复盘。
   diagnose:
     needs: [package]
@@ -363,8 +436,8 @@ jobs:
 
   # 汇总：生成四套仓库索引 → 发 Release → 提交 repo/ 回 main
   publish:
-    needs: [package, tarball, install-check]
-    if: needs.package.result == 'success' && needs.tarball.result == 'success' && needs.install-check.result == 'success'
+    needs: [package, tarball, install-check, aur]
+    if: needs.package.result == 'success' && needs.tarball.result == 'success' && needs.install-check.result == 'success' && needs.aur.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -375,6 +448,13 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+
+      # AUR 的 PKGBUILD / .SRCINFO 也随 Release 发布：不想等 AUR 审核的人
+      # 可以直接下这两个文件 makepkg -si。
+      - uses: actions/download-artifact@v4
+        with:
+          name: pkg-aur
+          path: aurart
 
       - name: 计算版本
         id: ver
@@ -388,49 +468,34 @@ jobs:
           echo "版本 $V"
           ls -l dist
 
-      # 同一次发版里有多个发行版编出来的同类包（4 个 deb、3 个 rpm）。
-      # 仓库只能收一份：收「基线」——取编译环境 glibc 最老的那个，
-      # 这样 22.04 编的 deb 能装 22.04~24.04 与 Debian 12/13，el9 编的 rpm
-      # 能装 RHEL 9/10、Fedora、openSUSE。其余发行版原生包只挂 Release。
-      - name: 分出基线包与发行版专用包
+      # 现在 deb / rpm 各只有一份通用包，不再需要从多份里挑基线。
+      # 这里做「恰好一份」的硬校验：日后谁往 matrix 里加回发行版专用包，
+      # 会在发版前红掉，而不是让软件源里混进某个随机发行版编出来的包。
+      - name: 归集产物并校验唯一性
         run: |
           set -euo pipefail
-          mkdir -p baseline extras
+          mkdir -p pkg
           shopt -s nullglob
           debs=(dist/*.deb)
           rpms=(dist/*.rpm)
-          if [ "${#debs[@]}" -ne 1 ] && [ "${#debs[@]}" -gt 0 ]; then
-            # 多于一个「无发行版后缀」的 deb 说明基线不唯一，宁可停下也不发错源
-            base_count=0
-            for f in "${debs[@]}"; do
-              case "$f" in *~*) ;; *) base_count=$((base_count + 1)) ;; esac
-            done
-            if [ "$base_count" -ne 1 ]; then
-              echo "dist 里的 deb：${debs[*]}"
-              echo "::error::apt 基线 deb 不唯一（$base_count 个），检查 matrix 的 --distro 参数"
-              exit 1
-            fi
-          fi
-          for f in "${debs[@]}"; do
-            case "$f" in *~*) mv "$f" extras/ ;; *) mv "$f" baseline/ ;; esac
-          done
-          echo "dist 里的 rpm：${rpms[*]:-无}"
-          el9=0
-          for f in "${rpms[@]}"; do
-            # 注意 rpm 名是 asus-numpad-<ver>-1.el9.x86_64.rpm，el9 在中间，
-            # 用 *el9*.rpm 而不是 *.el9.rpm
-            case "$f" in
-              *el9*.rpm) mv "$f" baseline/; el9=$((el9 + 1)) ;;
-              *)         mv "$f" extras/ ;;
-            esac
-          done
-          if [ "$el9" -ne 1 ]; then
-            echo "::error::rpm 基线包（*el9*.rpm）应恰好 1 个，实际 $el9 个"
+          if [ "${#debs[@]}" -ne 1 ]; then
+            echo "dist 里的 deb：${debs[*]:-无}"
+            echo "::error::deb 应恰好 1 个（通用包），实际 ${#debs[@]} 个"
             exit 1
           fi
-          mv dist/*.pkg.tar.* dist/*.apk dist/*.tar.gz baseline/ 2>/dev/null || true
-          echo "基线："; ls -1 baseline
-          echo "发行版专用："; ls -1 extras
+          if [ "${#rpms[@]}" -ne 1 ]; then
+            echo "dist 里的 rpm：${rpms[*]:-无}"
+            echo "::error::rpm 应恰好 1 个（通用包），实际 ${#rpms[@]} 个"
+            exit 1
+          fi
+          mv dist/* pkg/
+          if compgen -G "aurart/auraur/*" >/dev/null; then
+            mv aurart/auraur/* pkg/
+          elif compgen -G "aurart/*" >/dev/null; then
+            mv aurart/* pkg/
+          fi
+          echo "待发产物："
+          ls -1a pkg
 
       - name: 装索引工具
         run: |
@@ -463,10 +528,10 @@ jobs:
           set -euo pipefail
           missing=0
           check() { # $1 名字  $2 匹配式
-            if compgen -G "baseline/$2" >/dev/null || compgen -G "extras/$2" >/dev/null; then
-              echo "OK   $1: $(compgen -G "baseline/$2" | wc -l | tr -d ' ')/$(compgen -G "extras/$2" | wc -l | tr -d ' ') 个（基线/专用）"
+            if compgen -G "pkg/$2" >/dev/null; then
+              echo "OK   $1: $(compgen -G "pkg/$2" | wc -l | tr -d ' ') 个"
             else
-              echo "MISS $1（base+extras/$2）"
+              echo "MISS $1（pkg/$2）"
               missing=1
             fi
           }
@@ -484,7 +549,7 @@ jobs:
         run: |
           set -o pipefail
           # 失败时把最后几十行打成 annotation，公开可查，不必登录看日志
-          if ! bash -x ./tools/repo-gen.sh --dist baseline --out repo --keep 3 2>&1 | tee /tmp/repo-gen.log; then
+          if ! bash -x ./tools/repo-gen.sh --dist pkg --out repo --keep 3 2>&1 | tee /tmp/repo-gen.log; then
             echo "::error::repo-gen.sh 失败，关键行与尾部输出如下"
             { grep -aE "错误|失败|unrecognized|not found|No such|denied|fatal|invalid" /tmp/repo-gen.log | tail -n 20
               echo "---- tail ----"
@@ -506,8 +571,9 @@ jobs:
 
       - name: 生成校验和
         run: |
-          ( for d in baseline extras; do ( cd "$d" && sha256sum ./* 2>/dev/null ); done \
-              | grep -v SHA256SUMS > extras/asus-numpad-${{ steps.ver.outputs.version }}-SHA256SUMS || true )
+          ( cd pkg && sha256sum ./* 2>/dev/null ) \
+              | grep -v SHA256SUMS > "pkg/asus-numpad-${{ steps.ver.outputs.version }}-SHA256SUMS" || true
+          cat "pkg/asus-numpad-${{ steps.ver.outputs.version }}-SHA256SUMS"
 
       - name: 发 Release
         env:
@@ -515,15 +581,15 @@ jobs:
         run: |
           V="${{ steps.ver.outputs.version }}"
           if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" baseline/* extras/* --clobber
+            gh release upload "v$V" pkg/* pkg/.SRCINFO --clobber
             # 重打 tag 时旧 Release 会失去 tag 关联、退化成草稿（网页上看不到），
             # 这里强制把它绑回当前 tag 并置为已发布。
             gh release edit "v$V" --tag "v$V" --draft=false
           elif [ -f CHANGELOG.md ]; then
-            gh release create "v$V" baseline/* extras/* --title "asus-numpad $V" \
+            gh release create "v$V" pkg/* pkg/.SRCINFO --title "asus-numpad $V" \
               --notes-file CHANGELOG.md --target main
           else
-            gh release create "v$V" baseline/* extras/* --title "asus-numpad $V" \
+            gh release create "v$V" pkg/* pkg/.SRCINFO --title "asus-numpad $V" \
               --generate-notes --target main
           fi
 

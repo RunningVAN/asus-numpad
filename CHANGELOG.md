@@ -2,6 +2,35 @@
 
 版本号跟包版本一致；`-N` 后缀是发版前的构建号。
 
+## 1.2.2
+
+### 出包
+
+- **deb / rpm 不再按发行版重复出包**：从 4 个 deb + 3 个 rpm 收敛成各 1 个通用包，
+  构建任务从 9 个降到 4 个（deb / rpm / arch / alpine）。deb 在 Ubuntu 22.04
+  （glibc 2.35）里编一份，装得上 Ubuntu 22.04 / 24.04、Debian 12 / 13、Mint 21+；
+  rpm 在 AlmaLinux 9（glibc 2.34）里编一份，装得上 RHEL / Rocky / Alma 9~10、
+  Fedora、openSUSE。此前每个发行版各编一份，几份二进制内容其实一样、只差编译环境的
+  C 库下限，等于同一份东西存了 7 遍。
+- **「一份包通用」改由 CI 证明**：安装验证仍是 9 个容器，但 Fedora 与 openSUSE
+  现在装的就是 el9 那份 rpm，Debian 12/13 与 Ubuntu 22.04/24.04 装的就是同一份
+  deb。哪条线不通用会直接红，不再靠挑包绕过。
+- 发版前增加唯一性硬校验：`dist/` 里 deb 或 rpm 若出现第二份，publish 直接失败。
+- Arch 与 Alpine 保留各自原生包：滚动版与 musl 体系没有「跨版本通用」可言。
+
+### AUR
+
+- **补上 AUR 包 `asus-numpad-rs`**：新增 `packaging/aur/PKGBUILD.in`、
+  `gen-aur.sh` 与 `.install`。源码取 GitHub tag tarball，`makepkg` 现场编译，
+  装出来是本机工具链的原生二进制。AUR 上 `asus-numpad` 已被另一个 Python 实现
+  占用（0.4.1-7），故包名加 `-rs`；二进制名不变，用 `provides` / `conflicts`
+  声明替代关系。
+- CI 新增 `aur` job：在 archlinux 容器里用渲染好的 PKGBUILD 真编、`pacman -U`
+  真装、跑 `--version` 与 `--help`，并由 `makepkg --printsrcinfo` 生成
+  `.SRCINFO`（该文件只能由 makepkg 生成，手写会被 AUR 拒收）。
+- PKGBUILD 与 `.SRCINFO` 随 Release 发布：AUR 尚未同步时可直接下载这两个文件
+  `makepkg -si`。
+
 ## 1.2.1
 
 ### 出包
