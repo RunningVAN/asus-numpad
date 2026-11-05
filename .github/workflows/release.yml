@@ -200,8 +200,8 @@ jobs:
 
   # 出包成功不等于装得上。这里在每个目标发行版里真装同一个通用包再跑 --version：
   # 那份 deb 要装到 Ubuntu 22.04 与 Debian 12/13 上，那份 rpm 要装到 RHEL 9、
-  # Fedora、openSUSE 上——「一份包通用」这句话由这一步来证，glibc / 宏差异
-  # 没兜住的话会以 "GLIBC_2.xx not found" 或依赖冲突直接红。
+  # Fedora、openSUSE Leap 16 与 Tumbleweed 上——「一份包通用」这句话由这一步来证，
+  # glibc / 宏差异没兜住的话会以 "GLIBC_2.xx not found" 或依赖冲突直接红。
   install-check:
     name: 安装验证 (${{ matrix.name }})
     needs: [package]
@@ -216,7 +216,8 @@ jobs:
           - { name: debian-trixie, image: debian:trixie,              artifact: pkg-deb           , pick: '\.deb$' }
           - { name: almalinux-9,   image: almalinux:9,                artifact: pkg-rpm,           pick: '\.rpm$' }
           - { name: fedora,        image: fedora:latest,              artifact: pkg-rpm,           pick: '\.rpm$' }
-          - { name: opensuse,      image: opensuse/tumbleweed:latest, artifact: pkg-rpm,           pick: '\.rpm$' }
+          - { name: opensuse-leap, image: opensuse/leap:16.0,          artifact: pkg-rpm,           pick: '\.rpm$' }
+          - { name: opensuse-tw,   image: opensuse/tumbleweed:latest, artifact: pkg-rpm,           pick: '\.rpm$' }
           - { name: arch,          image: archlinux:latest,           artifact: pkg-arch,             pick: 'asus-numpad-[0-9].*pkg\.tar\.zst$' }
           - { name: alpine,        image: alpine:latest,              artifact: pkg-alpine,           pick: 'asus-numpad-[0-9].*apk$' }
     steps:

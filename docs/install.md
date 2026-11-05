@@ -1,11 +1,12 @@
 # 安装
 
-支持 Debian 系的 apt、Fedora/RHEL/openSUSE 的 dnf/zypper、Arch 的 pacman 与 AUR、
+支持 Debian 系的 apt、Fedora/RHEL 的 dnf、openSUSE 的 zypper、Arch 的 pacman、
 Alpine 的 apk，以及 Gentoo、Nix/NixOS 和任意发行版都能用的静态 tarball。
 
 两种取用方式，任选其一：
 
-- **走软件源**（推荐）：加一条仓库配置，之后 `apt upgrade` / `dnf upgrade` / `pacman -Syu` 跟着升级。
+- **走软件源**（推荐）：加一条仓库配置，之后 `apt upgrade` / `dnf upgrade` /
+  `zypper update` / `pacman -Syu` 跟着升级。
 - **直接装包**：从 [Releases](https://github.com/RunningVAN/asus-numpad/releases) 下载本机格式安装一次，升级要自己重复。
 
 包按机型拆分，装错会拒绝启动（退出码 3）。装之前先确认机型：
@@ -34,7 +35,7 @@ bookworm / trixie）、rpm 出 3 份（el9 / fc44 / suse），但那几份的二
 | 生态 | 包 | 编自 | 覆盖范围 |
 | --- | --- | --- | --- |
 | apt | `asus-numpad_<ver>_amd64.deb` | Ubuntu 22.04（glibc 2.35） | Ubuntu 22.04 / 24.04、Debian 12 / 13、Mint 21+ |
-| rpm | `asus-numpad-<ver>-1.el9.x86_64.rpm` | AlmaLinux 9（glibc 2.34） | RHEL / Rocky / Alma 9 与 10、Fedora、openSUSE |
+| rpm | `asus-numpad-<ver>-1.el9.x86_64.rpm` | AlmaLinux 9（glibc 2.34） | RHEL / Rocky / Alma 9 与 10、Fedora、openSUSE Leap 16 / Tumbleweed |
 | pacman | `asus-numpad-<ver>-1-x86_64.pkg.tar.zst` | Arch | Arch / Manjaro / EndeavourOS |
 | apk | `asus-numpad-<ver>-r0.apk` | Alpine（musl） | Alpine 3.19+ |
 | AUR | `asus-numpad-rs`（源码包） | 你自己 makepkg | Arch / Manjaro，随滚动版一起更新 |
@@ -44,7 +45,7 @@ Arch 与 Alpine 不存在「跨版本通用」这回事——Arch 是滚动版�
 
 「一份包真能通用」由 CI 兜底，不靠嘴说：每次发版会把**同一份** deb 装进
 Debian 12 / 13 与 Ubuntu 22.04 / 24.04，把**同一份** rpm 装进 AlmaLinux 9 /
-Fedora / openSUSE，逐个跑 `--version`，有一处装不上就不发版。
+Fedora / openSUSE Leap 16 / Tumbleweed，逐个跑 `--version`，有一处装不上就不发版。
 
 ### Debian / Ubuntu / Mint
 
@@ -57,7 +58,7 @@ sudo apt install asus-numpad          # 或 asus-numpad-g614 等机型包
 
 `trusted=yes` 表示跳过 GPG 校验；`apt` 仍会按 `Release` 里的 SHA256 校验包体。
 
-### Fedora / RHEL / Rocky / Alma / openSUSE
+### Fedora / RHEL / Rocky / Alma
 
 ```bash
 sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
@@ -70,14 +71,24 @@ EOF
 sudo dnf install asus-numpad
 ```
 
-openSUSE 把 `dnf` 换成 `zypper install asus-numpad` 即可，仓库文件通用
-（`/etc/zypp/repos.d/` 下同样识别这种 `.repo`）。源里和 Release 里就只有这份
-rpm：spec 只用标准宏、不读发行版私有宏，运行时只依赖 glibc 与 systemd，所以
-Tumbleweed / Leap 上照装。
+### openSUSE Leap / Tumbleweed
 
-装之前不必自己验一遍：每次发版 CI 都会在 9 个干净容器（Debian 12/13、
-Ubuntu 22.04/24.04、AlmaLinux 9、Fedora、openSUSE、Arch、Alpine）里真装一次、
-跑一遍 `--version`，有一个装不上就不发版。
+仓库是 rpm-md，zypper 直接读，不需要另编一份 SUSE 包：
+
+```bash
+sudo zypper addrepo --no-gpgcheck --refresh \
+  "https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
+sudo zypper install asus-numpad          # 或 asus-numpad-g614 等机型包
+```
+
+`--no-gpgcheck` 对应 dnf 侧的 `gpgcheck=0`：仓库不签名。源里和 Release 里就只有
+这份 rpm，spec 只用标准宏、不读发行版私有宏，运行时只依赖 glibc 与 systemd，
+所以 Leap 16、SLES 16 与 Tumbleweed 上照装；Leap 15 系已 EOL 且 glibc 低于本包要求，
+不在覆盖范围内。
+
+装之前不必自己验一遍：每次发版 CI 都会在 10 个干净容器（Debian 12/13、
+Ubuntu 22.04/24.04、AlmaLinux 9、Fedora、openSUSE Leap 16、openSUSE Tumbleweed、
+Arch、Alpine）里真装一次、跑一遍 `--version`，有一个装不上就不发版。
 
 ### Arch / Manjaro
 
@@ -103,17 +114,6 @@ curl -fLO https://github.com/RunningVAN/asus-numpad/releases/latest/download/asu
 makepkg -si
 ```
 
-AUR 收录后（包名 `asus-numpad-rs`，维护者推一次即生效）：
-
-```bash
-yay -S asus-numpad-rs
-# 或 git clone https://aur.archlinux.org/asus-numpad-rs.git && cd asus-numpad-rs && makepkg -si
-```
-
-想自己往 AUR 提交，`PKGBUILD` 与 `asus-numpad-rs.SRCINFO` 每次发版都随 Release
-发布，`git clone ssh://aur@aur.archlinux.org/asus-numpad-rs.git` 后把 `SRCINFO`
-改名为 `.SRCINFO` 一起推上去即可。
-
 包名带 `-rs` 是因为 AUR 上的 `asus-numpad` 已被另一个 Python 实现的项目占用；
 二进制名仍是 `asus-numpad`，PKGBUILD 用 `provides` / `conflicts` 声明了替代关系。
 
@@ -137,7 +137,7 @@ sudo apk add --allow-untrusted asus-numpad
 | 发行版 | 文件 |
 | --- | --- |
 | Debian / Ubuntu / Mint | `asus-numpad_<ver>_amd64.deb` |
-| Fedora / RHEL / openSUSE | `asus-numpad-<ver>-1.el9.x86_64.rpm` |
+| Fedora / RHEL / openSUSE Leap 16 / Tumbleweed | `asus-numpad-<ver>-1.el9.x86_64.rpm` |
 | Arch / Manjaro | `asus-numpad-<ver>-1-x86_64.pkg.tar.zst` |
 | Arch / Manjaro（源码） | `PKGBUILD` + `.SRCINFO`（AUR 包的同一份） |
 | Alpine | `asus-numpad-<ver>-r0.apk` |

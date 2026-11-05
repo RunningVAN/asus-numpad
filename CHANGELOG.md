@@ -44,11 +44,13 @@
   构建任务从 9 个降到 4 个（deb / rpm / arch / alpine）。deb 在 Ubuntu 22.04
   （glibc 2.35）里编一份，装得上 Ubuntu 22.04 / 24.04、Debian 12 / 13、Mint 21+；
   rpm 在 AlmaLinux 9（glibc 2.34）里编一份，装得上 RHEL / Rocky / Alma 9~10、
-  Fedora、openSUSE。此前每个发行版各编一份，几份二进制内容其实一样、只差编译环境的
-  C 库下限，等于同一份东西存了 7 遍。
-- **「一份包通用」改由 CI 证明**：安装验证仍是 9 个容器，但 Fedora 与 openSUSE
-  现在装的就是 el9 那份 rpm，Debian 12/13 与 Ubuntu 22.04/24.04 装的就是同一份
-  deb。哪条线不通用会直接红，不再靠挑包绕过。
+  Fedora、openSUSE Leap 16 / Tumbleweed。此前每个发行版各编一份，几份二进制内容
+  其实一样、只差编译环境的 C 库下限，等于同一份东西存了 7 遍。
+- **「一份包通用」改由 CI 证明**：安装验证 10 个容器，但 Fedora、openSUSE Leap 16
+  与 Tumbleweed 现在装的就是 el9 那份 rpm，Debian 12/13 与 Ubuntu 22.04/24.04 装的
+  就是同一份 deb。哪条线不通用会直接红，不再靠挑包绕过。
+- **openSUSE 补上 zypper 安装路径**：仓库是 rpm-md，`zypper addrepo --no-gpgcheck`
+  直接读，不再让人把 dnf 的 repo 文件拷到 `/etc/zypp/repos.d/` 碰运气。
 - 发版前增加唯一性硬校验：`dist/` 里 deb 或 rpm 若出现第二份，publish 直接失败。
 - Arch 与 Alpine 保留各自原生包：滚动版与 musl 体系没有「跨版本通用」可言。
 
@@ -62,7 +64,7 @@
 - CI 新增 `aur` job：在 archlinux 容器里用渲染好的 PKGBUILD 真编、`pacman -U`
   真装、跑 `--version` 与 `--help`，并由 `makepkg --printsrcinfo` 生成
   `.SRCINFO`（该文件只能由 makepkg 生成，手写会被 AUR 拒收）。
-- PKGBUILD 与 `.SRCINFO` 随 Release 发布：AUR 尚未同步时可直接下载这两个文件
+- PKGBUILD 与 `.SRCINFO` 随 Release 发布，不进 AUR 也能直接下载这两个文件
   `makepkg -si`。
 
 ## 1.2.1

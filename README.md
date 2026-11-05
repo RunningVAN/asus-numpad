@@ -8,6 +8,34 @@ no ACPI table is patched; uninstalling restores stock behaviour.
 
 Timing and geometry constants come from `AlgoParameters` in the vendor file `AsusNUMPADFilter.inf`.
 
+## FAQ
+
+### Why ASUS only?
+
+Nothing in the code is ASUS-specific. The touchpad is read through evdev, contacts are mapped to
+cells, key events go out through uinput; porting to another touchpad means editing the model table
+(DMI and touchpad HID name) and the layout constants, not the code paths.
+
+The limit is the hardware. A NumberPad touchpad carries two things other OEM touchpads generally
+do not: an LED layer that lights a pattern under the pad surface, and a vendor parameter set that
+pins down geometry, timing, gesture thresholds and backlight steps. Without the lit pattern there
+is no way to see which cell a finger is on, or whether number mode is active — the keys would work
+but nothing would tell you where they are. Without the parameters, tap, swipe and two-finger
+thresholds have to be guessed on a pad that was never tuned for numpad use. So support stays on
+models that have both, and the model table is the only place where that is decided.
+
+### Why a userspace driver?
+
+- **Nothing to break on a kernel upgrade.** No stock module is replaced, no ACPI or i8042 change,
+  uninstalling restores stock behaviour — a driver that fights the kernel is the reason this
+  touchpad has no Linux support in the first place.
+- **Vendor numbers instead of guesses.** Timing, geometry, thresholds and backlight steps are the
+  values from ASUS's own driver file, so the state machine behaves like the Windows one.
+- **One package, several models.** Model selection is by DMI and touchpad HID name, so one package
+  covers G614, G634 and the rest of the supported table.
+- **The hardware is already paid for.** On Linux this pad is otherwise an ordinary touchpad; the
+  numpad it was sold with is a missing driver, not a missing feature.
+
 ## How it works
 
 ### Data path
@@ -86,7 +114,7 @@ echo "deb [trusted=yes] https://raw.githubusercontent.com/RunningVAN/asus-numpad
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update && sudo apt install asus-numpad
 
-# Fedora / RHEL / openSUSE
+# Fedora / RHEL / Rocky / Alma
 sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
 [asus-numpad]
 name=asus-numpad
@@ -95,6 +123,11 @@ enabled=1
 gpgcheck=0
 EOF
 sudo dnf install asus-numpad
+
+# openSUSE Leap / Tumbleweed, same rpm-md repo, zypper reads it directly
+sudo zypper addrepo --no-gpgcheck --refresh \
+  "https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
+sudo zypper install asus-numpad
 
 # Arch / Manjaro
 sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
@@ -108,15 +141,16 @@ sudo pacman -Sy asus-numpad
 # Arch / Manjaro, source package asus-numpad-rs
 # PKGBUILD and asus-numpad-rs.install from the release page in one directory:
 makepkg -si
-# After the AUR listing:
-yay -S asus-numpad-rs
 ```
 
 One package per ecosystem. The deb is built on Ubuntu 22.04 and covers 22.04 to 24.04 plus Debian
-12 and 13. The rpm is built on AlmaLinux 9 and covers RHEL, AlmaLinux, Rocky 9 to 10, Fedora and
-openSUSE. Native packages are also on [Releases](https://github.com/RunningVAN/asus-numpad/releases):
-deb, rpm, pkg.tar.zst, PKGBUILD with .SRCINFO, apk, static tarball. Alpine, Gentoo, NixOS, AUR and
-manual tarball steps are in [docs/install.md](docs/install.md).
+12 and 13. The rpm is built on AlmaLinux 9 and covers RHEL, AlmaLinux, Rocky 9 to 10, Fedora,
+openSUSE Leap 16 and Tumbleweed: the spec uses standard macros only, runtime dependencies are glibc
+and systemd, and the repository is rpm-md, which zypper reads directly. Nothing is rebuilt per
+distribution. Native packages are also on
+[Releases](https://github.com/RunningVAN/asus-numpad/releases): deb, rpm, pkg.tar.zst, PKGBUILD with
+.SRCINFO, apk, static tarball. Alpine, Gentoo, NixOS and manual tarball steps are in
+[docs/install.md](docs/install.md).
 
 CI installs every package in a clean container for each target distribution and runs `--version`;
 a package that fails to install blocks the release.
@@ -230,24 +264,9 @@ Packaging details: [packaging/README.md](packaging/README.md). A `v*` tag runs
 `.github/workflows/release.yml`, which builds in per-distribution containers, generates four
 repository indexes, publishes the release and commits `repo/` back to `main`.
 
-## Known limitations
-
-1. **Manual steps come from the hardware table.** `brightness_levels` lists the panel steps
-   (`0x41`..`0x48`). `manual_brightness_levels` maps manual steps onto that axis, default four:
-   `[0, 0x43, 0x45, 0x48]`, from off to maximum. Entries are `0` or `0x41`..`0x48`, length 1 to 8
-   sets the step count, equal neighbours allowed, a decreasing table is discarded. Follow mode
-   normalises the keyboard backlight onto the same table; the numpad never gets brighter than the
-   keyboard.
-2. **NumLock long press threshold.** `iNumLockMaxVaildDist = 2741` is 0.27 mm at 0.1 mm units,
-   shorter than a real holding motion. The value is used as given; a long press recognised as a
-   swipe points here first.
-3. **Icon cell and calculator hot zone overlap** in the vendor layout. The whole cell goes to the
-   NumLock trigger.
-4. **Backlight cannot be read back.** `HIDIOCGFEATURE` returns zeros; light state is tracked from
-   the written report and the status line.
-
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
 
 Copyright (C) 2026 RunningVAN
+*（内容由AI生成，仅供参考）*

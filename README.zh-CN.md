@@ -7,6 +7,27 @@ ASUS NumberPad 的 Linux 用户态驱动。通过 evdev 独占触摸板，把触
 
 时序与几何常量取自厂商文件 `AsusNUMPADFilter.inf` 中的 `AlgoParameters`。
 
+## 常见问题
+
+### 为什么只支持华硕机型？
+
+代码里没有华硕专属的东西：触摸板走 evdev 读，触点映射到格子，按键走 uinput 注入。要支持别的
+触摸板，改的是机型表（DMI 与触摸板 HID 名）和布局常量，不是代码路径。
+
+真正的限制在硬件。NumberPad 触摸板比别家多两样东西：一层能把图案点亮的 LED，以及一套把几何、
+时序、手势阈值、背光档位定死的厂商参数。没有那层灯，按下去不知道手指落在哪一格、也不知道数字
+模式开没开——键能出，但等于盲打；没有那套参数，轻点、滑动、双指的阈值只能在一块从来没按小键盘
+调过的面板上瞎试。所以支持范围只留在两者都具备的机型上，判断依据只有机型表。
+
+### 为什么做成用户态驱动？
+
+- **内核升级不会把它带崩。** 不替换任何自带模块、不动 ACPI 与 i8042，卸载即恢复原状；跟内核
+  对着干，正是这块触摸板一直没有 Linux 支持的原因。
+- **用厂商原值，不靠猜。** 时序、几何、阈值、背光档位直接取华硕自己驱动文件里的数，状态机行为
+  与 Windows 侧一致。
+- **一份包覆盖多机型。** 机型靠 DMI 与触摸板 HID 名判别，G614、G634 等同一份包就能用。
+- **硬件已经买了。** 在 Linux 上它本来只是一块普通触摸板；小键盘缺的不是功能，是驱动。
+
 ## 工作原理
 
 ### 数据链路
@@ -83,7 +104,7 @@ echo "deb [trusted=yes] https://raw.githubusercontent.com/RunningVAN/asus-numpad
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update && sudo apt install asus-numpad
 
-# Fedora / RHEL / openSUSE
+# Fedora / RHEL / Rocky / Alma
 sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
 [asus-numpad]
 name=asus-numpad
@@ -92,6 +113,11 @@ enabled=1
 gpgcheck=0
 EOF
 sudo dnf install asus-numpad
+
+# openSUSE Leap / Tumbleweed
+sudo zypper addrepo --no-gpgcheck --refresh \
+  "https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
+sudo zypper install asus-numpad
 
 # Arch / Manjaro
 sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
@@ -105,14 +131,14 @@ sudo pacman -Sy asus-numpad
 # Arch / Manjaro，源码包 asus-numpad-rs
 # 把 release 页面的 PKGBUILD 与 asus-numpad-rs.install 放在同一目录：
 makepkg -si
-# 上架 AUR 后：
-yay -S asus-numpad-rs
 ```
 
 每个生态一个包。deb 在 Ubuntu 22.04 上构建，覆盖 22.04 至 24.04 与 Debian 12、13。rpm 在
-AlmaLinux 9 上构建，覆盖 RHEL、AlmaLinux、Rocky 9 至 10、Fedora 与 openSUSE。原生包也在
+AlmaLinux 9 上构建，覆盖 RHEL、AlmaLinux、Rocky 9 至 10、Fedora、openSUSE Leap 16 与
+Tumbleweed：spec 只用标准宏，运行时只依赖 glibc 与 systemd，仓库是 rpm-md，zypper 直接读，
+不按发行版各编一份。原生包也在
 [Releases](https://github.com/RunningVAN/asus-numpad/releases)：deb、rpm、pkg.tar.zst、带
-.SRCINFO 的 PKGBUILD、apk、静态 tarball。Alpine、Gentoo、NixOS、AUR 与手动 tarball 步骤见
+.SRCINFO 的 PKGBUILD、apk、静态 tarball。Alpine、Gentoo、NixOS 与手动 tarball 步骤见
 [docs/install.md](docs/install.md)。
 
 CI 在每个目标发行版的干净容器里安装每个包并执行 `--version`，装不上的包会挡住发布。
@@ -221,19 +247,9 @@ ASUS_NUMPAD_SKU=g614 RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
 `.github/workflows/release.yml`，在按发行版划分的容器里构建、生成四套仓库索引、发布 release 并把
 `repo/` 提交回 `main`。
 
-## 已知限制
-
-1. **手动档位来自硬件档位表。** `brightness_levels` 是面板档位（`0x41`..`0x48`）。
-   `manual_brightness_levels` 把手动档映射到同一坐标轴上，默认四档 `[0, 0x43, 0x45, 0x48]`，
-   从关闭到最亮。元素为 `0` 或 `0x41`..`0x48`，长度 1 到 8 即档位数，允许相邻相等，递减的表被
-   丢弃。跟随模式把键盘背光归一化到同一张表；小键盘不会比键盘更亮。
-2. **NumLock 长按阈值。** `iNumLockMaxVaildDist = 2741`，单位 0.1 mm，即 0.27 mm，比真实的按住
-   动作短。取值照原样使用；长按被识别成滑动时先查这里。
-3. **图标格与计算器热区在厂商布局中重叠。** 整格归 NumLock 触发。
-4. **背光无法回读。** `HIDIOCGFEATURE` 返回全零；灯态依据已写入的报文与状态行维护。
-
 ## 许可
 
 GPL-3.0-or-later，见 [LICENSE](LICENSE)。
 
 Copyright (C) 2026 RunningVAN
+*（内容由AI生成，仅供参考）*
