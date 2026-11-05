@@ -43,12 +43,30 @@ done
 [[ -d "$DIST" ]] || die "产物目录不存在: $DIST"
 
 # 版本从 deb/rpm 文件名里取，四个生态共用同一套版本号
-VERSION="$(ls "$DIST" | sed -n 's/^asus-numpad_\([0-9][^-]*\)-[0-9]*_[a-z0-9]*\.deb$/\1/p' | sort -V | tail -1)"
-[[ -n "$VERSION" ]] || VERSION="$(ls "$DIST" | sed -n 's/^asus-numpad-\([0-9][^-]*\)-[0-9]*\..*\.rpm$/\1/p' | sort -V | tail -1)"
+# deb 名字有两种：带改版号（asus-numpad_1.0.0-1_amd64.deb）和不带（asus-numpad_1.0.0_amd64.deb）
+VERSION="$(ls "$DIST" | sed -n \
+    -e 's/^asus-numpad_\([0-9][^-]*\)_[a-z0-9]*\.deb$/\1/p' \
+    -e 's/^asus-numpad_\([0-9][^-]*\)-[0-9][^-]*_[a-z0-9]*\.deb$/\1/p' \
+    -e 's/^asus-numpad-\([0-9][^-]*\)-[0-9]*\..*\.rpm$/\1/p' \
+  | sort -V | tail -1)"
 [[ -n "$VERSION" ]] || warn "推不出版本号，索引里的 Date 用当天"
 VERSION="${VERSION:-0.0.0}"
 
 log "版本 ${VERSION}，产物 ${DIST}，输出 $OUT"
+
+# --------------------------------------------------------------------------- #
+# 版本倒退闸门
+# --------------------------------------------------------------------------- #
+# prune 只按版本号保留最新 KEEP 个，所以当本次版本低于仓库里已有的版本时，新包会
+# 被当成"最旧"直接删掉，索引里只剩旧版本，而脚本照样以成功退出。发布侧看不出异常，
+# 装的人却拿到旧包。这里宁可让流水线红掉，也不产出这种索引。
+EXISTING="$(ls "$OUT"/apt/pool/main/a/asus-numpad "$OUT"/rpm/x86_64 \
+               "$OUT"/arch/x86_64 "$OUT"/alpine/x86_64 2>/dev/null \
+             | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1 || true)"
+if [[ -n "$EXISTING" && "$EXISTING" != "$VERSION" ]] \
+   && [[ "$(printf '%s\n%s\n' "$VERSION" "$EXISTING" | sort -V | tail -1)" != "$VERSION" ]]; then
+    die "仓库里已有 ${EXISTING}，本次要发 ${VERSION}：版本更低，包管理器不会把它当升级，prune 还会把新包当最旧的删掉。先清掉 $OUT 下的旧版本，或改一个更高的版本号。"
+fi
 mkdir -p "$OUT"
 
 # --------------------------------------------------------------------------- #
