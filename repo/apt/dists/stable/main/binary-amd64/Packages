@@ -34,3 +34,21 @@ Homepage: https://github.com/RunningVAN/asus-numpad
 Description: ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动
  ASUS 触摸板数字小键盘用户态驱动，参数取自官方 AsusNUMPADFilter.inf。
 
+Package: asus-numpad
+Version: 1.2.4
+Architecture: amd64
+Maintainer: asus-numpad maintainers <maintainers@example.invalid>
+Installed-Size: 1412
+Depends: libc6 (>= 2.31)
+Recommends: systemd
+Filename: pool/main/a/asus-numpad/asus-numpad_1.2.4_amd64.deb
+Size: 476568
+MD5sum: 1342d7709083b620733d68e118bbb22f
+SHA1: ec6caf1e4dba7afaa22defef176f6e64f4b45795
+SHA256: 99d64bca49eea51f295cbe02b1c140a24e560c6f6a63dac49d8802a8d0796731
+Section: utils
+Priority: optional
+Homepage: https://github.com/RunningVAN/asus-numpad
+Description: ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动
+ ASUS 触摸板数字小键盘用户态驱动，参数取自官方 AsusNUMPADFilter.inf。
+
