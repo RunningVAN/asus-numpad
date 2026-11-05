@@ -14,6 +14,7 @@ post_install() {
 
 asus-numpad 已安装。
   · 长按触摸板右上角图标区约 496ms 切换数字小键盘
+    （冰刃双屏 / 灵耀双屏为侧置触摸板，数字模式走键盘上的专用切换键）
   · systemctl status asus-numpad
   · asus-numpad check
   · 配置：/etc/asus-numpad/asus-numpad.json

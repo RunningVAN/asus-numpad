@@ -8,126 +8,6 @@ no ACPI table is patched; uninstalling restores stock behaviour.
 
 Timing and geometry constants come from `AlgoParameters` in the vendor file `AsusNUMPADFilter.inf`.
 
-## FAQ
-
-### Why is support limited to ASUS models?
-
-The driver does not depend on ASUS-specific interfaces: input comes from the touchpad's evdev node,
-keys go out through uinput, and no vendor kernel module or ACPI object is involved, so any multitouch
-pad follows the same code path. A port means replacing the model entry (DMI `product_name` plus the
-touchpad HID name) and the layout constants (cell centres, thresholds).
-
-What cannot be ported is the hardware. The NumberPad panel provides two things other OEM touchpads
-generally do not:
-
-- **Addressable backlight.** Cell position and number-mode state are indicated by an LED pattern
-  driven through HID FEATURE report `0x0d` (`[0d 14 03 <v> ad]`, `0x41`..`0x48` select the brightness
-  step). Without it, keys are still emitted, but nothing indicates which cell a finger is on or
-  whether number mode is active.
-- **A factory calibration table.** `AlgoParameters` in `AsusNUMPADFilter.inf` fixes frame length
-  (8 ms), geometry unit (0.1 mm), tap window (350 ms), NumLock long press (62 frames), swipe
-  threshold (4838 um) and two-finger gap (40 mm). Without it those values have to be fitted on a
-  panel that was never tuned for numpad use, and tap and swipe recognition will not match the
-  Windows driver.
-
-Support is therefore limited to models that have both, and `src/sku.rs` is the only place where that
-is decided. A panel that has both can be added by editing that table and the layout constants.
-Patches are welcome.
-
-### Why a userspace driver instead of a kernel module?
-
-- The panel is attached through ELAN i2c-hid (`04F3:3275` / `ASUE1416`), not through the ASUS `0B05`
-  keyboard controller, so no existing kernel module covers it and none has to be replaced to add
-  support.
-- Backlight control is a HID FEATURE report on the touchpad's own hidraw node, which a userspace
-  process can issue without kernel changes.
-- Timing, geometry and threshold values are taken from the vendor INF verbatim, so state machine
-  behaviour matches the Windows driver, and per-model differences stay in one table.
-- The boot path is untouched. Uninstalling removes the service unit and the udev rule and the pad
-  returns to stock behaviour; kernel upgrades cannot regress it.
-
-### Will this be merged into asusctl?
-
-No.
-
-- Only a small number of ASUS models ship this touchpad.
-- Once the package for the matching model is installed there is little left to adjust: the numpad
-  works as it is, so adding it to asusctl offers little to the rest of its users.
-- The maintainer does not have the time to adapt it to asusctl's architecture and release cycle.
-
-Contributions are welcome either way: patches to this project, or an implementation of these features
-in asusctl.
-
-## How it works
-
-### Data path
-
-```
-touchpad --evdev(/dev/input/eventN)--> frame buffer (8 ms) --> state machine --uinput(/dev/uinput)--> key events
-                                                                   |
-                                                                   `--> hidraw FEATURE report --> numpad backlight
-```
-
-### Timing and geometry
-
-| Parameter | Value | Meaning |
-| --- | --- | --- |
-| Frame length | 8 ms | Time base of the state machine; a long press is 62 frames (496 ms) |
-| Length unit | 0.1 mm | Unit for layout geometry and thresholds |
-| Tap duration | 350 ms | Separates a tap from a swipe |
-| NumLock long press | 62 frames | Toggles number mode from the icon area |
-| Swipe threshold | 4838 µm | Movement below this is not a swipe |
-| Two-finger gap | 40 mm | Detects two-finger scrolling |
-| Launch gesture | 7000 µm | Distance that triggers the calculator hot zone |
-
-### Key layout
-
-Keymaps are selected by touchpad module and HID name, not by laptop model. `HID_LAYOUTS` holds 44
-HID-name-to-keymap entries and covers every module in the vendor `SupportList`; module prefixes
-such as `ASUE1416` and `ASCF1400` appear in `/sys/class/input/*/name`.
-
-The numpad sits in the top-right corner of the touchpad, 5 rows by 4 columns. Cell centres are
-the coordinates of `NUMPADLAYOUT_GH3XLNDZ_00..14` in 0.1 mm units. Coordinate to cell to keycode
-conversion has no hardware dependency and is unit tested.
-
-### Backlight
-
-```
-report: 0d 14 03 <level> ad   # 6 bytes, HID FEATURE report ID 0x0d
-level:  0x41..0x48            # steps 1..8
-        0x00                  # off
-        0x01                  # on, current step kept
-write:  HIDIOCSFEATURE        # no 0x60 unlock required
-```
-
-`bright follow on` reads `current` and `max` from `/sys/class/leds/asus::kbd_backlight/brightness`,
-maps the ratio onto steps 1..8, polls every 500 ms and writes only on a step change. Manual steps
-and follow mode share one step table.
-
-Node selection (`led_policy.rs`): the OMNI receiver `0b05:1ace` is always excluded, ELAN `04f3:*`
-with FEATURE `0x0d` takes priority, then ASUS `0b05:*`, then i2c (`0x38` / `0x15`).
-
-### Permissions
-
-No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs as a
-`systemd --user` unit, `/dev/uinput` is granted by the session.
-
-## Source layout
-
-| Path | Purpose |
-| --- | --- |
-| `src/main.rs` | CLI parsing and wiring |
-| `src/engine.rs` | Vendor algorithm state machine |
-| `src/layout.rs` | Layout geometry, 44 HID entries, coordinate conversion |
-| `src/config.rs` | Defaults, load and save, migration of old paths |
-| `src/brightness.rs` | Keyboard backlight to numpad step mapping |
-| `src/led_policy.rs` | Backlight node scoring |
-| `src/sku.rs` | Model gate |
-| `src/i18n.rs` | Three languages, overridable with external `.lang` files |
-| `src/linux/` | evdev, uinput, hidraw and i2c backends |
-| `lang/` | zh-CN, zh-TW, en strings |
-| `packaging/` | deb, rpm, Arch, Alpine, Gentoo, Nix, tarball scripts and repo tools |
-
 ## Installation
 
 ```bash
@@ -178,10 +58,10 @@ CI installs every package in a clean container for each target distribution and 
 a package that fails to install blocks the release.
 
 There is one package. The model is detected at runtime: the same binary reads DMI fields and the
-touchpad module, then picks the matching keymap, so there is no package to choose and nothing to get
-wrong. If the hardware cannot be read reliably (virtual machines, whitebox chassis, BIOS placeholder
-strings), pin the model by hand, see [Model detection](#model-detection). Runtime dependency: glibc,
-or musl on Alpine.
+touchpad module, then picks the matching parameters and keymap, so no package names a model and none
+can be the wrong one for the machine. If the hardware cannot be read reliably (virtual machines,
+whitebox chassis, BIOS placeholder strings), pin the model by hand, see
+[Model detection](#model-detection). Runtime dependency: glibc, or musl on Alpine.
 
 ## Usage
 
@@ -193,10 +73,20 @@ asus-numpad --dump-config  # effective configuration
 ```
 
 ```bash
-asus-numpad bright 0|1|2|3      # off, low, medium, high (fixed step, follow disabled)
+asus-numpad bright 0..3         # step, 0 = off (follow disabled); the range ends at the step count
 asus-numpad bright up|down|cycle
 asus-numpad bright follow on|off
 asus-numpad bright status
+```
+
+```bash
+asus-numpad levels              # step table: the byte each step writes
+asus-numpad levels 2 0x46       # step 2 writes 0x46 (0x00 or 0x41..0x48)
+asus-numpad levels reset        # back to the default four steps
+asus-numpad led on|off|0x41     # bypass the state machine, send one backlight byte
+asus-numpad layout              # keymap in use, every recorded keymap, support level
+asus-numpad layout --ids        # module name to keymap table
+asus-numpad layout auto         # back to automatic selection
 ```
 
 ```bash
@@ -220,11 +110,12 @@ use vendor defaults.
 | `grab` | `true` / `false` | Grab the touchpad; when off, clicks reach the desktop |
 | `led_kind` | `auto` / `hidraw` / `i2c` / `none` | Backlight channel |
 | `follow_keyboard_brightness` | `true` / `false` | Mirror the keyboard backlight, default `true` |
-| `manual_brightness_step` | `0`..`4` | Current manual step (0 = off), used when follow is off |
+| `manual_brightness_step` | `0`..`3` | Current manual step (0 = off), used when follow is off; the range ends at the step count |
 | `manual_brightness_levels` | array | Step to value table, default `[0, 0x43, 0x45, 0x48]`; entries `0` or `0x41`..`0x48`; length 1 to 8 sets the step count; equal neighbours allowed; a decreasing table is discarded |
 | `brightness_levels` | array | Hardware steps, default `0x41`..`0x48` |
 | `brightness_poll_ms` | ms | Poll interval, default `500` |
 | `allow_unverified_layout` | `true` / `false` | Accept an unlisted layout of a known family |
+| `layout_name` | keymap name / `auto` | Pin a keymap by name, `auto` selects it from the module |
 | `sku` | model id / `null` | Pin a model and skip detection; `null` means auto |
 
 ## Supported models
@@ -232,19 +123,41 @@ use vendor defaults.
 | Model id | Models |
 | --- | --- |
 | `g533` | Strix SCAR 15 / Strix G15 (2022): `G533Z*`, `G513R*` (`G533Q*` / `G513Q*` / `G513I*` from 2021 ship without a NumberPad and are not matched) |
-| `g614` | Strix SCAR 16 / Strix G16 (2023): `G614`, `G634` |
-| `g615` | Strix SCAR 16 / Strix G16 (2025 and later): `G615`, `G635` |
-| `gx550` | Zephyrus Duo 15 and 16: `GX550`, `GX551`, `GX650` |
-| `ux582` | Zenbook Duo: `UX582`, `UX482` |
+| `g614` | Strix SCAR 16 / Strix G16 (2023 and 2024): `G614`, `G634` |
+| `g615` | Strix SCAR 16 / Strix G16 (2025 and 2026): `G615`, `G635` |
+| `gx550` | Zephyrus Duo 15 and 16 (side-mounted touchpad): `GX550`, `GX551`, `GX650` |
+| `ux582` | Zenbook Duo (side-mounted touchpad): `UX582`, `UX482` |
 | `universal` | Anything else: vendor defaults, keymap picked by touchpad module |
 
 Model ids are there to switch parameters by hand (`asus-numpad sku <id>`) and to show what
 auto-detection picked; they never block startup. A machine that matches no row simply runs on
-`universal`, with the keymap still chosen by the actual touchpad module. Only `G634` has been on a
-physical machine; the other rows map from touchpad module data and keymap tables.
+`universal`, with the keymap still chosen by the actual touchpad module. `G614` and `G634` cover the
+2023 and 2024 model years (SCAR 16 -> SCAR 16 2024), `G615` and `G635` cover 2025 and 2026 (Strix
+G16 2025 -> 2026 and SCAR 16 2025 -> 2026; `G615` is the standard model, `G635` the SCAR variant):
+the trailing characters track CPU refreshes, the touchpad does not change. 2026 keeps the same codes,
+so the table needs no extra row. Only `G634JY` (SCAR 16, 2023) has been on a physical machine; the
+other rows map from touchpad module data and keymap tables.
+
+A model row holds the DMI name prefixes of the generation it serves, plus an `excludes` list for
+generations that reuse the same code prefix without the hardware. An excluded prefix falls through to
+the module check and then to `universal`; it is not refused. A manual `sku` pin outranks both.
 
 The model code in DMI is authoritative; marketing names are for orientation only. The old per-model
 package names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades move to `asus-numpad`.
+
+### Dual-screen models: side-mounted touchpad
+
+On the Zephyrus Duo and Zenbook Duo the secondary screen takes half of the palm rest, so the touchpad
+is a vertical strip to the right of the keyboard instead of sitting under the palms. Number mode on
+these machines is switched by a **dedicated key on the keyboard** (the ScreenPad key on `GX550` is one
+of them), not by a long press on the icon area at the top-right corner of the touchpad. The 62-frame
+icon-area long press therefore does not apply to a side-mounted pad:
+
+- Contact mapping and backlight are unchanged: cell centres shift with the keymap of that module, and
+  the backlight still uses FEATURE `0x0d`.
+- The mode switch belongs to the keyboard key. The keyboard is its own HID device and the driver grabs
+  the touchpad only, so it never competes for that key.
+- To pin number mode, use the `numlock` option (`sync` / `toggle` / `off`) rather than the long press.
 
 ### Model detection
 
@@ -266,6 +179,148 @@ asus-numpad sku auto       # back to auto-detection
 ```
 
 `sku` in the config wins over detection; `--sku g614` applies to one invocation only.
+
+### Layout gate
+
+Keymaps are keyed by module name: `HID_LAYOUTS` in `src/layout.rs` maps 44 module names to keymap
+names from the vendor INF. Each keymap carries a support level.
+
+| Level | Behaviour |
+| --- | --- |
+| `verified` | starts as is |
+| `family` | same 5x4 grid, 15 parameters complete, not verified on hardware: refused until allowed |
+| `unsupported` | parameters recorded but the grid differs from the reference keymap: refused, `check` output requested |
+
+A module the table does not know resolves to `UNKNOWN` and is refused the same way, so an unfamiliar
+panel never gets mapped onto a keymap that would emit the wrong keys. The gate applies to the keymap
+only, never to the model id.
+
+```bash
+asus-numpad --allow-unverified run    # or set allow_unverified_layout in the config
+```
+
+## FAQ
+
+### Why is support limited to ASUS models?
+
+The driver does not depend on ASUS-specific interfaces: input comes from the touchpad's evdev node,
+keys go out through uinput, and no vendor kernel module or ACPI object is involved, so any multitouch
+pad follows the same code path. A port means replacing the model entry (DMI `product_name` plus the
+touchpad HID name) and the layout constants (cell centres, thresholds).
+
+What cannot be ported is the hardware. The NumberPad panel provides two things other OEM touchpads
+generally do not:
+
+- **Addressable backlight.** Cell position and number-mode state are indicated by an LED pattern
+  driven through HID FEATURE report `0x0d` (`[0d 14 03 <v> ad]`, `0x41`..`0x48` select the brightness
+  step). Without it, keys are still emitted, but nothing indicates which cell a finger is on or
+  whether number mode is active.
+- **A factory calibration table.** `AlgoParameters` in `AsusNUMPADFilter.inf` fixes frame length
+  (8 ms), geometry unit (0.1 mm), tap window (350 ms), NumLock long press (62 frames), swipe
+  threshold (4838 um) and two-finger gap (40 mm). Without it those values have to be fitted on a
+  panel that was never tuned for numpad use, and tap and swipe recognition will not match the
+  Windows driver.
+
+Support is therefore limited to panels that have both. Model parameters live in `src/sku.rs`,
+keymaps and their support level in `HID_LAYOUTS` (`src/layout.rs`). Neither table is a model
+whitelist: a model id only picks parameters, the keymap is picked by the touchpad module, and an
+uncovered module stops at the [layout gate](#layout-gate). A panel that has both takes one table row
+plus the layout constants. Patches are welcome.
+
+### Why a userspace driver instead of a kernel module?
+
+- The panel is attached through ELAN i2c-hid (`04F3:3275` / `ASUE1416`), not through the ASUS `0B05`
+  keyboard controller, so no existing kernel module covers it and none has to be replaced to add
+  support.
+- Backlight control is a HID FEATURE report on the touchpad's own hidraw node, which a userspace
+  process can issue without kernel changes.
+- Timing, geometry and threshold values are taken from the vendor INF verbatim, so state machine
+  behaviour matches the Windows driver, and model differences stay in one parameter table.
+- The boot path is untouched. Uninstalling removes the service unit and the udev rule and the pad
+  returns to stock behaviour; kernel upgrades cannot regress it.
+
+### Will this be merged into asusctl?
+
+No.
+
+- Only a small number of ASUS models ship this touchpad.
+- Once installed there is little left to adjust: the numpad works as it is, so adding it to asusctl
+  offers little to the rest of its users.
+- The maintainer does not have the time to adapt it to asusctl's architecture and release cycle.
+
+Contributions are welcome either way: patches to this project, or an implementation of these features
+in asusctl.
+
+## How it works
+
+### Data path
+
+```
+touchpad --evdev(/dev/input/eventN)--> frame buffer (8 ms) --> state machine --uinput(/dev/uinput)--> key events
+                                                                   |
+                                                                   `--> hidraw FEATURE report --> numpad backlight
+```
+
+### Timing and geometry
+
+| Parameter | Value | Meaning |
+| --- | --- | --- |
+| Frame length | 8 ms | Time base of the state machine; a long press is 62 frames (496 ms) |
+| Length unit | 0.1 mm | Unit for layout geometry and thresholds |
+| Tap duration | 350 ms | Separates a tap from a swipe |
+| NumLock long press | 62 frames | Toggles number mode from the icon area (centre-mounted pads; see [dual-screen models](#dual-screen-models-side-mounted-touchpad)) |
+| Swipe threshold | 4838 µm | Movement below this is not a swipe |
+| Two-finger gap | 40 mm | Detects two-finger scrolling |
+| Launch gesture | 7000 µm | Distance that triggers the calculator hot zone |
+
+### Key layout
+
+Keymaps are selected by touchpad module and HID name, not by laptop model. `HID_LAYOUTS` holds 44
+HID-name-to-keymap entries and covers every module in the vendor `SupportList`; module prefixes
+such as `ASUE1416` and `ASCF1400` appear in `/sys/class/input/*/name`. Each entry carries a support
+level, see the [layout gate](#layout-gate).
+
+The numpad sits in the top-right corner of the touchpad, 5 rows by 4 columns. Cell centres are
+the coordinates of `NUMPADLAYOUT_GH3XLNDZ_00..14` in 0.1 mm units. Coordinate to cell to keycode
+conversion has no hardware dependency and is unit tested.
+
+### Backlight
+
+```
+report: 0d 14 03 <level> ad   # 6 bytes, HID FEATURE report ID 0x0d
+level:  0x41..0x48            # steps 1..8
+        0x00                  # off
+        0x01                  # on, current step kept
+write:  HIDIOCSFEATURE        # no 0x60 unlock required
+```
+
+`bright follow on` reads `current` and `max` from `/sys/class/leds/asus::kbd_backlight/brightness`,
+maps the ratio onto steps 1..8, polls every 500 ms and writes only on a step change. Manual steps
+and follow mode share one step table.
+
+Node selection (`led_policy.rs`): the OMNI receiver `0b05:1ace` is always excluded, ELAN `04f3:*`
+with FEATURE `0x0d` takes priority, then ASUS `0b05:*`, then i2c (`0x38` / `0x15`).
+
+### Permissions
+
+No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs as a
+`systemd --user` unit, `/dev/uinput` is granted by the session.
+
+## Source layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/main.rs` | CLI parsing and wiring |
+| `src/engine.rs` | Vendor algorithm state machine |
+| `src/layout.rs` | Layout geometry, 44 HID entries, coordinate conversion |
+| `src/config.rs` | Defaults, load and save, migration of old paths |
+| `src/brightness.rs` | Keyboard backlight to numpad step mapping |
+| `src/led_policy.rs` | Backlight node scoring |
+| `src/sku.rs` | Model table, runtime detection, manual pin, per-generation excludes |
+| `src/i18n.rs` | Three languages, overridable with external `.lang` files |
+| `src/linux/` | evdev, uinput, hidraw and i2c backends |
+| `lang/` | zh-CN, zh-TW, en strings |
+| `packaging/` | deb, rpm, Arch, Alpine, Gentoo, Nix, tarball scripts and repo tools |
 
 ## Building
 
@@ -289,4 +344,3 @@ repository indexes, publishes the release and commits `repo/` back to `main`.
 GPL-3.0-or-later. See [LICENSE](LICENSE).
 
 Copyright (C) 2026 RunningVAN
-*（内容由AI生成，仅供参考）*

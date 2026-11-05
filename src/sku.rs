@@ -78,7 +78,7 @@ pub struct Sku {
 pub const SKUS: &[Sku] = &[
     Sku {
         id: "g533",
-        display: "ASUS 枪神6 / 魔霸6 15 英寸（G533Z* / G513R*，2022 代）",
+        display: "ASUS 枪神6 / 魔霸6，15 英寸，2022（G533Z* / G513R*）",
         models: &["G533", "G513"],
         // 2021 代枪神5 / 魔霸5：代号第三位是 Q / I，官方规格页没有 NumberPad，
         // 靠模组判据之外再按代际挡一道，免得识别成 g533 给出「这台有小键盘」的错觉。
@@ -88,7 +88,7 @@ pub const SKUS: &[Sku] = &[
     },
     Sku {
         id: "g614",
-        display: "ASUS 枪神7 / 枪神8 / 魔霸新锐 2023 / 枪神7 超竞版 16 英寸（G614 / G634）",
+        display: "ASUS 枪神7 / 枪神8 及超竞版、魔霸新锐，16 英寸，2023–2024（G614 / G634）",
         models: &["G614", "G634"],
         excludes: &[],
         modules: &["ASUE1416", "ASUF1416"],
@@ -96,27 +96,27 @@ pub const SKUS: &[Sku] = &[
     },
     Sku {
         id: "g615",
-        display: "ASUS 枪神9 / 枪神10 16 英寸、魔霸新锐 2025、超竞版（G615 / G635）",
+        display: "ASUS 枪神9 / 枪神10 及超竞版、魔霸新锐 2025，16 英寸，2025–2026（G615 / G635）",
         models: &["G615", "G635"],
         excludes: &[],
         modules: &["ASCP1400", "ASCF1400"],
-        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，不并入本配置",
+        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。G615 为标准版、G635 为超竞版；2026 年的枪神10 沿用同一对代号，模组取值来自 2025 代，2026 代尚未上真机。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，不并入本配置",
     },
     Sku {
         id: "gx550",
-        display: "ASUS 冰刃双屏 15 / 16 英寸（GX550 / GX551 / GX650）",
+        display: "ASUS 冰刃双屏，15 / 16 英寸，侧置触摸板（GX550 / GX551 / GX650）",
         models: &["GX550", "GX551", "GX650"],
         excludes: &[],
         modules: &["ASUE1408", "ASUE1404"],
-        note: "GX550 / GX551 / GX650 同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A",
+        note: "GX550 / GX551 / GX650 同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A。触摸板竖排在键盘右侧，数字模式由键盘上的专用键切换，不是长按图标区（见 README「双屏机型：侧置触摸板」）",
     },
     Sku {
         id: "ux582",
-        display: "灵耀双屏（UX582 / UX482）",
+        display: "ASUS 灵耀双屏，侧置触摸板（UX582 / UX482）",
         models: &["UX582", "UX482"],
         excludes: &[],
         modules: &["ASUE1406", "ELAN1406"],
-        note: "模组 ASUE1406 / ELAN1406 → 键表 NVM",
+        note: "模组 ASUE1406 / ELAN1406 → 键表 NVM。触摸板在键盘右侧，数字模式由键盘上的专用键切换，不是长按图标区",
     },
     Sku {
         id: "universal",
