@@ -1,0 +1,19 @@
+# Rust 构建产物
+/target/
+**/*.rs.bk
+
+# 打包产物
+/dist/
+packaging/**/pkg/
+packaging/**/src/
+packaging/**/*.tar.gz
+packaging/**/*.pkg.tar.*
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 本地交叉编译链接器路径
+.zigcc-linker
