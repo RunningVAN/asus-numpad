@@ -351,11 +351,15 @@ jobs:
       - name: 校验 .SRCINFO 与 PKGBUILD 一致
         run: |
           set -euo pipefail
-          test -f auraur/.SRCINFO
-          grep -q "^pkgname = asus-numpad-rs$" auraur/.SRCINFO
-          grep -q "^pkgver = ${{ steps.ver.outputs.version }}$" auraur/.SRCINFO
+          test -f auraur/.SRCINFO || { echo "::error::没有 .SRCINFO"; exit 1; }
+          # makepkg --printsrcinfo 的字段行带前导 tab，别写成 ^pkgver
+          V='${{ steps.ver.outputs.version }}'
+          grep -qE "^[[:space:]]*pkgname = asus-numpad-rs$" auraur/.SRCINFO \
+            || { echo "::error::pkgname 不对"; grep -E "pkgname" auraur/.SRCINFO; exit 1; }
+          grep -qE "^[[:space:]]*pkgver = ${V}$" auraur/.SRCINFO \
+            || { echo "::error::pkgver 不是 ${V}"; grep -E "pkgver" auraur/.SRCINFO; exit 1; }
           # AUR 拒收 pkgver 里带 - 的包，这里提前拦
-          ! grep -qE "^pkgver = .*-" auraur/.SRCINFO
+          ! grep -qE "^[[:space:]]*pkgver = .*-" auraur/.SRCINFO
           echo "--- .SRCINFO ---"
           cat auraur/.SRCINFO
 
@@ -371,7 +375,7 @@ jobs:
       # 仓库产物（它会以 asus-numpad-rs 的包名进 pacman 源，和原生包打架）
       - uses: actions/upload-artifact@v4
         with:
-          name: pkg-aur
+          name: aur-src
           path: |
             auraur/PKGBUILD
             auraur/.SRCINFO
@@ -445,8 +449,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 只汇总出包产物。不加 pattern 会把 logs-* 与 AUR 源码一起拉进 dist，
+      # 后面 mv dist/* 连日志目录都会塞进 Release。
       - uses: actions/download-artifact@v4
         with:
+          pattern: pkg-*
           path: dist
           merge-multiple: true
 
@@ -454,7 +461,7 @@ jobs:
       # 可以直接下这两个文件 makepkg -si。
       - uses: actions/download-artifact@v4
         with:
-          name: pkg-aur
+          name: aur-src
           path: aurart
 
       - name: 计算版本
