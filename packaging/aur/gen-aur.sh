@@ -44,7 +44,9 @@ mkdir -p "${OUT}"
 
 if [[ -z "${SHA256}" ]]; then
     log "下载源码包计算校验和：${SOURCE_URL}"
-    tmp="$(mktemp -t asus-numpad-aur)"
+    # 用显式模板：GNU mktemp 的 -t 要求模板自带至少三个 X，macOS 的 -t 则是
+    # 直接给名字，两边不通用，CI 上一版就死在 "too few X's in template"。
+    tmp="$(mktemp "${TMPDIR:-/tmp}/asus-numpad-aur.XXXXXX")"
     trap 'rm -f "$tmp"' EXIT
     # --retry-all-errors：tag 刚推上去时 archive 会短暂 404，普通 --retry 不重试 404
     if ! curl -fsSL --retry 6 --retry-delay 5 --retry-all-errors -o "$tmp" "${SOURCE_URL}"; then
