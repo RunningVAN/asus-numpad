@@ -66,7 +66,9 @@ for d in "$OUT/apt/pool/main/a/asus-numpad" "$OUT/rpm/x86_64" \
     [[ -d "$d" ]] || continue
     for f in "$d"/*; do
         [[ -e "$f" ]] || continue
-        v="$(printf '%s\n' "${f##*/}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+        # -m1 而不是 | head -1：head 读一行就关管道，grep 收到 SIGPIPE 退出 141，
+        # 配合 set -o pipefail 会让整个脚本在赋值这一步直接退出。
+        v="$(printf '%s\n' "${f##*/}" | grep -oE -m1 '[0-9]+\.[0-9]+\.[0-9]+' || true)"
         if [[ -n "$v" ]]; then existing_versions+=("$v"); fi
     done
 done
