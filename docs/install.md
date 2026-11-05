@@ -7,10 +7,10 @@ Alpine 的 apk，以及 Gentoo、Nix/NixOS 和任意发行版都能用的静态 
 
 - **走软件源**（推荐）：加一条仓库配置，之后 `apt upgrade` / `dnf upgrade` /
   `zypper update` / `pacman -Syu` 跟着升级。
-- **直接装包**：从 [Releases](https://github.com/RunningVAN/asus-numpad/releases) 下载本机格式安装一次，升级要自己重复。
+- **直接装包**：从 [Releases](https://github.com/asus-numpad/asus-numpad/releases) 下载本机格式安装一次，升级要自己重复。
 
-只有一个包，机型配置由程序在运行期自动识别，装之前不必查机型表，也不会装错包。装完想确认
-识别结果：
+只有一个包，机型配置由程序在运行期自动识别，装之前不必查机型表，也不会装错包。表里对不上的
+机器会拒绝启动（退出码 `3`，并打印支持机型），不会拿别的机型的参数硬跑。装完想确认识别结果：
 
 ```bash
 asus-numpad sku          # 识别到哪套配置、依据是什么
@@ -26,9 +26,13 @@ asus-numpad sku auto     # 恢复自动识别
 
 机型与模组、键表的对应见 [README 机型表](../README.md#支持机型) 与 [machines.md](machines.md)。
 
+项目已迁到 `asus-numpad` 组织，版本号从 1.0.0 重编。旧源（`RunningVAN/asus-numpad`）里 1.2.4
+及更早的包不能就地升级到 1.0.0，换源前先卸一次再装：`sudo dnf remove asus-numpad` /
+`sudo apt remove asus-numpad`。
+
 ## 软件源
 
-仓库地址是 `https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo`，
+仓库地址是 `https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo`，
 由 CI 在每次发版后自动重建，每个生态保留最近 3 个版本。仓库未做 GPG 签名——
 密钥轮换的成本和收益不成比例；索引里的哈希校验值齐全，介意完整性的请改用 Release
 里的包手工安装。
@@ -58,7 +62,7 @@ Fedora / openSUSE Leap 16 / Tumbleweed，逐个跑 `--version`，有一处装不
 ### Debian / Ubuntu / Mint
 
 ```bash
-echo "deb [trusted=yes] https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/apt stable main" \
+echo "deb [trusted=yes] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update
 sudo apt install asus-numpad
@@ -72,7 +76,7 @@ sudo apt install asus-numpad
 sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
 [asus-numpad]
 name=asus-numpad
-baseurl=https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$basearch
+baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
 enabled=1
 gpgcheck=0
 EOF
@@ -85,7 +89,7 @@ sudo dnf install asus-numpad
 
 ```bash
 sudo zypper addrepo --no-gpgcheck --refresh \
-  "https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
+  "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
 sudo zypper install asus-numpad
 ```
 
@@ -105,7 +109,7 @@ sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 
 [asus-numpad]
 SigLevel = Optional TrustAll
-Server = https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/arch/$arch
+Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
 sudo pacman -Sy asus-numpad
 ```
@@ -117,8 +121,8 @@ sudo pacman -Sy asus-numpad
 ```bash
 # 立刻可用：从 Release 下 PKGBUILD 与 asus-numpad-rs.install 到空目录
 mkdir asus-numpad-rs && cd asus-numpad-rs
-curl -fLO https://github.com/RunningVAN/asus-numpad/releases/latest/download/PKGBUILD
-curl -fLO https://github.com/RunningVAN/asus-numpad/releases/latest/download/asus-numpad-rs.install
+curl -fLO https://github.com/asus-numpad/asus-numpad/releases/latest/download/PKGBUILD
+curl -fLO https://github.com/asus-numpad/asus-numpad/releases/latest/download/asus-numpad-rs.install
 makepkg -si
 ```
 
@@ -132,7 +136,7 @@ PKGBUILD 真编真装、跑 `--version` 并校验 systemd 单元与 udev 规则�
 ### Alpine
 
 ```bash
-echo "https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
+echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
   | sudo tee -a /etc/apk/repositories
 sudo apk update
 sudo apk add --allow-untrusted asus-numpad
@@ -205,14 +209,14 @@ sudo emerge -av sys-apps/asus-numpad
 
 ```bash
 # 临时跑
-nix run github:RunningVAN/asus-numpad
+nix run github:asus-numpad/asus-numpad
 
 # 装进 profile
-nix profile install github:RunningVAN/asus-numpad
+nix profile install github:asus-numpad/asus-numpad
 
 # NixOS（flake）
 {
-  inputs.asus-numpad.url = "github:RunningVAN/asus-numpad";
+  inputs.asus-numpad.url = "github:asus-numpad/asus-numpad";
   # 在某个 nixosSystem 的 modules 里：
   # { imports = [ inputs.asus-numpad.nixosModules.default ];
   #   services.asus-numpad.enable = true; }
@@ -222,7 +226,7 @@ nix profile install github:RunningVAN/asus-numpad
 ## 源码构建
 
 ```bash
-git clone https://github.com/RunningVAN/asus-numpad
+git clone https://github.com/asus-numpad/asus-numpad
 cd asus-numpad
 cargo build --release --locked
 sudo install -Dm755 target/release/asus-numpad /usr/bin/asus-numpad

@@ -1,6 +1,6 @@
 # asus-numpad
 
-English | [简体中文](README.zh-CN.md) · [Website](https://asus-numpad.github.io/)
+English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [Website](https://asus-numpad.github.io/)
 
 Linux userspace driver for the ASUS NumberPad. The touchpad is grabbed through evdev, contacts
 are mapped to numpad cells, key events are injected through uinput. No kernel module is replaced,
@@ -8,11 +8,20 @@ no ACPI table is patched; uninstalling restores stock behaviour.
 
 Timing and geometry constants come from `AlgoParameters` in the vendor file `AsusNUMPADFilter.inf`.
 
+Version 1.0 restarts the numbering under the `asus-numpad` organisation: the project moved here from
+`RunningVAN/asus-numpad`, where the history from 1.0.0 up to 1.2.4 stays read-only. Packages from that source are
+not upgradable in place, so remove them once before switching repositories:
+
+```bash
+# rpm: sudo dnf remove asus-numpad
+# deb: sudo apt remove asus-numpad
+```
+
 ## Installation
 
 ```bash
 # Debian / Ubuntu
-echo "deb [trusted=yes] https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/apt stable main" \
+echo "deb [trusted=yes] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update && sudo apt install asus-numpad
 
@@ -20,7 +29,7 @@ sudo apt update && sudo apt install asus-numpad
 sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
 [asus-numpad]
 name=asus-numpad
-baseurl=https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$basearch
+baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
 enabled=1
 gpgcheck=0
 EOF
@@ -28,7 +37,7 @@ sudo dnf install asus-numpad
 
 # openSUSE Leap / Tumbleweed, same rpm-md repo, zypper reads it directly
 sudo zypper addrepo --no-gpgcheck --refresh \
-  "https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
+  "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
 sudo zypper install asus-numpad
 
 # Arch / Manjaro
@@ -36,7 +45,7 @@ sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 
 [asus-numpad]
 SigLevel = Optional TrustAll
-Server = https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/arch/$arch
+Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
 sudo pacman -Sy asus-numpad
 
@@ -50,7 +59,7 @@ One package per ecosystem. The deb is built on Ubuntu 22.04 and covers 22.04 to 
 openSUSE Leap 16 and Tumbleweed: the spec uses standard macros only, runtime dependencies are glibc
 and systemd, and the repository is rpm-md, which zypper reads directly. Nothing is rebuilt per
 distribution. Native packages are also on
-[Releases](https://github.com/RunningVAN/asus-numpad/releases): deb, rpm, pkg.tar.zst, PKGBUILD with
+[Releases](https://github.com/asus-numpad/asus-numpad/releases): deb, rpm, pkg.tar.zst, PKGBUILD with
 .SRCINFO, apk, static tarball. Alpine, Gentoo, NixOS and manual tarball steps are in
 [docs/install.md](docs/install.md).
 
@@ -59,9 +68,11 @@ a package that fails to install blocks the release.
 
 There is one package. The model is detected at runtime: the same binary reads DMI fields and the
 touchpad module, then picks the matching parameters and keymap, so no package names a model and none
-can be the wrong one for the machine. If the hardware cannot be read reliably (virtual machines,
-whitebox chassis, BIOS placeholder strings), pin the model by hand, see
-[Model detection](#model-detection). Runtime dependency: glibc, or musl on Alpine.
+can be the wrong one for the machine. A machine that matches no row of the table is not started: the
+gate exits with code 3 and prints the supported models, rather than running parameters meant for other
+hardware. If the hardware cannot be read reliably (virtual machines, whitebox chassis, BIOS
+placeholder strings), pin the model by hand, see [Model detection](#model-detection). Runtime
+dependency: glibc, or musl on Alpine.
 
 ## Usage
 
@@ -127,11 +138,9 @@ use vendor defaults.
 | `g615` | Strix SCAR 16 / Strix G16 (2025 and 2026): `G615`, `G635` |
 | `gx550` | Zephyrus Duo 15 and 16 (side-mounted touchpad): `GX550`, `GX551`, `GX650` |
 | `ux582` | Zenbook Duo (side-mounted touchpad): `UX582`, `UX482` |
-| `universal` | Anything else: vendor defaults, keymap picked by touchpad module |
 
-Model ids are there to switch parameters by hand (`asus-numpad sku <id>`) and to show what
-auto-detection picked; they never block startup. A machine that matches no row simply runs on
-`universal`, with the keymap still chosen by the actual touchpad module. `G614` and `G634` cover the
+This table is the support list: a model id switches parameters by hand (`asus-numpad sku <id>`) and
+makes the detection result visible, and a machine outside the table is refused at startup. `G614` and `G634` cover the
 2023 and 2024 model years (SCAR 16 -> SCAR 16 2024), `G615` and `G635` cover 2025 and 2026 (Strix
 G16 2025 -> 2026 and SCAR 16 2025 -> 2026; `G615` is the standard model, `G635` the SCAR variant):
 the trailing characters track CPU refreshes, the touchpad does not change. 2026 keeps the same codes,
@@ -140,10 +149,20 @@ other rows map from touchpad module data and keymap tables.
 
 A model row holds the DMI name prefixes of the generation it serves, plus an `excludes` list for
 generations that reuse the same code prefix without the hardware. An excluded prefix falls through to
-the module check and then to `universal`; it is not refused. A manual `sku` pin outranks both.
+the module check and, when that misses as well, to the same refusal. A manual `sku` pin outranks
+both.
 
 The model code in DMI is authoritative; marketing names are for orientation only. The old per-model
 package names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades move to `asus-numpad`.
+
+| | |
+| --- | --- |
+| ![SCAR 15 / Strix G15 2022](docs/images/models/g533.webp) | ![SCAR 16 / Strix G16 2023](docs/images/models/g614.webp) |
+| SCAR 15 / Strix G15 (2022) | SCAR 16 / Strix G16 (2023) |
+| ![SCAR 16 / Strix G16 2025](docs/images/models/g615.webp) | ![Zephyrus Duo 16 2022](docs/images/models/gx550.webp) |
+| SCAR 16 / Strix G16 (2025) | Zephyrus Duo 16 (2022), side-mounted touchpad |
+
+Product images from the ASUS product pages.
 
 ### Dual-screen models: side-mounted touchpad
 
@@ -166,8 +185,9 @@ placeholder strings count as missing and do not block startup; a vendor field th
 ASUS blocks startup.
 
 Touchpad module name (such as `ASUE1416`, read from i2c-hid and HID) is the second signal, used
-when DMI names no model. Neither signal pointing at a model means `universal`. Module and keymap per
-model: [docs/machines.md](docs/machines.md).
+when DMI names no model. When neither signal names a row, the machine is outside the support list and
+the gate refuses to start with exit code 3; `--sku` stays the way in. Module and keymap per model:
+[docs/machines.md](docs/machines.md).
 
 When the hardware cannot be read reliably, pin the model:
 
@@ -221,11 +241,11 @@ generally do not:
   panel that was never tuned for numpad use, and tap and swipe recognition will not match the
   Windows driver.
 
-Support is therefore limited to panels that have both. Model parameters live in `src/sku.rs`,
-keymaps and their support level in `HID_LAYOUTS` (`src/layout.rs`). Neither table is a model
-whitelist: a model id only picks parameters, the keymap is picked by the touchpad module, and an
-uncovered module stops at the [layout gate](#layout-gate). A panel that has both takes one table row
-plus the layout constants. Patches are welcome.
+Support is therefore limited to panels that have both. The model table in `src/sku.rs` is the support
+list and gates startup; keymaps and their support level live in `HID_LAYOUTS` (`src/layout.rs`) and are
+picked separately by the touchpad module, so an uncovered module stops at the
+[layout gate](#layout-gate). A panel that has both takes one table row plus the layout constants.
+Patches are welcome.
 
 ### Why a userspace driver instead of a kernel module?
 
@@ -343,4 +363,4 @@ repository indexes, publishes the release and commits `repo/` back to `main`.
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
 
-Copyright (C) 2026 RunningVAN
+Copyright (C) 2026 the asus-numpad authors

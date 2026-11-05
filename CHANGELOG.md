@@ -2,6 +2,36 @@
 
 版本号跟包版本一致；`-N` 后缀是发版前的构建号。
 
+1.0.0 起版本号在 `asus-numpad` 组织下重新起算。下面 1.2.4 及更早的记录来自旧仓库
+[`RunningVAN/asus-numpad`](https://github.com/RunningVAN/asus-numpad)，原样保留作存档，与 1.0.0
+之间没有升级路径。
+
+## 1.0.0
+
+### 迁入组织
+
+- 仓库迁到 [`asus-numpad/asus-numpad`](https://github.com/asus-numpad/asus-numpad)，官网改为
+  `https://asus-numpad.github.io/`，软件源改为 `.../asus-numpad/asus-numpad/main/repo`；旧仓库与
+  旧官网地址保留跳转。
+- 版本号从 1.0.0 重新起算。旧源的 1.2.4 装不上 1.0.0（rpm / deb 都不降级），换源前先卸一次：
+  `sudo dnf remove asus-numpad` 或 `sudo apt remove asus-numpad`。
+
+### 认不出机型就拒绝启动
+
+- 删掉「认不出机型就落一套通用参数照常跑」的兜底：DMI 型号与触摸板模组都对不上机型表时，
+  启动闸门以退出码 `3` 结束并打印支持机型。拿别人的参数往未知硬件上套，跑起来像成功，出问题
+  反而无从判断该不该支持。
+- 机型表 `SKUS` 收缩为五条真实机型（`g533` / `g614` / `g615` / `gx550` / `ux582`），删掉
+  `universal` 条目；`sku list` 不再列出它，`--sku universal` 报未知 id。
+- 手动指定仍是唯一的逃生通道：`--sku <id>` 或配置里的 `sku` 优先于自动识别，用于虚拟机、
+  白牌机箱、BIOS 占位串。
+- 打包层删除 `asus-numpad-universal` 包名接管项；spec 只保留旧机型包名的 `Provides` /
+  `Obsoletes`。
+
+### 保持不变
+
+- 单一包与运行期自动识别（1.2.4 起）、`excludes` 代际排除、布局闸门，行为均未改动。
+
 ## 1.2.4
 
 ### 单一包与自动识别

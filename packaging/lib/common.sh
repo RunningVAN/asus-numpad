@@ -8,7 +8,7 @@ set -euo pipefail
 PKG_NAME="asus-numpad"
 BIN_NAME="asus-numpad"
 PKG_LICENSE="GPL-3.0-or-later"
-PKG_URL="https://github.com/RunningVAN/asus-numpad"
+PKG_URL="https://github.com/asus-numpad/asus-numpad"
 PKG_SUMMARY="ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动"
 PKG_DESC="ASUS 触摸板数字小键盘用户态驱动，参数取自官方 AsusNUMPADFilter.inf。"
 

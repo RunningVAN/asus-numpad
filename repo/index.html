@@ -21,10 +21,10 @@
 <h1>asus-numpad 1.2.4</h1>
 <p class="sub">ASUS 触摸板数字小键盘（NumberPad）的 Linux 用户态驱动 · GPL-3.0-or-later</p>
 
-<p>本页是软件源根地址：<code>https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo</code>。下面的命令直接可用，无需下载密钥。</p>
+<p>本页是软件源根地址：<code>https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo</code>。下面的命令直接可用，无需下载密钥。</p>
 
 <h2>Debian / Ubuntu / Mint</h2>
-<pre><code>echo "deb [trusted=yes] https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/apt stable main" \
+<pre><code>echo "deb [trusted=yes] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update &amp;&amp; sudo apt install asus-numpad</code></pre>
 <p>仓库未做 GPG 签名，因此用 <code>trusted=yes</code>。介意的话请改用 Release 里的 .deb 手工装。</p>
@@ -33,7 +33,7 @@ sudo apt update &amp;&amp; sudo apt install asus-numpad</code></pre>
 <pre><code>sudo tee /etc/yum.repos.d/asus-numpad.repo &lt;&lt;'EOF'
 [asus-numpad]
 name=asus-numpad
-baseurl=https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$basearch
+baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
 enabled=1
 gpgcheck=0
 EOF
@@ -44,17 +44,17 @@ sudo dnf install asus-numpad</code></pre>
 
 [asus-numpad]
 SigLevel = Optional TrustAll
-Server = https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/arch/$arch
+Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
 sudo pacman -Sy asus-numpad</code></pre>
 
 <h2>Alpine</h2>
-<pre><code>echo "https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
+<pre><code>echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
   | sudo tee -a /etc/apk/repositories
 sudo apk update &amp;&amp; sudo apk add --allow-untrusted asus-numpad</code></pre>
 
 <h2>Nix / NixOS</h2>
-<pre><code>nix run github:RunningVAN/asus-numpad
+<pre><code>nix run github:asus-numpad/asus-numpad
 # NixOS: services.asus-numpad.enable = true;</code></pre>
 
 <h2>其它发行版</h2>

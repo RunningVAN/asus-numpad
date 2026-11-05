@@ -15,14 +15,17 @@
 //!    给「DMI 读不出型号」的机器留的备用通道（[`SkuSource::Manual`]）；
 //! 2. DMI 型号字段命中（[`SkuSource::Dmi`]）；
 //! 3. 触摸板模组名命中（[`SkuSource::Hardware`]）——DMI 写成占位串时的第二判据；
-//! 4. 都没命中 → 通用配置（[`SkuSource::Fallback`]），照常运行，键表由
-//!    [`crate::layout`] 按实际 HID 模组决定。
+//! 4. 都没命中 → 拒绝启动（退出码 `3`）：本包只跑机型表里的机器。
 //!
-//! ## 仍然会拦的一种情况
+//! ## 认不出机型就拒绝启动
 //!
-//! 自动识别之后「装错包」不再是问题，剩下的拦截只有一种：厂商明确不是 ASUS
-//! （[`DmiVerdict::NonAsus`]）。其余机型一律不拦——机型表是给「认出机型、换上对应
-//! 参数」用的，认不到就落通用配置，键表照旧按实际触摸板模组选。
+//! 早期版本在「认不出」时落一套通用配置照常运行。那套兜底看起来体贴，实际是拿别人
+//! 的参数往未知硬件上套——跑起来像成功，出问题时无从判断该不该支持。现在不再猜：
+//! DMI 型号与触摸板模组都对不上，启动闸门直接退出码 `3`，并打印支持的机型列表。
+//!
+//! 两条提示分开给：厂商字段明确不是 ASUS 时报「不是 ASUS 机器」，其余报「本机不在
+//! 支持列表」。读不到 DMI 的机器（虚拟机、白牌机箱、BIOS 占位串）靠手动指定
+//! `--sku` / `asus-numpad sku <id>` 放行，那是唯一的逃生通道。
 //!
 //! ## 不做的事
 //!
@@ -118,14 +121,6 @@ pub const SKUS: &[Sku] = &[
         modules: &["ASUE1406", "ELAN1406"],
         note: "模组 ASUE1406 / ELAN1406 → 键表 NVM。触摸板在键盘右侧，数字模式由键盘上的专用键切换，不是长按图标区",
     },
-    Sku {
-        id: "universal",
-        display: "通用配置（默认路径：未匹配到具体机型时使用）",
-        models: &[],
-        excludes: &[],
-        modules: &[],
-        note: "参数取官方默认，键表按实际触摸板模组自动选择；也可用 asus-numpad sku <id> 手动指定",
-    },
 ];
 
 /// 机型配置是怎么选出来的——输出里要说清「凭什么判定是这台」。
@@ -137,8 +132,6 @@ pub enum SkuSource {
     Dmi,
     /// 触摸板模组名命中（DMI 读不出型号时的第二判据）
     Hardware,
-    /// 都没命中，用通用配置
-    Fallback,
 }
 
 impl SkuSource {
@@ -147,7 +140,6 @@ impl SkuSource {
             SkuSource::Manual => "manual",
             SkuSource::Dmi => "dmi",
             SkuSource::Hardware => "hardware",
-            SkuSource::Fallback => "fallback",
         }
     }
 
@@ -157,7 +149,6 @@ impl SkuSource {
             SkuSource::Manual => "sku.source.manual",
             SkuSource::Dmi => "sku.source.dmi",
             SkuSource::Hardware => "sku.source.hardware",
-            SkuSource::Fallback => "sku.source.fallback",
         }
     }
 }
@@ -169,22 +160,11 @@ pub struct Resolved {
     pub source: SkuSource,
     /// 选中依据的细节：命中的机型代号 / 触摸板模组 / 手动指定的 id
     pub detail: Option<String>,
-    /// 这台机器该不该跑（`NonAsus` 会被启动闸门拦下）
-    pub verdict: DmiVerdict,
 }
 
 impl Resolved {
     pub fn id(&self) -> &'static str {
         self.sku.id
-    }
-
-    pub fn allows_run(&self) -> bool {
-        self.verdict.allows_run()
-    }
-
-    /// 是否真的认出了机型（`false` = 落到通用配置）
-    pub fn is_detected(&self) -> bool {
-        self.source != SkuSource::Fallback
     }
 }
 
@@ -200,13 +180,45 @@ impl std::fmt::Display for UnknownSku {
 
 impl std::error::Error for UnknownSku {}
 
-/// 机型表里所有可选 id（含兜底的 `universal`）。
-pub fn known_ids() -> Vec<&'static str> {
-    SKUS.iter().map(|s| s.id).collect()
+/// 本机不在支持列表里——启动闸门据此退出码 `3`。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unsupported {
+    /// 厂商字段明确不是 ASUS 时带上是哪家；`None` 表示只是认不出机型
+    pub non_asus: Option<String>,
 }
 
-fn universal() -> &'static Sku {
-    by_id("universal").expect("SKUS 必须含 universal")
+impl std::fmt::Display for Unsupported {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.non_asus {
+            Some(vendor) => write!(f, "not an ASUS machine ({vendor})"),
+            None => f.write_str("no supported model matched"),
+        }
+    }
+}
+
+impl std::error::Error for Unsupported {}
+
+/// 识别失败：手动 id 无效，或本机不在支持列表。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolveError {
+    UnknownId(UnknownSku),
+    Unsupported(Unsupported),
+}
+
+impl std::fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolveError::UnknownId(e) => e.fmt(f),
+            ResolveError::Unsupported(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for ResolveError {}
+
+/// 机型表里所有可选 id。
+pub fn known_ids() -> Vec<&'static str> {
+    SKUS.iter().map(|s| s.id).collect()
 }
 
 /// 纯逻辑：DMI 身份 × 硬件探测 × 手动指定 → 该用哪套机型配置。
@@ -216,30 +228,24 @@ fn universal() -> &'static Sku {
 /// 1. 手动指定（配置文件 `sku` / `--sku`）→ `Manual`，认了这个 id 就不再质疑；
 /// 2. DMI 型号字段命中某条机的 `models` → `Dmi`（该条机的 `excludes` 命中的代际除外）；
 /// 3. 触摸板模组命中某条机的 `modules` → `Hardware`；
-/// 4. 厂商字段明确不是 ASUS → 通用配置 + `NonAsus`；
-/// 5. 其余（读不到 DMI、型号不在表里）→ 通用配置 + `Unknown`，照常运行。
+/// 4. 都没命中 → `Unsupported`，调用方（启动闸门）退出码 `3`。
 ///
-/// 最后一步刻意放行：读不到 DMI 不等于装错机器，真正跑起来后还有布局闸门按实际
-/// HID 模组兜底。手动指定是给这类机器准备的备用通道。
+/// 第 4 步刻意不留兜底：认不出机型就不跑，避免用别人的参数在未知硬件上「看起来跑起来了」。
+/// 读不到 DMI 的机器靠手动指定放行，不必依赖兜底。
 pub fn resolve(
     identity: &DmiIdentity,
     hw: &HardwareProbe,
     manual: Option<&str>,
-) -> Result<Resolved, UnknownSku> {
+) -> Result<Resolved, ResolveError> {
     if let Some(id) = manual {
         if !id.trim().is_empty() {
-            let sku = by_id(id).ok_or_else(|| UnknownSku(id.trim().to_string()))?;
+            let sku = by_id(id)
+                .ok_or_else(|| ResolveError::UnknownId(UnknownSku(id.trim().to_string())))?;
             // 手动指定等于「我确认这台就是它」，不再让 DMI 反过来否掉用户的选择
-            let verdict = if sku.models.is_empty() {
-                DmiVerdict::NotEnforced
-            } else {
-                DmiVerdict::Match
-            };
             return Ok(Resolved {
                 sku,
                 source: SkuSource::Manual,
                 detail: Some(sku.id.to_string()),
-                verdict,
             });
         }
     }
@@ -249,7 +255,6 @@ pub fn resolve(
             sku,
             source: SkuSource::Dmi,
             detail: Some(model.to_string()),
-            verdict: DmiVerdict::Match,
         });
     }
 
@@ -259,37 +264,33 @@ pub fn resolve(
                 sku,
                 source: SkuSource::Hardware,
                 detail: Some(module.to_string()),
-                verdict: DmiVerdict::MatchHardware(module.to_string()),
             });
         }
     }
 
-    if identity.is_asus() == Some(false) {
-        let vendor = identity
+    Err(ResolveError::Unsupported(Unsupported {
+        non_asus: non_asus_vendor(identity),
+    }))
+}
+
+/// 厂商字段明确表明不是 ASUS 时返回厂商名，否则 `None`。
+fn non_asus_vendor(identity: &DmiIdentity) -> Option<String> {
+    if identity.is_asus() != Some(false) {
+        return None;
+    }
+    Some(
+        identity
             .sys_vendor
             .as_deref()
             .or(identity.board_vendor.as_deref())
             .unwrap_or("unknown")
             .trim()
-            .to_string();
-        return Ok(Resolved {
-            sku: universal(),
-            source: SkuSource::Fallback,
-            detail: None,
-            verdict: DmiVerdict::NonAsus(vendor),
-        });
-    }
-
-    Ok(Resolved {
-        sku: universal(),
-        source: SkuSource::Fallback,
-        detail: None,
-        verdict: DmiVerdict::Unknown,
-    })
+            .to_string(),
+    )
 }
 
 /// 本机该用哪套机型配置（读真实 DMI 与触摸板）；`manual` 来自配置 / 命令行。
-pub fn current(manual: Option<&str>) -> Result<Resolved, UnknownSku> {
+pub fn current(manual: Option<&str>) -> Result<Resolved, ResolveError> {
     resolve(&dmi_identity(), &probe_hardware(), manual)
 }
 
@@ -447,51 +448,6 @@ impl DmiIdentity {
             "unknown".to_string()
         } else {
             parts.join(", ")
-        }
-    }
-}
-
-/// 机型校验结论。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DmiVerdict {
-    /// DMI 命中本包机型
-    Match,
-    /// DMI 没给结论，但触摸板模组命中本包（比 DMI 更贴近真实硬件）
-    MatchHardware(String),
-    /// DMI 明确是别的（ASUS）机型
-    Mismatch(String),
-    /// DMI 厂商字段表明这不是 ASUS 机器
-    NonAsus(String),
-    /// 读不到 DMI（非 Linux、容器、权限受限、BIOS 只给了占位串）
-    Unknown,
-    /// 本包不做机型校验（`universal`）
-    NotEnforced,
-}
-
-impl DmiVerdict {
-    /// 是否允许继续启动。
-    ///
-    /// `Unknown` 放行的理由：读不到 DMI 的场合（容器、缺权限、BIOS 占位串）本来就
-    /// 无法判断，此时拦下会误伤正常机器；真正运行起来后还有布局闸门兜底。
-    pub fn allows_run(&self) -> bool {
-        matches!(
-            self,
-            DmiVerdict::Match
-                | DmiVerdict::MatchHardware(_)
-                | DmiVerdict::Unknown
-                | DmiVerdict::NotEnforced
-        )
-    }
-
-    /// 供日志/自检输出的短标签。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            DmiVerdict::Match => "match",
-            DmiVerdict::MatchHardware(_) => "match-hw",
-            DmiVerdict::Mismatch(_) => "mismatch",
-            DmiVerdict::NonAsus(_) => "non-asus",
-            DmiVerdict::Unknown => "unknown",
-            DmiVerdict::NotEnforced => "not-enforced",
         }
     }
 }
@@ -787,7 +743,11 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), n, "SKU id 必须唯一");
-        assert!(by_id("universal").is_some(), "必须保留 universal 兜底");
+        assert_eq!(SKUS.len(), 5, "机型表只保留五个模组族");
+        assert!(
+            by_id("universal").is_none(),
+            "不再有通用配置：认不出机型就拒绝启动"
+        );
         assert!(by_id("G614").is_some(), "机型查询应忽略大小写");
         // g513 并入 g533；g635 并入 g615；gx650 并入 gx550；ux482 并入 ux582。
         // g713 / h7606 不并入任何配置：触控板里没有虚拟数字键盘
@@ -800,8 +760,14 @@ mod tests {
         for s in SKUS {
             assert!(!s.display.is_empty(), "{} 缺少展示名", s.id);
             assert!(!s.note.is_empty(), "{} 缺少说明", s.id);
+            // 没有 DMI 白名单的条目永远只能靠硬件判据命中，等于退化成兜底，不允许
+            assert!(!s.models.is_empty(), "{} 必须有自己的 DMI 型号", s.id);
+            assert!(!s.modules.is_empty(), "{} 必须绑定触摸板模组", s.id);
         }
-        assert!(known_ids().contains(&"universal"));
+        let known = known_ids();
+        for id in ["g533", "g614", "g615", "gx550", "ux582"] {
+            assert!(known.contains(&id), "{id} 应在机型表里");
+        }
     }
 
     #[test]
@@ -823,8 +789,6 @@ mod tests {
             let r = resolve(&dmi(product), &no_hw(), None).unwrap();
             assert_eq!(r.id(), want, "{product}");
             assert_eq!(r.source, SkuSource::Dmi, "{product}");
-            assert!(r.allows_run(), "{product} 应放行");
-            assert!(r.is_detected(), "{product} 应算认出机型");
             assert!(r.detail.is_some(), "{product} 应说明命中的代号");
         }
     }
@@ -858,17 +822,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.id(), "g614");
-        // 只有营销名、没有编号：认不出就落通用配置，不拦
-        let r = resolve(
+        // 只有营销名、没有编号：认不出机型就报不支持，不再落通用配置
+        let err = resolve(
             &ident(Some("ROG Strix SCAR 16"), None, None),
             &no_hw(),
             None,
         )
-        .unwrap();
-        assert_eq!(r.id(), "universal");
-        assert_eq!(r.source, SkuSource::Fallback);
-        assert!(r.allows_run());
-        assert!(!r.is_detected());
+        .unwrap_err();
+        assert!(
+            matches!(err, ResolveError::Unsupported(ref u) if u.non_asus.is_none()),
+            "{err}"
+        );
     }
 
     #[test]
@@ -877,17 +841,15 @@ mod tests {
         let r = resolve(&dmi("ROG Strix SCAR 16"), &hw(&["ASUE1416:00"]), None).unwrap();
         assert_eq!(r.id(), "g614");
         assert_eq!(r.source, SkuSource::Hardware);
-        assert!(matches!(&r.verdict, DmiVerdict::MatchHardware(m) if m.starts_with("ASUE1416")));
-        assert!(r.allows_run());
-        // 模组不认识 → 通用配置
-        let r = resolve(
+        assert!(r.detail.as_deref().unwrap_or("").starts_with("ASUE1416"));
+        // 模组不在任何机型名单里 → 不支持
+        let err = resolve(
             &dmi("ROG Strix SCAR 16"),
             &hw(&["PNP0C50", "HID-SENSOR-2000"]),
             None,
         )
-        .unwrap();
-        assert_eq!(r.source, SkuSource::Fallback);
-        assert!(r.allows_run());
+        .unwrap_err();
+        assert!(matches!(err, ResolveError::Unsupported(_)), "{err}");
         // DMI 写错、模组属于别的机型族时，硬件判据把它拉回正确配置
         let r = resolve(
             &dmi("ROG Strix G15 G513RM_G513RM"),
@@ -896,16 +858,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.id(), "g533");
-        assert!(r.allows_run());
-        // 既不在机型表、模组也不认识的机器：落通用配置放行
-        let r = resolve(
+        // 既不在机型表、模组也不认识的机器：拒绝，不再兜底
+        let err = resolve(
             &dmi("ROG Strix SCAR 18 G834JY_G834JY"),
             &hw(&["PNP0C50"]),
             None,
         )
-        .unwrap();
-        assert_eq!(r.id(), "universal");
-        assert!(r.allows_run());
+        .unwrap_err();
+        assert!(matches!(err, ResolveError::Unsupported(_)), "{err}");
     }
 
     #[test]
@@ -919,16 +879,16 @@ mod tests {
         .unwrap();
         assert_eq!(r.id(), "gx550");
         assert_eq!(r.source, SkuSource::Manual);
-        assert!(r.allows_run());
         assert_eq!(r.detail.as_deref(), Some("gx550"));
         // 大小写与空白不敏感
         let r = resolve(&no_identity(), &no_hw(), Some("  GX550 ")).unwrap();
         assert_eq!(r.id(), "gx550");
-        // 手动指定 universal = 明确要通用配置
-        let r = resolve(&no_identity(), &no_hw(), Some("universal")).unwrap();
-        assert_eq!(r.id(), "universal");
-        assert_eq!(r.verdict, DmiVerdict::NotEnforced);
-        assert!(r.allows_run());
+        // 通用配置已经取消：手动指定 universal 也该报 id 不存在
+        let err = resolve(&no_identity(), &no_hw(), Some("universal")).unwrap_err();
+        assert_eq!(
+            err,
+            ResolveError::UnknownId(UnknownSku("universal".to_string()))
+        );
         // 空字符串等同没指定
         let r = resolve(&dmi("ROG Strix SCAR 16 G634JY"), &no_hw(), Some("   ")).unwrap();
         assert_eq!(r.source, SkuSource::Dmi);
@@ -937,7 +897,10 @@ mod tests {
     #[test]
     fn manual_unknown_id_is_an_error() {
         let err = resolve(&no_identity(), &no_hw(), Some("g999")).unwrap_err();
-        assert_eq!(err, UnknownSku("g999".to_string()));
+        assert_eq!(
+            err,
+            ResolveError::UnknownId(UnknownSku("g999".to_string()))
+        );
     }
 
     fn no_identity() -> DmiIdentity {
@@ -947,7 +910,7 @@ mod tests {
     #[test]
     fn previous_generation_sharing_a_prefix_is_excluded() {
         // 2021 代枪神5（G533Q*）/ 魔霸5（G513Q*、G513I*）与 2022 代共用 G533 / G513 前缀，
-        // 但官方规格页没有 NumberPad：不能被识别成 g533。
+        // 但官方规格页没有 NumberPad：不能被识别成 g533，也不该被当成支持机型。
         for product in [
             "ROG Strix SCAR 15 G533QM_G533QM",
             "ROG Strix SCAR 15 G533QR_G533QR",
@@ -957,17 +920,13 @@ mod tests {
             "ROG Strix G15 G513IC_G513IC",
             "ROG Strix G15 G513IH_G513IH",
         ] {
-            let r = resolve(&dmi(product), &no_hw(), None).unwrap();
-            assert_eq!(r.id(), "universal", "{product} 应落通用配置");
-            assert_eq!(r.source, SkuSource::Fallback, "{product}");
-            assert!(!r.is_detected(), "{product} 不应算认出机型");
-            assert!(r.allows_run(), "{product} 不应被拦");
+            let err = resolve(&dmi(product), &no_hw(), None).unwrap_err();
+            assert!(matches!(err, ResolveError::Unsupported(_)), "{product}: {err}");
         }
-        // 代际排除只管识别，逃生通道照样在：手动指定 g533 立即生效
+        // 逃生通道照样在：手动指定 g533 立即生效
         let r = resolve(&dmi("ROG Strix G15 G513QM_G513QM"), &no_hw(), Some("g533")).unwrap();
         assert_eq!(r.id(), "g533");
         assert_eq!(r.source, SkuSource::Manual);
-        assert!(r.allows_run());
         // 主板名写错、但确实插着 2022 代的模组：硬件判据仍能把它拉回 g533
         let r = resolve(
             &dmi("ROG Strix G15 G513QM_G513QM"),
@@ -990,9 +949,9 @@ mod tests {
     }
 
     #[test]
-    fn models_without_a_numberpad_are_not_rejected() {
-        // ProArt P16（H7606，DialPad 旋钮）、18 英寸 Plus、17 英寸 G17（物理数字键）
-        // 都不在机型表里：落通用配置照常放行，运行期由布局闸门按实际模组判断。
+    fn models_outside_the_table_are_rejected() {
+        // ProArt P16（H7606，DialPad 旋钮）、18 英寸、17 英寸 G17（物理数字键）
+        // 都不在机型表里：直接拒绝，不再拿一套通用参数跑上去。
         for product in [
             "ASUS ProArt P16 H7606WI_H7606WI",
             "ROG Strix SCAR 18 G834JY_G834JY",
@@ -1000,16 +959,13 @@ mod tests {
             "ROG Strix G17 G713RC_G713RC",
             "ROG Strix G17 G713QR_G713QR",
         ] {
-            let r = resolve(&dmi(product), &no_hw(), None).unwrap();
-            assert_eq!(r.id(), "universal", "{product}");
-            assert_eq!(r.source, SkuSource::Fallback, "{product}");
-            assert!(r.allows_run(), "{product} 不应被拦");
-            assert!(!r.is_detected(), "{product} 不应算认出机型");
+            let err = resolve(&dmi(product), &no_hw(), None).unwrap_err();
+            assert!(matches!(err, ResolveError::Unsupported(_)), "{product}: {err}");
         }
     }
 
     #[test]
-    fn real_gaming_models_are_not_caught_by_reject_rules() {
+    fn real_gaming_models_are_recognised() {
         for product in [
             "ROG Strix SCAR 16 G615LR_G615LR",
             "ROG Strix SCAR 16 G635LX_G635LX",
@@ -1017,7 +973,6 @@ mod tests {
         ] {
             let r = resolve(&dmi(product), &no_hw(), None).unwrap();
             assert_ne!(r.id(), "universal", "{product} 应认出具体配置");
-            assert!(r.allows_run(), "{product} 应放行");
         }
     }
 
@@ -1030,38 +985,48 @@ mod tests {
             board_name: Some("LNVNB161216".to_string()),
             product_family: None,
         };
-        let r = resolve(&id, &no_hw(), None).unwrap();
-        assert_eq!(r.id(), "universal");
-        assert!(matches!(&r.verdict, DmiVerdict::NonAsus(v) if v.contains("LENOVO")));
-        assert!(!r.allows_run());
+        let err = resolve(&id, &no_hw(), None).unwrap_err();
+        match &err {
+            ResolveError::Unsupported(u) => {
+                assert!(u.non_asus.as_deref().unwrap_or("").contains("LENOVO"));
+            }
+            other => panic!("应报 unsupported：{other}"),
+        }
+        // 没认出机型（厂商仍是 ASUS）时不能误报「不是 ASUS」
+        let err = resolve(&dmi("ROG Strix SCAR 16"), &no_hw(), None).unwrap_err();
+        match &err {
+            ResolveError::Unsupported(u) => assert!(u.non_asus.is_none()),
+            other => panic!("应报 unsupported：{other}"),
+        }
     }
 
     #[test]
-    fn unreadable_dmi_falls_back_instead_of_blocking() {
-        // 读不到 DMI 不等于装错机器：落通用配置照常跑，运行期还有布局闸门兜底
-        let r = resolve(&no_identity(), &no_hw(), None).unwrap();
-        assert_eq!(r.id(), "universal");
-        assert_eq!(r.source, SkuSource::Fallback);
-        assert_eq!(r.verdict, DmiVerdict::Unknown);
-        assert!(r.allows_run());
-        // 型号不在机型表里（新机型）同样不拦
-        let r = resolve(&dmi("ROG Strix SCAR 16 G999ZZ"), &no_hw(), None).unwrap();
-        assert_eq!(r.id(), "universal");
-        assert!(r.allows_run());
+    fn unreadable_dmi_is_rejected() {
+        // 读不到 DMI 不再兜底放行：要么手动指定，要么拒绝启动
+        let err = resolve(&no_identity(), &no_hw(), None).unwrap_err();
+        assert!(
+            matches!(err, ResolveError::Unsupported(ref u) if u.non_asus.is_none()),
+            "{err}"
+        );
+        // 型号在表外的新机型同样拒绝
+        let err = resolve(&dmi("ROG Strix SCAR 16 G999ZZ"), &no_hw(), None).unwrap_err();
+        assert!(matches!(err, ResolveError::Unsupported(_)), "{err}");
     }
 
     #[test]
     fn placeholders_count_as_unreadable() {
-        // BIOS 没填真值：占位串不能被当成「别的机型」
+        // BIOS 没填真值：占位串不能被当成「别的机型」，但也不能当成支持机型
         let id = ident(
             Some("System Product Name"),
             Some("To Be Filled By O.E.M."),
             Some("Default string"),
         );
         assert!(id.haystacks().is_empty());
-        let r = resolve(&id, &no_hw(), None).unwrap();
-        assert_eq!(r.verdict, DmiVerdict::Unknown);
-        assert!(r.allows_run());
+        let err = resolve(&id, &no_hw(), None).unwrap_err();
+        assert!(
+            matches!(err, ResolveError::Unsupported(ref u) if u.non_asus.is_none()),
+            "{err}"
+        );
         assert!(DmiIdentity::default().haystacks().is_empty());
     }
 
@@ -1085,11 +1050,10 @@ mod tests {
         let r = resolve(&dmi("ROG Strix SCAR 16 G634JY_G634JY"), &no_hw(), None).unwrap();
         assert_eq!(r.id(), "g614");
 
-        // 空文件视为未知，不拦
+        // 空文件视为未知：拒绝启动
         std::fs::write(dir.join("product_name"), "  \n").unwrap();
         assert_eq!(dmi_product_name_at(&root), None);
-        let r = resolve(&no_identity(), &no_hw(), None).unwrap();
-        assert!(r.allows_run());
+        assert!(resolve(&no_identity(), &no_hw(), None).is_err());
 
         let _ = std::fs::remove_dir_all(&root);
     }

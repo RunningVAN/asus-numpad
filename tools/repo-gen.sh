@@ -22,7 +22,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST="$ROOT/dist"
 OUT="$ROOT/repo"
 KEEP=3
-BASE_URL="https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo"
+BASE_URL="https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo"
 
 log()  { printf '==> %s\n' "$*"; }
 warn() { printf '警告: %s\n' "$*" >&2; }
@@ -297,7 +297,7 @@ sudo pacman -Sy asus-numpad</code></pre>
 sudo apk update &amp;&amp; sudo apk add --allow-untrusted asus-numpad</code></pre>
 
 <h2>Nix / NixOS</h2>
-<pre><code>nix run github:RunningVAN/asus-numpad
+<pre><code>nix run github:asus-numpad/asus-numpad
 # NixOS: services.asus-numpad.enable = true;</code></pre>
 
 <h2>其它发行版</h2>

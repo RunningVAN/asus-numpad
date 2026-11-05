@@ -4,9 +4,9 @@
 # Gentoo 版本化 ebuild。
 #
 # 用法：把本文件与 Manifest 一起放进本地 overlay
-#   /var/db/repos/local/sys-apps/asus-numpad/asus-numpad-1.2.1.ebuild
+#   /var/db/repos/local/sys-apps/asus-numpad/asus-numpad-1.0.0.ebuild
 # 然后
-#   sudo ebuild asus-numpad-1.2.1.ebuild manifest
+#   sudo ebuild asus-numpad-1.0.0.ebuild manifest
 #   sudo emerge -av sys-apps/asus-numpad
 #
 # 若想直接源码跟随仓库最新提交，用同目录的 asus-numpad-9999.ebuild。
@@ -16,13 +16,13 @@ EAPI=8
 inherit systemd udev
 
 DESCRIPTION="ASUS NumberPad userspace driver for Linux (official AlgoParameters aligned)"
-HOMEPAGE="https://github.com/RunningVAN/asus-numpad"
+HOMEPAGE="https://github.com/asus-numpad/asus-numpad"
 
 if [[ ${PV} == 9999 ]]; then
 	inherit git-r3
-	EGIT_REPO_URI="https://github.com/RunningVAN/asus-numpad.git"
+	EGIT_REPO_URI="https://github.com/asus-numpad/asus-numpad.git"
 else
-	SRC_URI="https://github.com/RunningVAN/asus-numpad/archive/v${PV}.tar.gz -> ${P}.tar.gz"
+	SRC_URI="https://github.com/asus-numpad/asus-numpad/archive/v${PV}.tar.gz -> ${P}.tar.gz"
 	KEYWORDS="~amd64 ~arm64"
 fi
 

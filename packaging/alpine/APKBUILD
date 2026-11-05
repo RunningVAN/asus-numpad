@@ -12,17 +12,17 @@
 # `cargo vendor` 打一份依赖 tarball 放进 source（依赖只有 serde / clap / libc）。
 
 pkgname=asus-numpad
-pkgver=1.1.0
+pkgver=1.0.0
 pkgrel=0
 pkgdesc="ASUS NumberPad userspace driver for Linux (official AlgoParameters aligned)"
-url="https://github.com/RunningVAN/asus-numpad"
+url="https://github.com/asus-numpad/asus-numpad"
 arch="x86_64 aarch64"
 license="GPL-3.0-or-later"
 depends=""
 makedepends="cargo rust"
 install="$pkgname.post-install"
 subpackages="$pkgname-doc"
-source="$pkgname-$pkgver.tar.gz::https://github.com/RunningVAN/asus-numpad/archive/v$pkgver.tar.gz"
+source="$pkgname-$pkgver.tar.gz::https://github.com/asus-numpad/asus-numpad/archive/v$pkgver.tar.gz"
 builddir="$srcdir/$pkgname-$pkgver"
 options="net"
 # 语言文件与 man 由 install 阶段装到固定路径，不参与 abuild 的自动拆分

@@ -69,8 +69,9 @@ asus-numpad check
 `check` 里的 `本机触摸板模组` 一行就是硬件层读数：驱动会扫
 `/sys/bus/i2c/devices/*/name`、`/sys/bus/hid/devices/*/HID_NAME` 与
 `/proc/bus/input/devices`，把 `ASUE1416` 这类模组名归一化后与机型表比对。
-DMI 写坏、写成占位串的机器靠这一层仍能认出机型。机型表之外的型号不参与机型判定，
-一律走通用配置——键表按模组选，不受整机型号影响。
+DMI 写坏、写成占位串的机器靠这一层仍能认出机型。机型表之外的型号没有参数可套，
+启动闸门以退出码 `3` 拒绝启动并打印支持列表——不再落一套通用配置硬跑。键表仍按模组选，
+不受整机型号影响。
 
 新 PID 加进 `src/led_policy.rs` 的 `KNOWN_NUMPAD_PIDS`；新模组在
 `evidence/drivers/*_unpacked/**/AsusNUMPADFilter.inf` 里查 `HID_DEVICE_NAME`

@@ -32,7 +32,6 @@ struct Opts {
     /// 手动指定机型配置（`--sku`），只对本次生效、不写配置文件
     sku: Option<String>,
     allow_unverified: bool,
-    allow_sku_mismatch: bool,
     numlock: Option<String>,
     mixed_mode: Option<String>,
     pressure_min: Option<i32>,
@@ -283,13 +282,6 @@ fn build_cli() -> Command {
                 .help(t("cli.allow_unverified.help")),
         )
         .arg(
-            Arg::new("allow_sku_mismatch")
-                .long("allow-sku-mismatch")
-                .global(true)
-                .action(ArgAction::SetTrue)
-                .help(t("cli.allow_sku_mismatch.help")),
-        )
-        .arg(
             Arg::new("sku")
                 .long("sku")
                 .global(true)
@@ -344,7 +336,6 @@ fn opts_from(matches: &ArgMatches) -> Opts {
         layout: matches.get_one::<String>("layout").cloned(),
         sku: matches.get_one::<String>("sku").cloned(),
         allow_unverified: matches.get_flag("allow_unverified"),
-        allow_sku_mismatch: matches.get_flag("allow_sku_mismatch"),
         numlock: matches.get_one::<String>("numlock").cloned(),
         mixed_mode: matches.get_one::<String>("mixed_mode").cloned(),
         pressure_min: matches.get_one::<i32>("pressure_min").copied(),
@@ -1646,64 +1637,61 @@ fn cmd_dump(cfg: &Config) -> Result<i32> {
 
 /// 机型闸门：这台机器根本跑不起来的，就在启动前说清楚。
 ///
-/// 自动识别上线后「装错包」不再是问题，剩下的拦截只有一种：厂商明确不是 ASUS。
-/// 返回 `Some(退出码)` 表示已拦下，`None` 表示放行。
-fn sku_gate(cfg: &Config, allow_mismatch: bool) -> Option<i32> {
+/// 本包只跑机型表里的机器：DMI 型号与触摸板模组都认不出时不再兜底，直接拦下。
+/// 返回 `Some(退出码)` 表示已拦下，`None` 表示放行（`2` = `--sku` 给的 id 无效，
+/// `3` = 本机不在支持列表）。
+fn sku_gate(cfg: &Config) -> Option<i32> {
     let identity = sku::dmi_identity();
     let hw = sku::probe_hardware();
-    let resolved = match sku::resolve(&identity, &hw, cfg.sku.as_deref()) {
-        Ok(r) => r,
-        Err(e) => {
+    let ids = sku::known_ids().join(", ");
+    match sku::resolve(&identity, &hw, cfg.sku.as_deref()) {
+        Ok(_) => None,
+        Err(sku::ResolveError::UnknownId(e)) => {
             println!("{}", banner());
-            println!(
-                "{}",
-                i18n::tf(
-                    "sku.bad_id",
-                    &[("id", &e.0), ("ids", &sku::known_ids().join(", "))]
-                )
-            );
-            return Some(2);
+            println!("{}", i18n::tf("sku.bad_id", &[("id", &e.0), ("ids", &ids)]));
+            Some(2)
         }
-    };
-    if allow_mismatch || resolved.allows_run() {
-        return None;
+        Err(sku::ResolveError::Unsupported(u)) => {
+            println!("{}", banner());
+            println!("{}", unsupported_text(&u, &ids));
+            println!("{}", i18n::tf("err.unsupported_hint", &[("ids", &ids)]));
+            Some(3)
+        }
     }
-    println!("{}", banner());
-    println!("{}", sku_block(cfg));
-    println!();
-    if let sku::DmiVerdict::NonAsus(vendor) = &resolved.verdict {
-        println!("{}", i18n::tf("err.not_asus", &[("vendor", vendor)]));
-        return Some(3);
+}
+
+/// 「这台不在支持列表」的两条提示：厂商明确不是 ASUS / 只是认不出机型。
+fn unsupported_text(u: &sku::Unsupported, ids: &str) -> String {
+    match &u.non_asus {
+        Some(vendor) => i18n::tf("err.not_asus", &[("vendor", vendor)]),
+        None => i18n::tf("err.unsupported_model", &[("ids", ids)]),
     }
-    None
 }
 
 /// 输出「本机用哪套机型配置 + 凭什么判定」。
 fn sku_block(cfg: &Config) -> String {
     let identity = sku::dmi_identity();
     let hw = sku::probe_hardware();
-    let resolved = match sku::resolve(&identity, &hw, cfg.sku.as_deref()) {
-        Ok(r) => r,
-        Err(e) => {
-            return i18n::tf(
-                "sku.bad_id",
-                &[("id", &e.0), ("ids", &sku::known_ids().join(", "))],
-            )
+    let ids = sku::known_ids().join(", ");
+    let mut out = match sku::resolve(&identity, &hw, cfg.sku.as_deref()) {
+        Ok(r) => {
+            let mut s = i18n::tf(
+                "sku.model",
+                &[("sku", r.sku.display), ("source", &i18n::t(r.source.i18n_key()))],
+            );
+            s.push('\n');
+            if let Some(detail) = &r.detail {
+                s.push_str(&i18n::tf("sku.detail", &[("detail", detail)]));
+                s.push('\n');
+            }
+            s.push_str(&i18n::tf("sku.note", &[("note", r.sku.note)]));
+            s
         }
+        Err(sku::ResolveError::UnknownId(e)) => {
+            i18n::tf("sku.bad_id", &[("id", &e.0), ("ids", &ids)])
+        }
+        Err(sku::ResolveError::Unsupported(u)) => unsupported_text(&u, &ids),
     };
-    let mut out = i18n::tf(
-        "sku.model",
-        &[
-            ("sku", resolved.sku.display),
-            ("source", &i18n::t(resolved.source.i18n_key())),
-        ],
-    );
-    out.push('\n');
-    if let Some(detail) = &resolved.detail {
-        out.push_str(&i18n::tf("sku.detail", &[("detail", detail)]));
-        out.push('\n');
-    }
-    out.push_str(&i18n::tf("sku.note", &[("note", resolved.sku.note)]));
     out.push('\n');
     if identity.haystacks().is_empty() {
         out.push_str(&i18n::t("sku.dmi_unknown"));
@@ -1714,24 +1702,6 @@ fn sku_block(cfg: &Config) -> String {
     if !hw.is_empty() {
         out.push_str(&i18n::tf("sku.hw", &[("hw", &hw.label())]));
         out.push('\n');
-    }
-    let verdict_text = match &resolved.verdict {
-        sku::DmiVerdict::Match => i18n::t("sku.verdict.match"),
-        sku::DmiVerdict::MatchHardware(m) => i18n::tf("sku.verdict.match_hw", &[("module", m)]),
-        sku::DmiVerdict::Mismatch(d) => i18n::tf("sku.verdict.mismatch", &[("dmi", d)]),
-        sku::DmiVerdict::NonAsus(v) => i18n::tf("sku.verdict.non_asus", &[("vendor", v)]),
-        sku::DmiVerdict::Unknown => i18n::t("sku.verdict.unknown"),
-        sku::DmiVerdict::NotEnforced => i18n::t("sku.verdict.not_enforced"),
-    };
-    out.push_str(&i18n::tf("sku.verdict", &[("verdict", &verdict_text)]));
-    // 没认出机型时补一句手动通道：读不到 DMI 的机器（虚拟机、白牌机箱、占位串）
-    // 只能靠人指定，这是本功能存在的意义。
-    if !resolved.is_detected() && resolved.allows_run() {
-        out.push('\n');
-        out.push_str(&i18n::tf(
-            "sku.manual_hint",
-            &[("ids", &sku::known_ids().join(", "))],
-        ));
     }
     out
 }
@@ -1784,8 +1754,8 @@ fn cmd_sku(cfg: &Config, cfg_path: &Path, arg: Option<&str>) -> Result<i32> {
     }
 }
 
-fn cmd_run(cfg: Config, verbose: bool, allow_sku_mismatch: bool) -> Result<i32> {
-    if let Some(code) = sku_gate(&cfg, allow_sku_mismatch) {
+fn cmd_run(cfg: Config, verbose: bool) -> Result<i32> {
+    if let Some(code) = sku_gate(&cfg) {
         return Ok(code);
     }
     println!("{}", banner());
@@ -1836,7 +1806,6 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let allow_sku_mismatch = opts.allow_sku_mismatch;
     let code = match opts.cmd {
         Cmd::Check => cmd_check(&cfg, &notes)?,
         Cmd::Dump => cmd_dump(&cfg)?,
@@ -1850,7 +1819,7 @@ fn main() -> Result<()> {
         Cmd::Lang { code } => cmd_lang(&cfg_path, code.as_deref())?,
         Cmd::Layout { name, ids } => cmd_layout(&cfg, &cfg_path, name.as_deref(), ids)?,
         Cmd::Sku { id } => cmd_sku(&cfg, &cfg_path, id.as_deref())?,
-        Cmd::Run => cmd_run(cfg, opts.verbose, allow_sku_mismatch)?,
+        Cmd::Run => cmd_run(cfg, opts.verbose)?,
     };
     if code != 0 {
         std::process::exit(code);

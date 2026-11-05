@@ -1,0 +1,338 @@
+# asus-numpad
+
+[English](README.md) | [简体中文](README.zh-CN.md) | 繁體中文 · [官網](https://asus-numpad.github.io/)
+
+ASUS NumberPad 的 Linux 使用者空間驅動程式。透過 evdev 獨佔觸控板，把觸點換算成小鍵盤格位，
+再經 uinput 注入按鍵。不替換核心模組，不修改 ACPI 表，解除安裝即回復原狀。
+
+時序與幾何常數取自廠商檔案 `AsusNUMPADFilter.inf` 中的 `AlgoParameters`。
+
+1.0 起版本號在 `asus-numpad` 組織下重新起算：專案由 `RunningVAN/asus-numpad` 遷來，舊倉庫的
+1.0.0 到 1.2.4 歷史唯讀保留。舊來源的套件無法就地升級，換來源前先移除一次：
+
+```bash
+# rpm: sudo dnf remove asus-numpad
+# deb: sudo apt remove asus-numpad
+```
+
+## 安裝
+
+```bash
+# Debian / Ubuntu
+echo "deb [trusted=yes] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
+sudo apt update && sudo apt install asus-numpad
+
+# Fedora / RHEL / Rocky / Alma
+sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
+[asus-numpad]
+name=asus-numpad
+baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
+enabled=1
+gpgcheck=0
+EOF
+sudo dnf install asus-numpad
+
+# openSUSE Leap / Tumbleweed
+sudo zypper addrepo --no-gpgcheck --refresh \
+  "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
+sudo zypper install asus-numpad
+
+# Arch / Manjaro
+sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
+
+[asus-numpad]
+SigLevel = Optional TrustAll
+Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
+EOF
+sudo pacman -Sy asus-numpad
+
+# Arch / Manjaro，來源套件 asus-numpad-rs
+# 把 release 頁面的 PKGBUILD 與 asus-numpad-rs.install 放在同一目錄：
+makepkg -si
+```
+
+每個生態各一個套件。deb 在 Ubuntu 22.04 上建置，涵蓋 22.04 至 24.04 與 Debian 12、13。rpm 在
+AlmaLinux 9 上建置，涵蓋 RHEL、AlmaLinux、Rocky 9 至 10、Fedora、openSUSE Leap 16 與
+Tumbleweed：spec 只用標準巨集，執行期僅相依 glibc 與 systemd，倉庫格式為 rpm-md，zypper 直接
+讀取，不按發行版各編一份。原生套件也在
+[Releases](https://github.com/asus-numpad/asus-numpad/releases)：deb、rpm、pkg.tar.zst、附
+.SRCINFO 的 PKGBUILD、apk、靜態 tarball。Alpine、Gentoo、NixOS 與手動 tarball 步驟見
+[docs/install.md](docs/install.md)。
+
+CI 在每個目標發行版的乾淨容器中安裝每個套件並執行 `--version`，裝不起來的套件會擋下發佈。
+
+只有一個套件。機型在執行期辨識：同一份二進位檔讀取 DMI 型號與觸控板模組，據此選擇參數與鍵表；
+套件名稱不帶機型，也就不存在裝錯套件。表中對不上的機器不啟動：閘門以結束碼 3 中止並列出支援
+機型，不拿別的機型的參數去套未知硬體。硬體資訊讀不準（虛擬機、白牌機殼、BIOS 佔位字串）時可
+手動指定，見[機型辨識](#機型辨識)。執行期相依：glibc，Alpine 上為 musl。
+
+## 使用
+
+```bash
+asus-numpad check          # 唯讀自我檢查：裝置、佈局換算、背光候選
+asus-numpad dump           # 原始事件流
+asus-numpad run            # 前景執行，由 systemd 單元啟動
+asus-numpad --dump-config  # 目前生效設定
+```
+
+```bash
+asus-numpad bright 0..3         # 檔位，0 為關（關閉跟隨）；上界由檔數決定
+asus-numpad bright up|down|cycle
+asus-numpad bright follow on|off
+asus-numpad bright status
+```
+
+```bash
+asus-numpad levels              # 檔位表：每一檔寫入的位元組
+asus-numpad levels 2 0x46       # 第 2 檔寫 0x46（取值 0x00 或 0x41..0x48）
+asus-numpad levels reset        # 回復預設四檔
+asus-numpad led on|off|0x41     # 繞過狀態機，直接送出一個背光位元組
+asus-numpad layout              # 目前鍵表、全部已收錄鍵表與支援等級
+asus-numpad layout --ids        # 模組名對應鍵表的清單
+asus-numpad layout auto         # 回復自動選擇
+```
+
+```bash
+asus-numpad lang [zh-CN|zh-TW|en|auto]
+asus-numpad --lang en check     # 僅本次生效
+```
+
+語言優先順序：`ASUS_NUMPAD_LANG`、`--lang`、設定檔中的 `language`、系統 locale。
+
+## 設定
+
+`~/.config/asus-numpad/asus-numpad.json`，以 root 執行時為 `/etc/asus-numpad/`。未寫入的鍵取廠商
+預設值。
+
+| 鍵 | 取值 | 含義 |
+| --- | --- | --- |
+| `numlock` | `sync` / `toggle` / `off` | 跟隨系統 NumLock 狀態 |
+| `calc_gesture` | `true` / `false` | 手勢喚起計算機 |
+| `calc_gesture_mode` | `long` / `off` | 觸發方式 |
+| `mixed_mode` | `auto` / `on` / `off` | 按鍵與指標並存，需要 `/dev/uinput` |
+| `grab` | `true` / `false` | 獨佔觸控板；關閉後點擊交給桌面 |
+| `led_kind` | `auto` / `hidraw` / `i2c` / `none` | 背光通道 |
+| `follow_keyboard_brightness` | `true` / `false` | 跟隨鍵盤背光，預設 `true` |
+| `manual_brightness_step` | `0`..`3` | 目前手動檔（0 為關閉），跟隨關閉時生效；上界為檔數 |
+| `manual_brightness_levels` | 陣列 | 檔位對應取值的表，預設 `[0, 0x43, 0x45, 0x48]`；元素為 `0` 或 `0x41`..`0x48`；長度 1 到 8 即檔數；允許相鄰相等；遞減的表會被丟棄 |
+| `brightness_levels` | 陣列 | 硬體檔位，預設 `0x41`..`0x48` |
+| `brightness_poll_ms` | 毫秒 | 輪詢間隔，預設 `500` |
+| `allow_unverified_layout` | `true` / `false` | 接受已知家族中未收錄的佈局 |
+| `layout_name` | 鍵表名 / `auto` | 手動指定鍵表，`auto` 依模組選擇 |
+| `sku` | 機型 id / `null` | 手動指定機型，跳過自動辨識；`null` 為自動 |
+
+## 支援機型
+
+| 機型 id | 機型 |
+| --- | --- |
+| `g533` | Strix SCAR 15 / Strix G15，15 吋，2022：`G533Z*`、`G513R*`（2021 代的 `G533Q*` / `G513Q*` / `G513I*` 沒有 NumberPad，不參與辨識） |
+| `g614` | Strix SCAR 16 / Strix G16，16 吋，2023–2024：`G614`、`G634` |
+| `g615` | Strix SCAR 16 / Strix G16，16 吋，2025–2026：`G615`、`G635` |
+| `gx550` | Zephyrus Duo 15 / 16（側置觸控板）：`GX550`、`GX551`、`GX650` |
+| `ux582` | Zenbook Duo（側置觸控板）：`UX582`、`UX482` |
+
+同一塊觸控板跨年度沿用同一代號，代號後的字母只跟 CPU 換代，觸控板本身不變：`G614` / `G634`
+涵蓋 2023 與 2024 兩個年度（SCAR 16 → SCAR 16 2024），`G615` / `G635` 涵蓋 2025 與 2026
+（Strix G16 2025 → 2026、SCAR 16 2025 → 2026，其中 `G615` 為標準版、`G635` 為 SCAR 版）。
+2026 年沒有更換代號，機型表因此不必新增一列。
+
+這張表就是支援範圍。機型 id 用來手動切換參數（`asus-numpad sku <id>`），並讓自動辨識的結果
+看得見；表外的機器拒絕啟動。實測機型只有 `G634JY`（SCAR 16，2023），其餘各列依據觸控板模組
+資料與鍵表對應推定。
+
+一列機型條目由該世代的 DMI 型號前綴與 `excludes` 組成：`excludes` 收的是沿用同一代號前綴、
+但沒有這塊觸控板的舊世代。被排除的前綴會落到模組判據，兩者都對不上時同樣拒絕啟動；手動指定的
+`sku` 優先於兩者。
+
+以 DMI 中的機型代碼為準，市場名稱僅供對照。舊版按機型拆分的套件名稱（`asus-numpad-g614`
+等）留在 `Obsoletes` 中，升級時由 `asus-numpad` 接手。
+
+| | |
+| --- | --- |
+| ![Strix SCAR 15 2022](docs/images/models/g533.webp) | ![Strix SCAR 16 2023](docs/images/models/g614.webp) |
+| Strix SCAR 15 / Strix G15（2022） | Strix SCAR 16 / Strix G16（2023） |
+| ![Strix SCAR 16 2025](docs/images/models/g615.webp) | ![Zephyrus Duo 16 2022](docs/images/models/gx550.webp) |
+| Strix SCAR 16 / Strix G16（2025） | Zephyrus Duo 16（側置觸控板，2022） |
+
+產品圖取自華碩官網。
+
+### 雙螢幕機型：側置觸控板
+
+Zephyrus Duo 與 Zenbook Duo 的 C 面被副螢幕佔去一半，觸控板豎排在鍵盤右側，不在掌心正下方。
+這類機器的數字模式由**鍵盤上的專用切換鍵**控制（`GX550` 鍵盤上那顆 ScreenPad 鍵即屬此類），
+不是長按觸控板右上角的圖示區。因此「長按 62 幀切換數字模式」這條路徑對側置觸控板不成立：
+
+- 觸點對應與背光照舊：格心座標依該模組的鍵表平移，背光仍走 FEATURE `0x0d`；
+- 模式切換交給鍵盤專用鍵——鍵盤走自己的 HID 節點，驅動只抓觸控板，不搶這個鍵；
+- 需要固定數字模式時使用設定項 `numlock`（`sync` / `toggle` / `off`），不靠長按手勢。
+
+### 機型辨識
+
+辨識取 DMI 的 `product_name`、`board_name`、`product_family` 三者的聯集。BIOS 佔位字串視為
+缺失，不阻擋啟動；明確不是 ASUS 的廠商欄位會阻擋啟動。
+
+觸控板模組名（如 `ASUE1416`，來自 i2c-hid 與 HID）是第二判據，在 DMI 說不出機型時啟用。兩個
+判據都沒對上具體機型，即判定為表外機器：閘門以結束碼 3 拒絕啟動，`--sku` 是唯一的放行通道。
+各機型的模組與鍵表見 [docs/machines.md](docs/machines.md)。
+
+讀不到正確硬體資訊時手動指定：
+
+```bash
+asus-numpad sku            # 看辨識到哪一套設定、憑什麼
+asus-numpad sku list       # 列出可選機型 id
+asus-numpad sku g614       # 手動指定，寫進設定長期生效
+asus-numpad sku auto       # 回復自動辨識
+```
+
+設定中的 `sku` 鍵優先於自動辨識，`--sku g614` 只對本次執行生效。
+
+### 佈局閘門
+
+鍵表依觸控板模組名選擇：`src/layout.rs` 的 `HID_LAYOUTS` 把 44 個模組名對應到廠商 INF 中的
+鍵表名，每張鍵表帶一個支援等級。
+
+| 等級 | 行為 |
+| --- | --- |
+| `verified` | 直接啟動 |
+| `family` | 5x4 網格相同、15 項參數齊全，但未在實機驗證：預設拒絕，需放行 |
+| `unsupported` | 參數已收錄但網格與基準鍵表不同：預設拒絕，並提示附上 `check` 輸出回報 |
+
+表中沒有的模組落到 `UNKNOWN`，以同樣方式拒絕。未知面板不會被拼到一張會按錯鍵的鍵表上。閘門
+只管鍵表，與機型 id 無關。
+
+```bash
+asus-numpad --allow-unverified run    # 或在設定中設 allow_unverified_layout: true
+```
+
+## 常見問題
+
+### 為什麼只支援華碩機型？
+
+驅動不依賴華碩私有介面：輸入取自觸控板的 evdev 節點，按鍵經 uinput 輸出，不涉及廠商核心模組與
+ACPI 物件，任意多點觸控板走的是同一條程式路徑。移植工作集中在替換機型條目（DMI 的
+`product_name` 加觸控板 HID 名稱）與佈局常數（格心座標、各項閾值）。
+
+無法移植的是硬體。NumberPad 面板提供兩項其他 OEM 觸控板通常沒有的能力：
+
+- **可定址背光。** 落指格位與數字模式狀態由 LED 圖樣指示，經 HID FEATURE 報告 `0x0d`
+  （`[0d 14 03 <v> ad]`，`0x41`..`0x48` 為亮度檔）驅動。沒有這層背光，按鍵仍能輸出，但無法
+  指示手指所在格位，也無法指示數字模式是否開啟。
+- **出廠校正表。** `AsusNUMPADFilter.inf` 中的 `AlgoParameters` 固定了幀長（8 ms）、幾何單位
+  （0.1 mm）、輕點視窗（350 ms）、NumLock 長按（62 幀）、滑動閾值（4838 µm）與雙指間距
+  （40 mm）。沒有這張表，這些值只能在從未按小鍵盤調校過的面板上擬合，輕點與滑動辨識無法與
+  Windows 驅動對齊。
+
+因此支援範圍限定在同時具備兩者的面板。`src/sku.rs` 的機型表即支援範圍，負責啟動閘門；鍵表與
+支援等級在 `src/layout.rs` 的 `HID_LAYOUTS`，依觸控板模組另外選擇，表中沒有的模組停在
+[佈局閘門](#佈局閘門)。具備這兩項能力的面板，接入工作是一列表項加佈局常數，歡迎提交修補。
+
+### 為什麼做成使用者空間驅動而不是核心模組？
+
+- 面板經 ELAN i2c-hid（`04F3:3275` / `ASUE1416`）接入，不在華碩 `0B05` 鍵盤控制器之下，現有
+  核心模組涵蓋不到它，接入也不需要替換任何模組。
+- 背光控制是觸控板自身 hidraw 節點上的 HID FEATURE 報告，使用者空間行程即可下發，不必進入核心。
+- 時序、幾何與閾值逐項取自廠商 INF，狀態機行為與 Windows 驅動一致，機型差異集中在一張參數表裡。
+- 開機路徑沒有改動。解除安裝即移除 service unit 與 udev 規則，回復原狀，核心升級不會帶來回歸。
+
+### 會考慮 PR 進 asusctl 嗎？
+
+不會。
+
+- 只有少數華碩機型搭載這塊觸控板。
+- 裝好之後幾乎沒有需要調整的地方，小鍵盤直接可用，合入 asusctl 對其餘使用者收益很小。
+- 維護者沒有精力適配 asusctl 的架構與發佈節奏。
+
+兩條路都歡迎：向本專案提交修補，或在 asusctl 側實作這部分功能。
+
+## 工作原理
+
+### 資料流
+
+```
+觸控板 --evdev(/dev/input/eventN)--> 幀緩衝(8 ms) --> 狀態機 --uinput(/dev/uinput)--> 按鍵事件
+                                                          |
+                                                          `--> hidraw FEATURE 報告 --> 小鍵盤背光
+```
+
+### 時序與幾何
+
+| 參數 | 取值 | 含義 |
+| --- | --- | --- |
+| 幀長 | 8 ms | 狀態機時基，長按 62 幀（496 ms） |
+| 長度單位 | 0.1 mm | 佈局幾何與閾值的單位 |
+| 點擊判定 | 350 ms | 區分點按與滑動 |
+| NumLock 長按 | 62 幀 | 圖示區切換數字模式（置中式觸控板；側置觸控板見[雙螢幕機型](#雙螢幕機型側置觸控板)） |
+| 滑動閾值 | 4838 µm | 低於此位移不算滑動 |
+| 雙指間距 | 40 mm | 雙指捲動辨識 |
+| 喚起手勢 | 7000 µm | 計算機熱區觸發距離 |
+
+### 鍵表
+
+鍵表依觸控板模組與 HID 名稱選擇，不依筆電型號。`HID_LAYOUTS` 收錄 44 條 HID 名稱到鍵表的
+對應，涵蓋廠商 `SupportList` 中的每個模組；`ASUE1416`、`ASCF1400` 這類模組前綴可在
+`/sys/class/input/*/name` 中看到。每條對應帶支援等級，見[佈局閘門](#佈局閘門)。
+
+小鍵盤位於觸控板右上角，5 列 4 行（側置觸控板取的是觸控板自身的右上角，只是整塊觸控板排在鍵盤
+右側）。格子中心即 `NUMPADLAYOUT_GH3XLNDZ_00..14` 的座標，單位 0.1 mm。座標到格子、格子到鍵碼
+的換算不含硬體相依，有單元測試。
+
+### 背光
+
+```
+報告: 0d 14 03 <檔位> ad   # 6 位元組，HID FEATURE 報告 ID 0x0d
+檔位: 0x41..0x48           # 第 1..8 檔
+      0x00                 # 關閉
+      0x01                 # 開啟，沿用目前檔位
+寫入: HIDIOCSFEATURE       # 無需 0x60 解鎖
+```
+
+`bright follow on` 讀取 `/sys/class/leds/asus::kbd_backlight/brightness` 的 `current` 與 `max`，
+把比值對應到 1..8 檔，每 500 ms 輪詢，僅在檔位變化時寫入。手動檔位與跟隨模式共用一張檔位表。
+
+節點選擇（`led_policy.rs`）：一律排除 OMNI 接收器 `0b05:1ace`；ELAN `04f3:*` 且帶 FEATURE
+`0x0d` 優先，其次 ASUS `0b05:*`，最後 i2c（`0x38` / `0x15`）。
+
+### 權限
+
+不需要 root。udev 給 hidraw 與 event 節點標上 `TAG+="uaccess"`，守護行程以 `systemd --user`
+單元執行，`/dev/uinput` 由工作階段授權。
+
+## 原始碼結構
+
+| 路徑 | 用途 |
+| --- | --- |
+| `src/main.rs` | CLI 解析與組裝 |
+| `src/engine.rs` | 廠商演算法狀態機 |
+| `src/layout.rs` | 佈局幾何、44 條 HID 表、座標換算 |
+| `src/config.rs` | 預設值、讀寫、舊路徑遷移 |
+| `src/brightness.rs` | 鍵盤背光到小鍵盤檔位的對應 |
+| `src/led_policy.rs` | 背光節點評分 |
+| `src/sku.rs` | 機型表、執行期辨識、手動指定、世代排除 |
+| `src/i18n.rs` | 三種語言，可用外部 `.lang` 檔覆寫 |
+| `src/linux/` | evdev、uinput、hidraw、i2c 後端 |
+| `lang/` | zh-CN、zh-TW、en 文案 |
+| `packaging/` | deb、rpm、Arch、Alpine、Gentoo、Nix、tarball 腳本與倉庫工具 |
+
+## 建置
+
+```bash
+./packaging/build.sh                        # 目前發行版
+./packaging/build.sh deb rpm tarball        # 指定目標（deb/rpm/arch/alpine/tarball）
+./tools/repo-gen.sh                         # 由 dist/ 產生本機倉庫到 repo/（apt/rpm/pacman/apk）
+```
+
+```bash
+RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
+  cargo build --target x86_64-unknown-linux-musl --release
+```
+
+打包細節見 [packaging/README.md](packaging/README.md)。推送 `v*` 標籤會觸發
+`.github/workflows/release.yml`，在按發行版劃分的容器裡建置、產生四套倉庫索引、發佈 release
+並把 `repo/` 提交回 `main`。
+
+## 授權
+
+GPL-3.0-or-later，見 [LICENSE](LICENSE)。
+
+Copyright (C) 2026 the asus-numpad authors

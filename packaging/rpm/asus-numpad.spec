@@ -32,10 +32,8 @@ Provides:       asus-numpad-gx650 = %{version}-%{release}
 Obsoletes:      asus-numpad-gx650 < %{version}-%{release}
 Provides:       asus-numpad-ux582 = %{version}-%{release}
 Obsoletes:      asus-numpad-ux582 < %{version}-%{release}
-Provides:       asus-numpad-universal = %{version}-%{release}
-Obsoletes:      asus-numpad-universal < %{version}-%{release}
 License:        GPL-3.0-or-later
-URL:            https://github.com/RunningVAN/asus-numpad
+URL:            https://github.com/asus-numpad/asus-numpad
 Source0:        asus-numpad-%{version}.tar.gz
 BuildRequires:  rust >= 1.75
 BuildRequires:  cargo

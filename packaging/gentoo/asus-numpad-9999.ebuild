@@ -9,8 +9,8 @@ EAPI=8
 inherit git-r3 systemd udev
 
 DESCRIPTION="ASUS NumberPad userspace driver for Linux (official AlgoParameters aligned)"
-HOMEPAGE="https://github.com/RunningVAN/asus-numpad"
-EGIT_REPO_URI="https://github.com/RunningVAN/asus-numpad.git"
+HOMEPAGE="https://github.com/asus-numpad/asus-numpad"
+EGIT_REPO_URI="https://github.com/asus-numpad/asus-numpad.git"
 EGIT_BRANCH="main"
 
 LICENSE="GPL-3.0-or-later"

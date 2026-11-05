@@ -1,17 +1,25 @@
 # asus-numpad
 
-[English](README.md) | 简体中文 · [官网](https://asus-numpad.github.io/)
+[English](README.md) | 简体中文 | [繁體中文](README.zh-TW.md) · [官网](https://asus-numpad.github.io/)
 
 ASUS NumberPad 的 Linux 用户态驱动。通过 evdev 独占触摸板，把触点换算成小键盘格，通过 uinput
 注入按键。不替换内核模块，不打 ACPI 补丁，卸载即恢复原状。
 
 时序与几何常量取自厂商文件 `AsusNUMPADFilter.inf` 中的 `AlgoParameters`。
 
+1.0 起版本号在 `asus-numpad` 组织下重新起算：项目由 `RunningVAN/asus-numpad` 迁来，旧仓库的
+1.0.0 到 1.2.4 历史只读保留。旧源的包无法就地升级，换源前先卸一次：
+
+```bash
+# rpm: sudo dnf remove asus-numpad
+# deb: sudo apt remove asus-numpad
+```
+
 ## 安装
 
 ```bash
 # Debian / Ubuntu
-echo "deb [trusted=yes] https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/apt stable main" \
+echo "deb [trusted=yes] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update && sudo apt install asus-numpad
 
@@ -19,7 +27,7 @@ sudo apt update && sudo apt install asus-numpad
 sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
 [asus-numpad]
 name=asus-numpad
-baseurl=https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$basearch
+baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
 enabled=1
 gpgcheck=0
 EOF
@@ -27,7 +35,7 @@ sudo dnf install asus-numpad
 
 # openSUSE Leap / Tumbleweed
 sudo zypper addrepo --no-gpgcheck --refresh \
-  "https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
+  "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
 sudo zypper install asus-numpad
 
 # Arch / Manjaro
@@ -35,7 +43,7 @@ sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 
 [asus-numpad]
 SigLevel = Optional TrustAll
-Server = https://raw.githubusercontent.com/RunningVAN/asus-numpad/main/repo/arch/$arch
+Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
 sudo pacman -Sy asus-numpad
 
@@ -48,14 +56,15 @@ makepkg -si
 AlmaLinux 9 上构建，覆盖 RHEL、AlmaLinux、Rocky 9 至 10、Fedora、openSUSE Leap 16 与
 Tumbleweed：spec 只用标准宏，运行时只依赖 glibc 与 systemd，仓库是 rpm-md，zypper 直接读，
 不按发行版各编一份。原生包也在
-[Releases](https://github.com/RunningVAN/asus-numpad/releases)：deb、rpm、pkg.tar.zst、带
+[Releases](https://github.com/asus-numpad/asus-numpad/releases)：deb、rpm、pkg.tar.zst、带
 .SRCINFO 的 PKGBUILD、apk、静态 tarball。Alpine、Gentoo、NixOS 与手动 tarball 步骤见
 [docs/install.md](docs/install.md)。
 
 CI 在每个目标发行版的干净容器里安装每个包并执行 `--version`，装不上的包会挡住发布。
 
 只有一个包。机型在运行期识别：同一份二进制读 DMI 型号与触摸板模组，据此选参数与键表；包名不带
-机型，也就不存在装错包。硬件信息读不准（虚拟机、白牌机箱、BIOS 占位串）时可手动指定，见
+机型，也就不存在装错包。表里对不上的机器不启动：闸门以退出码 3 结束并打印支持机型，不拿别人的
+参数去套未知硬件。硬件信息读不准（虚拟机、白牌机箱、BIOS 占位串）时可手动指定，见
 [机型识别](#机型识别)。运行依赖：glibc，Alpine 上为 musl。
 
 ## 使用
@@ -121,23 +130,31 @@ asus-numpad --lang en check     # 仅本次生效
 | `g615` | 枪神9 / 枪神10 及超竞版、魔霸新锐 2025，16 英寸，2025–2026：`G615`、`G635` |
 | `gx550` | 冰刃双屏（侧置触摸板），15 / 16 英寸：`GX550`、`GX551`、`GX650` |
 | `ux582` | 灵耀双屏（侧置触摸板）：`UX582`、`UX482` |
-| `universal` | 其余机型：厂商默认参数，键表按触摸板模组选择 |
 
 同一块触摸板跨年沿用同一代号，代号后的字符只跟 CPU 换代，触摸板本身不变：`G614` / `G634` 覆盖
 2023 与 2024 两个年度（枪神7 → 枪神8 及超竞版、魔霸新锐），`G615` / `G635` 覆盖 2025 与 2026
 （枪神9 → 枪神10 及超竞版，其中 `G615` 为标准版、`G635` 为超竞版）。2026 年没有换代号，机型表因此
 不必新增一行。
 
-机型 id 的作用是手动切换参数（`asus-numpad sku <id>`），以及让自动识别的结果看得见；
-它不参与拦截。对不上任何一行的机器直接走 `universal`，键表仍按实际触摸板模组选。
-实测机型只有 `G634JY`（枪神7 超竞版），其余各行依据触摸板模组数据与键表映射。
+这张表就是支持范围。机型 id 用来手动切换参数（`asus-numpad sku <id>`），并让自动识别的结果
+看得见；表外的机器拒绝启动。实测机型只有 `G634JY`（枪神7 超竞版），其余各行依据触摸板模组数据
+与键表映射。
 
 一行机型条目由该代的 DMI 型号前缀与 `excludes` 组成：`excludes` 收的是复用了同一代号前缀、
-但没有这块触摸板的老代际。命中的代号落到模组判据，再落到 `universal`，不阻塞启动；手动指定的
-`sku` 优先级最高。
+但没有这块触摸板的老代际。命中的代号落到模组判据，都对不上则同样拒绝启动；手动指定的 `sku`
+优先级最高。
 
 DMI 中的机型代码为准，市场名仅供对照。旧版按机型拆分的包名（`asus-numpad-g614` 等）留在
 `Obsoletes` 中，升级时由 `asus-numpad` 接管。
+
+| | |
+| --- | --- |
+| ![枪神6 / 魔霸6 2022](docs/images/models/g533.webp) | ![枪神7 2023](docs/images/models/g614.webp) |
+| 枪神6 / 魔霸6（2022） | 枪神7 及超竞版、魔霸新锐（2023） |
+| ![枪神9 2025](docs/images/models/g615.webp) | ![冰刃双屏 2022](docs/images/models/gx550.webp) |
+| 枪神9 及超竞版、魔霸新锐（2025） | 冰刃双屏（侧置触摸板，2022） |
+
+产品图取自华硕官网。
 
 ### 双屏机型：侧置触摸板
 
@@ -155,8 +172,8 @@ DMI 中的机型代码为准，市场名仅供对照。旧版按机型拆分的�
 处理，不阻塞启动；明确不是 ASUS 的厂商字段会阻塞启动。
 
 触摸板模组名（如 `ASUE1416`，来自 i2c-hid 与 HID）是第二判据，在 DMI 说不出机型时启用。
-两个判据都没对上具体机型，就走 `universal`。各机型的模组与键表见
-[docs/machines.md](docs/machines.md)。
+两个判据都没对上具体机型，即判定为表外机器：闸门以退出码 3 拒绝启动，`--sku` 是唯一的放行
+通道。各机型的模组与键表见 [docs/machines.md](docs/machines.md)。
 
 读不到正确硬件信息时手动指定：
 
@@ -205,10 +222,9 @@ ACPI 对象，任意多点触控板走的是同一条代码路径。移植工作
   （40 mm）。没有这张表，这些值只能在从未按小键盘调校过的面板上拟合，轻点与滑动识别无法与
   Windows 驱动对齐。
 
-因此支持范围限定在同时具备两者的面板。机型参数表在 `src/sku.rs`，键表与支持级别在
-`src/layout.rs` 的 `HID_LAYOUTS`。两张表都不是机型白名单：机型 id 只选参数，键表按触摸板模组选，
-表里没有的模组停在[布局闸门](#布局闸门)。具备这两项能力的面板，接入工作是一行表项加布局常量，
-欢迎提交补丁。
+因此支持范围限定在同时具备两者的面板。`src/sku.rs` 的机型表即支持范围，负责启动闸门；键表与
+支持级别在 `src/layout.rs` 的 `HID_LAYOUTS`，按触摸板模组另选一套，表里没有的模组停在
+[布局闸门](#布局闸门)。具备这两项能力的面板，接入工作是一行表项加布局常量，欢迎提交补丁。
 
 ### 为什么做成用户态驱动而不是内核模块？
 
@@ -318,4 +334,4 @@ RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
 
 GPL-3.0-or-later，见 [LICENSE](LICENSE)。
 
-Copyright (C) 2026 RunningVAN
+Copyright (C) 2026 the asus-numpad authors

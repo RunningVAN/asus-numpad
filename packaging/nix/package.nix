@@ -3,7 +3,7 @@
 rustPlatform.buildRustPackage {
   pname = "asus-numpad";
   # 版本号与 Cargo.toml 保持一致；改动版本时只需改这一处
-  version = "1.2.1";
+  version = "1.0.0";
 
   src = ../.;
 
@@ -30,7 +30,7 @@ rustPlatform.buildRustPackage {
 
   meta = {
     description = "ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动";
-    homepage = "https://github.com/RunningVAN/asus-numpad";
+    homepage = "https://github.com/asus-numpad/asus-numpad";
     license = lib.licenses.gpl3Plus;
     maintainers = [ ];
     mainProgram = "asus-numpad";

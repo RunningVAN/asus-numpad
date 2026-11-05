@@ -9,7 +9,7 @@
 # CI 里由 release.yml 的 aur job 调用；本地手动发 AUR 也用同一个入口。
 set -euo pipefail
 
-REPO_URL="https://github.com/RunningVAN/asus-numpad"
+REPO_URL="https://github.com/asus-numpad/asus-numpad"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TPL="${HERE}/PKGBUILD.in"
 INSTALL_FILE="${HERE}/asus-numpad-rs.install"
