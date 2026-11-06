@@ -61,7 +61,6 @@
     "models.nux": "侧置触摸板，数字模式由键盘专用键切换",
     "models.shots": "产品图取自华硕官网产品页，与上列机型一一对应。",
     "models.fine": "DMI 里的机型代号为准，宣传名称仅供参考。硬件读不准时用 <code>asus-numpad sku g614</code> 手动指定，<code>asus-numpad sku auto</code> 恢复自动识别。",
-    "models.noz": "幻16 系列（<code>GU603</code>–<code>GV601</code>，即 Zephyrus M16 / G16 / Flow X16）逐代无 NumberPad，不在表内；双屏 <code>GX650</code> 有，已由 <code>gx550</code> 覆盖。",
     "models.gate": "触摸板本身是最后一道判据。机型代号对上之后，驱动还要在 HID 里找到 FEATURE 报告 <code>0x0d</code>，找不到就拒绝启动：同型号的 4 区 RGB 配置用同一块触摸板模组，但没有图标区，画不出数字——代号一样，硬件上没有，软件也补不出来。",
 
     "inst.title": "安装",
@@ -169,7 +168,6 @@
     "models.nux": "側置觸控板，數字模式由鍵盤專用鍵切換",
     "models.shots": "產品圖取自華碩官網產品頁，與上列機型一一對應。",
     "models.fine": "以 DMI 裡的機型代號為準，宣傳名稱僅供對照。硬體讀不準時用 <code>asus-numpad sku g614</code> 手動指定，<code>asus-numpad sku auto</code> 回復自動辨識。",
-    "models.noz": "幻16 系列（<code>GU603</code>–<code>GV601</code>，即 Zephyrus M16 / G16 / Flow X16）逐代無 NumberPad，不在表內；雙螢幕 <code>GX650</code> 有，已由 <code>gx550</code> 涵蓋。",
     "models.gate": "觸控板本身是最後一道判據。機型代號對上之後，驅動還要在 HID 裡找到 FEATURE 報告 <code>0x0d</code>，找不到就拒絕啟動：同型號的 4 區 RGB 配置用同一塊觸控板模組，但沒有圖示區，畫不出數字——代號一樣，硬體上沒有，軟體也補不出來。",
 
     "inst.title": "安裝",
