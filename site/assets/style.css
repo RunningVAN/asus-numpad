@@ -71,6 +71,12 @@ code {
   white-space: nowrap;
 }
 
+/* 正文内联代码允许折行，避免长参数把段落撑出视口 */
+p code, li code, summary code, .notice code, figcaption code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -.022em; margin: 0; font-weight: 650; }
 
 .wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
@@ -527,21 +533,57 @@ html.js .reveal.in { opacity: 1; transform: none; }
 
 /* ---------------- responsive ---------------- */
 
+/* 网格与弹性子项允许收缩，避免 min-content 撑破视口 */
+.hero-grid > *, .cards > *, .steps > *, .use-grid > *, .other-ways > *,
+.foot-grid > *, .model-shots > *, .hero-text, .hero-visual, main {
+  min-width: 0;
+}
+
 @media (max-width: 1000px) {
-  .hero-grid { grid-template-columns: 1fr; gap: 44px; }
+  .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 44px; }
   .hero-visual { order: -1; }
   .pad { max-width: 100%; }
-  .cards, .steps, .use-grid { grid-template-columns: repeat(2, 1fr); }
-  .nav-links { display: none; }
+  .cards, .steps, .use-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* 窄屏保留锚点导航：折叠为第二行的可横滑二级条，与 nav 合并为一块实心底 */
+  .nav-inner { height: auto; min-height: 62px; flex-wrap: wrap; align-content: center; row-gap: 0; }
+  .nav-links {
+    position: static;
+    order: 3;
+    flex: 1 0 100%;
+    display: flex;
+    gap: 2px;
+    margin: 0 -28px;
+    padding: 0 28px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+    backdrop-filter: blur(14px) saturate(160%);
+    border-bottom: 1px solid var(--line);
+    mask-image: linear-gradient(90deg, #000 92%, transparent);
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a { padding: 12px 10px; border-radius: 0; white-space: nowrap; }
+  .hero { padding-top: 156px; }
+  html { scroll-padding-top: 116px; }
 }
 
 @media (max-width: 720px) {
-  .model-shots { grid-template-columns: 1fr; }
+  .model-shots { grid-template-columns: minmax(0, 1fr); }
   .wrap, .nav-inner { padding: 0 18px; }
-  .hero { padding-top: 108px; }
+  .nav-links { margin: 0 -18px; padding: 0 18px; }
+  .hero { padding-top: 132px; }
+  /* 手机首屏先给标题与按钮，主视觉图移到文案之后 */
+  .hero-visual { order: 0; }
+  .hero-grid { gap: 34px; }
+  .pad { max-width: 300px; }
   h1 { font-size: 2.1rem; }
+  .lede { font-size: 15.5px; margin: 16px 0 22px; }
+  .hero-actions .btn { flex: 1 1 0; justify-content: center; }
   .section { padding: 66px 0; }
-  .cards, .steps, .use-grid, .other-ways, .foot-grid { grid-template-columns: 1fr; }
+  .cards, .steps, .use-grid, .other-ways, .foot-grid { grid-template-columns: minmax(0, 1fr); }
   .sec-head { margin-bottom: 32px; }
   .quick-cmd { max-width: 100%; }
   .qcode { padding-right: 16px; padding-bottom: 40px; }
@@ -549,6 +591,43 @@ html.js .reveal.in { opacity: 1; transform: none; }
   .copy-pane { bottom: 12px; right: 12px; }
   .pane { padding: 16px; }
   .distro-strip { margin-top: 44px; gap: 14px; }
+
+  /* 触摸目标不小于 40px */
+  .nav-inner { gap: 10px; }
+  .nav-actions { margin-left: auto; flex-shrink: 0; }
+  .icon-btn { width: 40px; height: 40px; }
+  .btn-sm { padding: 10px 14px; }
+  .qtab { padding: 15px 14px; }
+  .copy-btn { padding: 12px; min-height: 40px; display: inline-flex; align-items: center; font-size: 12px; }
+  .tab { padding: 13px 15px; }
+  .foot-col a { padding: 9px 0; }
+  .quick-note a { display: inline-block; min-height: 40px; padding: 10px 8px; margin: -10px -8px; }
+  .link { display: inline-flex; align-items: center; min-height: 40px; }
+  .brand { min-height: 40px; }
+  p code, li code, summary code, td code, .fine code { font-size: 12px; }
+  .term pre span, .term pre code { font-size: 12px; }
+  .hero code, .section code, .section figcaption code { font-size: 12px; }
+
+  /* 小字号下限提到 11.5px 以上，可读性优先 */
+  .brand-tag { font-size: 11.5px; }
+  .chain .chip { font-size: 12px; }
+  .pad-head, .pad-foot { font-size: 11.5px; }
+  .term-bar em, .step-n, .strip-label { font-size: 11.5px; }
+  .use-card code, .pane pre code, .term pre, pre.mini code { font-size: 12px; }
+
+  .tabs { scrollbar-width: none; mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  .tabs::-webkit-scrollbar { display: none; }
+}
+
+@media (max-width: 480px) {
+  /* 首行放不下字标 + 版本徽标 + 三个动作按钮：隐去版本号，保证单行 */
+  .brand-tag { display: none; }
+}
+
+@media (max-width: 380px) {
+  .brand-name { font-size: 14.5px; }
+  .nav-inner { gap: 8px; }
+  .nav .btn-sm { padding: 10px; }
 }
 
 /* ---------- install notice ---------- */
