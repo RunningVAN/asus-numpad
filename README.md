@@ -138,13 +138,17 @@ use vendor defaults.
 
 ## Supported models
 
-| Model id | Models |
-| --- | --- |
-| `g533` | Strix SCAR 15 / Strix G15 (2022): `G533Z*`, `G513R*` (`G533Q*` / `G513Q*` / `G513I*` from 2021 ship without a NumberPad and are not matched) |
-| `g614` | Strix SCAR 16 / Strix G16 (2023 and 2024): `G614`, `G634` |
-| `g615` | Strix SCAR 16 / Strix G16 (2025 and 2026): `G615`, `G635` |
-| `gx550` | Zephyrus Duo 15 and 16 (side-mounted touchpad): `GX550`, `GX551`, `GX650` |
-| `ux582` | Zenbook Duo (side-mounted touchpad): `UX582`, `UX482` |
+| Model id | Models and model year | DMI prefixes | Touchpad module | Keymap | Configurations without the hardware |
+| --- | --- | --- | --- | --- | --- |
+| `g533` | Strix SCAR 15 / Strix G15, 15", 2022 | `G533Z`, `G513R` — 2021 `G533Q` / `G513Q` / `G513I` excluded | `ASUE1403`, `ELAN1403` | `GH2XLNDZ` | 3 of 5 Strix G15 2022 |
+| `g614` | Strix SCAR 16 / Strix G16, 16", 2023–2024 | `G614`, `G634` | `ASUE1416`, `ASUF1416` | `GH3XLNDZ` | 2 of 10 Strix G16 2023 |
+| `g615` | Strix SCAR 16 / Strix G16, 16", 2025–2026 | `G615`, `G635` | `ASCP1400`, `ASCF1400` | `GH4XLNDZ` | 1 of 25 Strix G16 2025 |
+| `gx550` | Zephyrus Duo 15 / 16, side-mounted, 2022–2023 | `GX550`, `GX551`, `GX650` | `ASUE1408`, `ASUE1404` | `GVM_A`, `GVM` | none in the official lists |
+| `ux582` | Zenbook Duo, side-mounted, 2021 | `UX582`, `UX482` | `ASUE1406`, `ELAN1406` | `NVM` | not verified per configuration |
+
+The `GVM_A` / `GVM` / `NVM` keymaps are named by the official filter but their 15-position parameters
+are not parsed yet, so they carry `LayoutSupport::Unsupported`: `gx550` and `ux582` are detected and
+reported, then refused at startup by the same gate as any other unrecorded module.
 
 This table is the support list: a model id switches parameters by hand (`asus-numpad sku <id>`) and
 makes the detection result visible, and a machine outside the table is refused at startup. `G614` and `G634` cover the
@@ -156,11 +160,10 @@ than validated machine by machine; per-model compatibility lives on the
 [website](https://asus-numpad.github.io/).
 
 A model id is not proof that the machine carries the hardware. Some retail configurations of the
-same model ship a 4-zone RGB touchpad with no NumberPad — 2 of 10 Strix G16 2023 configurations,
-1 of 25 Strix G16 2025, 3 of 5 Strix G15 2022 — and the DMI prefix is identical to the version that
-has it (`G614JV…-0EAGX…` has it, `G614JV…-0EACX…` does not). The keymap therefore still follows the
-touchpad module, never the model code; the per-configuration check is in
-[docs/machines.md](docs/machines.md#同一型号不是都有-numpad按配置核验).
+same model ship a 4-zone RGB touchpad with no NumberPad while keeping an identical DMI prefix
+(`G614JV…-0EAGX…` has it, `G614JV…-0EACX…` does not; counts per generation in the table above). The
+keymap therefore still follows the touchpad module, never the model code; the per-configuration check
+is in [docs/machines.md](docs/machines.md#同一型号不是都有-numpad按配置核验).
 
 A model row holds the DMI name prefixes of the generation it serves, plus an `excludes` list for
 generations that reuse the same code prefix without the hardware. An excluded prefix falls through to
@@ -180,6 +183,10 @@ package names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades 
 Product images from the ASUS product pages.
 
 ### Dual-screen models: side-mounted touchpad
+
+Status: the `GVM` / `GVM_A` / `NVM` keymap parameters are not parsed yet, so these two rows stop at
+detection and are refused by the layout gate. What follows is the behaviour the driver is built for,
+not a working default.
 
 On the Zephyrus Duo and Zenbook Duo the secondary screen takes half of the palm rest, so the touchpad
 is a vertical strip to the right of the keyboard instead of sitting under the palms. Number mode on

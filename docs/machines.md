@@ -1,5 +1,27 @@
 # 跨机型支持
 
+## 机型兼容表
+
+一行一个机型 id（`src/sku.rs` 的 `SKUS`），键表由触摸板模组决定（`src/layout.rs` 的 `HID_LAYOUTS`）：
+
+| 机型 id | 年份 | DMI 前缀（`excludes` 在内） | 触摸板模组 | 键表 | 键表状态 | 同型号无硬件配置 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `g533` | 2022 | `G533Z`、`G513R`；排除 `G533Q`、`G513Q`、`G513I` | `ASUE1403`、`ELAN1403` | `GH2XLNDZ` | `family` | 3 / 5（魔霸6 2022） |
+| `g614` | 2023–2024 | `G614`、`G634` | `ASUE1416`、`ASUF1416` | `GH3XLNDZ` | `verified` | 2 / 10（2023），2024 无 |
+| `g615` | 2025–2026 | `G615`、`G635` | `ASCP1400`、`ASCF1400` | `GH4XLNDZ` | `family` | 1 / 25（2025），SCAR 2025 无 |
+| `gx550` | 2022–2023 | `GX550`、`GX551`、`GX650` | `ASUE1408`、`ASUE1404` | `GVM_A`、`GVM` | `unsupported` | 0 / 6 |
+| `ux582` | 2021 | `UX582`、`UX482` | `ASUE1406`、`ELAN1406` | `NVM` | `unsupported` | 未逐配置核验 |
+
+读法：
+
+* `verified` 直接启动；`family` 与 `unsupported` 默认拒绝，`family` 可加 `--allow-unverified`
+  人工放行（结构同族、几何微差，需逐键核对），`unsupported` 的键表参数没有解析出来，放行也只会
+  乱按，因此不提供放行。
+* `gx550` / `ux582` 两行只到识别：`GVM_A` / `GVM` / `NVM` 在官方 inf 的 HID 映射里有名字，但没有
+  可解析的 15 组参数，借 `GH3XLNDZ` 参数占位仅用于让检测输出可读，启动仍被闸门拦下。
+* 最后一列是官方规格页逐配置核验的结果，指同一型号里 4 区 RGB 触控板、不带 NumberPad 的零售配置
+  占比，明细见下文「同一型号不是都有 NumberPad」。
+
 ## 为什么同模组天然通用
 
 NumberPad 的键位按**触摸板模组 + HID 命名**区分，与整机型号无关。
@@ -82,7 +104,7 @@ NumberPad 的键位按**触摸板模组 + HID 命名**区分，与整机型号�
 | --- | --- |
 | `verified` | 直接启动（模组名在 `HID_LAYOUTS` 中且键表已收录） |
 | `family` | 默认拒绝，提示加 `--allow-unverified` |
-| `unsupported` | 默认拒绝，提示反馈 `check` 输出 |
+| `unsupported` | 默认拒绝，提示反馈 `check` 输出（键表参数未解析，不放行） |
 
 ```bash
 asus-numpad --allow-unverified run
