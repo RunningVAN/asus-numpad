@@ -47,17 +47,13 @@ sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 SigLevel = Required DatabaseRequired
 Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
-sudo pacman -Sy asus-numpad
+sudo pacman -Syu asus-numpad
 
 # Alpine
 curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
   | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine" | sudo tee -a /etc/apk/repositories
+echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
 sudo apk update && sudo apk add asus-numpad
-
-# Arch / Manjaro，來源套件 asus-numpad-rs
-# 把 release 頁面的 PKGBUILD 與 asus-numpad-rs.install 放在同一目錄：
-makepkg -si
 ```
 
 每個生態各一個套件。deb 在 Ubuntu 22.04 上建置，涵蓋 22.04 至 24.04 與 Debian 12、13。rpm 在
@@ -65,8 +61,9 @@ AlmaLinux 9 上建置，涵蓋 RHEL、AlmaLinux、Rocky 9 至 10、Fedora、open
 Tumbleweed：spec 只用標準巨集，執行期僅相依 glibc 與 systemd，倉庫格式為 rpm-md，zypper 直接
 讀取，不按發行版各編一份。原生套件也在
 [Releases](https://github.com/asus-numpad/asus-numpad/releases)：deb、rpm、pkg.tar.zst、附
-.SRCINFO 的 PKGBUILD、apk、靜態 tarball。Alpine、Gentoo、NixOS 與手動 tarball 步驟見
-[docs/install.md](docs/install.md)。
+.SRCINFO 的 PKGBUILD、apk、靜態 tarball。手動建置 PKGBUILD：把 `PKGBUILD` 與
+`asus-numpad-rs.install` 放進同一目錄，執行 `makepkg -si`。Alpine、Gentoo、NixOS 與手動 tarball
+步驟見 [docs/install.md](docs/install.md)。倉庫與 release 附件只提供 x86_64，其餘架構需自行建置。
 
 `ci.yml` 每次推送都為每個生態建置套件並檢查套件中介資料；`release.yml` 另在每個目標發行版的
 乾淨容器中安裝每個套件並執行 `asus-numpad --version`，裝不起來的套件會擋下發佈。
@@ -140,8 +137,8 @@ asus-numpad --lang en check     # 僅本次生效
 | `gx550` | Zephyrus Duo 15 / Duo 15 SE / Duo 16（西風之神），側置觸控板，15–16 吋，2020–2023 | `GX550`、`GX551`、`GX650` | `ASUE1408`、`ASUE1404` | `GVM_A`、`GVM` | 官方列表中沒有 |
 | `ux582` | Zenbook Duo 14 / Zenbook Pro Duo 15 OLED，側置觸控板，14–15 吋，2020–2021 | `UX582`、`UX482` | `ASUE1406`、`ELAN1406` | `NVM` | 未逐配置核驗 |
 
-`GVM_A` / `GVM` / `NVM` 的參數就是從官方 inf 抄下來的，只是官方本身沒給滿 15 項（`GVM` 到 `_06`、
-`NVM` 到 `_12`），缺的項按 Windows 驅動的預設 `0` 填，不做數值推測；`GVM_A` 與 `GVM` 共用同一份
+`GVM_A` / `GVM` / `NVM` 的參數抄自官方 inf；官方只列到 `GVM_06` / `NVM_12`，不足一張完整表的 15 個
+格位，空缺寫 `0`——與 Windows 驅動讀不到該項時的預設一致，不做數值推測；`GVM_A` 與 `GVM` 共用同一份
 參數（`NUMPADLAYOUT_GVM_05` / `_06` 的註解寫明是「for GVMA」）。這兩列狀態是 `LayoutSupport::Family`：
 5 欄、網格與 GH3XLNDZ 同族，但沒在實機上逐鍵核對過，啟動需加 `--allow-unverified` 放行。
 
@@ -171,8 +168,8 @@ NumberPad，且 DMI 前綴與帶 NumberPad 的配置完全相同（`G614JV…-0E
 | --- | --- |
 | ![Strix SCAR 15 2022](site/assets/models/g533.webp) | ![Strix SCAR 16 2023](site/assets/models/g614.webp) |
 | Strix SCAR 15 / Strix G15（2022） | Strix SCAR 16 / Strix G16（2023） |
-| ![Strix SCAR 16 2025](site/assets/models/g615.webp) | ![Zephyrus Duo 16 (GX650)](site/assets/models/gx550.webp) |
-| Strix SCAR 16 / Strix G16（2025） | Zephyrus Duo 16（側置觸控板，GX650） |
+| ![Strix SCAR 16 2025](site/assets/models/g615.webp) | ![Zephyrus Duo 16，GX650（2022）](site/assets/models/gx550.webp) |
+| Strix SCAR 16 / Strix G16（2025） | Zephyrus Duo 16（側置觸控板，GX650，2022） |
 
 產品圖取自華碩產品頁，僅用於辨識機型。
 
@@ -284,8 +281,8 @@ asusctl 側實作同樣的功能，兩條路都歡迎。
 | NumLock 長按 | 62 幀 | `NUMPAD_GH2XLNDZ_01` / `_GH3XLNDZ_01`，圖示區切換數字模式（置中式觸控板；側置觸控板見[雙螢幕機型](#雙螢幕機型側置觸控板)） |
 | NumLock 漂移 | 2741 µm | `NUMPAD_09`：仍按長按處理的位移上限 |
 | 滑動閾值 | 4838 µm | `NUMPADGESTURE_05`：超過即取消本次按鍵、轉為手勢 |
-| 雙指間距 | 40 mm | `NUMPADGESTURE_08`：兩指間距超過此值判為捲動 |
-| 喚起手勢 | 7000 µm | 計算機熱區觸發距離 |
+| 雙指間距 | 40 mm | `NUMPADGESTURE_08`：捲動允許的最大指距，超過則按張開雙指交給桌面 |
+| 應用程式手勢 | 7000 µm | `NUMPAD_07`：多指手勢的觸發距離 |
 
 ### 鍵表
 

@@ -48,17 +48,13 @@ sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 SigLevel = Required DatabaseRequired
 Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
-sudo pacman -Sy asus-numpad
+sudo pacman -Syu asus-numpad
 
 # Alpine
 curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
   | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine" | sudo tee -a /etc/apk/repositories
+echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
 sudo apk update && sudo apk add asus-numpad
-
-# Arch / Manjaro, source package asus-numpad-rs
-# PKGBUILD and asus-numpad-rs.install from the release page in one directory:
-makepkg -si
 ```
 
 One package per ecosystem. The deb is built on Ubuntu 22.04 and covers 22.04 to 24.04 plus Debian
@@ -67,8 +63,10 @@ openSUSE Leap 16 and Tumbleweed: the spec uses standard macros only, runtime dep
 and systemd, and the repository is rpm-md, which zypper reads directly. Nothing is rebuilt per
 distribution. Native packages are also on
 [Releases](https://github.com/asus-numpad/asus-numpad/releases): deb, rpm, pkg.tar.zst, PKGBUILD with
-.SRCINFO, apk, static tarball. Alpine, Gentoo, NixOS and manual tarball steps are in
-[docs/install.md](docs/install.md).
+.SRCINFO, apk, static tarball. Building the PKGBUILD by hand: put `PKGBUILD` and
+`asus-numpad-rs.install` in one directory and run `makepkg -si`. Alpine, Gentoo, NixOS and manual
+tarball steps are in [docs/install.md](docs/install.md). The repositories and the release assets are
+x86_64 only; other architectures need a local build.
 
 `ci.yml` builds a package per ecosystem on every push and checks the package metadata. `release.yml`
 additionally installs each package in a clean container of every target distribution and runs
@@ -146,12 +144,12 @@ use vendor defaults.
 | `gx550` | Zephyrus Duo 15 / Duo 15 SE / Duo 16, side-mounted, 15"–16", 2020–2023 | `GX550`, `GX551`, `GX650` | `ASUE1408`, `ASUE1404` | `GVM_A`, `GVM` | none in the official lists |
 | `ux582` | Zenbook Duo 14 / Zenbook Pro Duo 15 OLED, side-mounted, 14"–15", 2020–2021 | `UX582`, `UX482` | `ASUE1406`, `ELAN1406` | `NVM` | not verified per configuration |
 
-The `GVM_A` / `GVM` / `NVM` parameters are copied verbatim from the official filter, which simply does
-not list all 15 of them: `GVM` stops at `_06`, `NVM` at `_12`. The missing entries are filled with `0`,
-the same default the Windows driver sees when the value is absent, and nothing is guessed. `GVM_A`
-shares the `GVM` values — `NUMPADLAYOUT_GVM_05` / `_06` are annotated "for GVMA" in the filter. Both
-rows carry `LayoutSupport::Family`: 5 columns, same grid, never checked key by key on real hardware, so
-they are refused at startup unless `--allow-unverified` is given.
+The `GVM_A` / `GVM` / `NVM` parameters are copied verbatim from the official filter, which lists fewer
+entries than a full 15-cell table holds: `GVM` ends at `_06`, `NVM` at `_12`. The gaps are written as
+`0`, the default the Windows driver reads when an entry is absent; no value is inferred. `GVM_A` shares
+the `GVM` values — `NUMPADLAYOUT_GVM_05` / `_06` are annotated "for GVMA" in the filter. Both rows
+carry `LayoutSupport::Family`: 5 columns, same grid, never checked key by key on real hardware, so they
+are refused at startup unless `--allow-unverified` is given.
 
 This table is the support list: a model id switches parameters by hand (`asus-numpad sku <id>`) and
 makes the detection result visible, and a machine outside the table is refused at startup. `G614` and `G634` cover the
@@ -182,10 +180,10 @@ package names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades 
 | --- | --- |
 | ![SCAR 15 / Strix G15 2022](site/assets/models/g533.webp) | ![SCAR 16 / Strix G16 2023](site/assets/models/g614.webp) |
 | SCAR 15 / Strix G15 (2022) | SCAR 16 / Strix G16 (2023) |
-| ![SCAR 16 / Strix G16 2025](site/assets/models/g615.webp) | ![Zephyrus Duo 16 (GX650)](site/assets/models/gx550.webp) |
-| SCAR 16 / Strix G16 (2025) | Zephyrus Duo 16 (2022), side-mounted touchpad |
+| ![SCAR 16 / Strix G16 2025](site/assets/models/g615.webp) | ![Zephyrus Duo 16, GX650 (2022)](site/assets/models/gx550.webp) |
+| SCAR 16 / Strix G16 (2025) | Zephyrus Duo 16 (GX650, 2022), side-mounted touchpad |
 
-Product images from the ASUS product pages.
+Product images come from the ASUS product pages and are used to identify the model only.
 
 ### Dual-screen models: side-mounted touchpad
 
@@ -314,8 +312,8 @@ touchpad --evdev(/dev/input/eventN)--> frame buffer (8 ms) --> state machine --u
 | NumLock long press | 62 frames | `NUMPAD_GH2XLNDZ_01` / `_GH3XLNDZ_01`; toggles number mode from the icon area (centre-mounted pads; see [dual-screen models](#dual-screen-models-side-mounted-touchpad)) |
 | NumLock drift | 2741 µm | `NUMPAD_09`: movement still counted as a long press |
 | Swipe threshold | 4838 µm | `NUMPADGESTURE_05`: movement above this cancels the key and becomes a gesture |
-| Scroll finger distance | 40 mm | `NUMPADGESTURE_08`: two fingers further apart than this scroll |
-| Launch gesture | 7000 µm | `NUMPAD_07`: distance that triggers the calculator hot zone |
+| Scroll finger distance | 40 mm | `NUMPADGESTURE_08`: largest finger gap that still scrolls; a wider gap goes to the desktop |
+| App gesture | 7000 µm | `NUMPAD_07`: distance that triggers the multi-finger gesture |
 
 ### Key layout
 

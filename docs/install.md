@@ -33,9 +33,10 @@ asus-numpad sku auto     # 恢复自动识别
 ## 软件源
 
 仓库地址是 `https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo`，
-由 CI 在每次发版后自动重建，每个生态保留最近 3 个版本。仓库未做 GPG 签名——
-密钥轮换的成本和收益不成比例；索引里的哈希校验值齐全，介意完整性的请改用 Release
-里的包手工安装。
+由 CI 在每次发版后自动重建，每个生态保留最近 3 个版本。索引带 GPG 签名：apt 是
+`InRelease`，dnf / zypper 开 `repo_gpgcheck`，pacman 走 `pacman-key`，apk 用 RSA 成员签名。
+公钥随索引发布在 `repo/keys/` 下，`install.sh` 先导入公钥再按各生态的校验路径装包，没有
+跳过校验的开关。指纹与私钥托管见 [signing.md](signing.md)。
 
 ### 源里放的是哪个包
 
@@ -126,7 +127,7 @@ sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 SigLevel = Required DatabaseRequired
 Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
-sudo pacman -Sy asus-numpad
+sudo pacman -Syu asus-numpad
 ```
 
 `Required DatabaseRequired` 要求包与数据库都必须有有效签名：`.sig` 缺失、钥没导入都对不上。
@@ -157,7 +158,7 @@ PKGBUILD 真编真装、跑 `--version` 并校验 systemd 单元与 udev 规则�
 ```bash
 curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
   | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine" \
+echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
   | sudo tee -a /etc/apk/repositories
 sudo apk update
 sudo apk add asus-numpad
@@ -180,9 +181,9 @@ sudo apk add asus-numpad
 | 任意 x86_64 | `asus-numpad-<ver>-x86_64.tar.gz` |
 
 ```bash
-sudo apt install ./asus-numpad_1.0.0_amd64.deb
-sudo dnf install ./asus-numpad-1.0.0-1.el9.x86_64.rpm
-sudo pacman -U asus-numpad-1.0.0-1-x86_64.pkg.tar.zst
+sudo apt install ./asus-numpad_<ver>_amd64.deb
+sudo dnf install ./asus-numpad-<ver>-1.el9.x86_64.rpm
+sudo pacman -U asus-numpad-<ver>-1-x86_64.pkg.tar.zst
 sudo apk add ./asus-numpad-1.0.0-r0.apk   # 已按上一节导入公钥；没导入时加 --allow-untrusted
 ```
 
@@ -198,7 +199,7 @@ sha256sum -c asus-numpad-1.2.4-SHA256SUMS --ignore-missing
 包里带安装脚本，不经过包管理器：
 
 ```bash
-tar xzf asus-numpad-1.2.4-x86_64.tar.gz
+tar xzf asus-numpad-<ver>-x86_64.tar.gz
 cd asus-numpad-1.2.4
 sudo ./install.sh --dry-run     # 先看它要做什么
 sudo ./install.sh
@@ -222,7 +223,7 @@ sudo ./install.sh
 sudo mkdir -p /etc/portage/repos.conf
 # 用本地 overlay 即可：
 sudo mkdir -p /var/db/repos/asus-numpad/sys-apps/asus-numpad
-sudo cp packaging/gentoo/asus-numpad-1.2.1.ebuild /var/db/repos/asus-numpad/sys-apps/asus-numpad/
+sudo cp packaging/gentoo/asus-numpad-1.0.1.ebuild /var/db/repos/asus-numpad/sys-apps/asus-numpad/
 cd /var/db/repos/asus-numpad && sudo repoman manifest 2>/dev/null || sudo pkgdev manifest
 sudo emerge -av sys-apps/asus-numpad
 ```

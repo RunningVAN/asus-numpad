@@ -47,17 +47,13 @@ sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 SigLevel = Required DatabaseRequired
 Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
-sudo pacman -Sy asus-numpad
+sudo pacman -Syu asus-numpad
 
 # Alpine
 curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
   | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine" | sudo tee -a /etc/apk/repositories
+echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
 sudo apk update && sudo apk add asus-numpad
-
-# Arch / Manjaro，源码包 asus-numpad-rs
-# 把 release 页面的 PKGBUILD 与 asus-numpad-rs.install 放在同一目录：
-makepkg -si
 ```
 
 每个生态一个包。deb 在 Ubuntu 22.04 上构建，覆盖 22.04 至 24.04 与 Debian 12、13。rpm 在
@@ -65,8 +61,9 @@ AlmaLinux 9 上构建，覆盖 RHEL、AlmaLinux、Rocky 9 至 10、Fedora、open
 Tumbleweed：spec 只用标准宏，运行时只依赖 glibc 与 systemd，仓库是 rpm-md，zypper 直接读，
 不按发行版各编一份。原生包也在
 [Releases](https://github.com/asus-numpad/asus-numpad/releases)：deb、rpm、pkg.tar.zst、带
-.SRCINFO 的 PKGBUILD、apk、静态 tarball。Alpine、Gentoo、NixOS 与手动 tarball 步骤见
-[docs/install.md](docs/install.md)。
+.SRCINFO 的 PKGBUILD、apk、静态 tarball。手工构建 PKGBUILD：把 `PKGBUILD` 与
+`asus-numpad-rs.install` 放进同一目录，执行 `makepkg -si`。Alpine、Gentoo、NixOS 与手动 tarball
+步骤见 [docs/install.md](docs/install.md)。仓库与 release 附件只提供 x86_64，其余架构需本地自建。
 
 `ci.yml` 每次推送都为每个生态构建包并检查包元数据；`release.yml` 另在每个目标发行版的干净容器里
 安装每个包并执行 `asus-numpad --version`，装不上的包会挡住发布。
@@ -136,11 +133,11 @@ asus-numpad --lang en check     # 仅本次生效
 | `g533` | 枪神6 / 魔霸6，15 英寸，2022 | `G533Z`、`G513R`——2021 代的 `G533Q` / `G513Q` / `G513I` 已排除 | `ASUE1403`、`ELAN1403` | `GH2XLNDZ` | 魔霸6 2022 五个配置里三个 |
 | `g614` | 枪神7 及超竞版、枪神8 及超竞版、魔霸新锐，16 英寸，2023–2024 | `G614`、`G634` | `ASUE1416`、`ASUF1416` | `GH3XLNDZ` | 枪神7 2023 十个配置里两个 |
 | `g615` | 枪神9 及超竞版、枪神10 及超竞版、魔霸新锐 2025，16 英寸，2025–2026 | `G615`、`G635` | `ASCP1400`、`ASCF1400` | `GH4XLNDZ` | 枪神9 2025 二十五个配置里一个 |
-| `gx550` | 冰刃双屏（Duo 15 / Duo 15 SE / Duo 16），侧置触摸板，15 / 16 英寸，2020–2023 | `GX550`、`GX551`、`GX650` | `ASUE1408`、`ASUE1404` | `GVM_A`、`GVM` | 官方列表里没有 |
-| `ux582` | 灵耀 X 双屏（UX482 / UX582），侧置触摸板，14 / 15 英寸，2020–2021 | `UX582`、`UX482` | `ASUE1406`、`ELAN1406` | `NVM` | 未逐配置核验 |
+| `gx550` | 冰刃双屏、冰刃 6 双屏、冰刃 7 双屏（Duo 15 / Duo 15 SE / Duo 16），侧置触摸板，15 / 16 英寸，2020–2023 | `GX550`、`GX551`、`GX650` | `ASUE1408`、`ASUE1404` | `GVM_A`、`GVM` | 官方列表里没有 |
+| `ux582` | 灵耀 X 双屏、灵耀 X 双屏 Pro（UX482 / UX582），侧置触摸板，14 / 15 英寸，2020–2021 | `UX582`、`UX482` | `ASUE1406`、`ELAN1406` | `NVM` | 未逐配置核验 |
 
-`GVM_A` / `GVM` / `NVM` 的参数就是从官方 inf 抄下来的，只是官方本身没给满 15 项（`GVM` 到 `_06`、
-`NVM` 到 `_12`），缺的项按 Windows 驱动的缺省 `0` 填，不做数值推测；`GVM_A` 与 `GVM` 共用同一份
+`GVM_A` / `GVM` / `NVM` 的参数抄自官方 inf；官方只列到 `GVM_06` / `NVM_12`，不足一张完整表的 15 个
+格位，空缺写 `0`——与 Windows 驱动读不到该项时的缺省一致，不做数值推测；`GVM_A` 与 `GVM` 共用同一份
 参数（`NUMPADLAYOUT_GVM_05` / `_06` 的注释写明是「for GVMA」）。这两行状态是 `LayoutSupport::Family`：
 5 列、网格与 GH3XLNDZ 同族，但没在真机上逐键核对过，启动需加 `--allow-unverified` 放行。
 
@@ -168,10 +165,10 @@ DMI 中的机型代码为准，市场名仅供对照。旧版按机型拆分的�
 
 | | |
 | --- | --- |
-| ![枪神6 / 魔霸6 2022](site/assets/models/g533.webp) | ![枪神7 2023](site/assets/models/g614.webp) |
+| ![枪神6 / 魔霸6 2022](site/assets/models/g533.webp) | ![枪神7 及超竞版、魔霸新锐 2023](site/assets/models/g614.webp) |
 | 枪神6 / 魔霸6（2022） | 枪神7 及超竞版、魔霸新锐（2023） |
-| ![枪神9 2025](site/assets/models/g615.webp) | ![冰刃双屏（GX650）](site/assets/models/gx550.webp) |
-| 枪神9 及超竞版、魔霸新锐（2025） | 冰刃双屏（侧置触摸板，GX650） |
+| ![枪神9 2025](site/assets/models/g615.webp) | ![冰刃 6 双屏（GX650）](site/assets/models/gx550.webp) |
+| 枪神9 及超竞版、魔霸新锐（2025） | 冰刃 6 双屏（侧置触摸板，GX650，2022） |
 
 产品图取自华硕产品页，仅用于识别机型。
 
@@ -283,8 +280,8 @@ ACPI 对象，任意多点触控板走的是同一条代码路径。移植工作
 | NumLock 长按 | 62 帧 | `NUMPAD_GH2XLNDZ_01` / `_GH3XLNDZ_01`，图标区切换数字模式（居中式触摸板；侧置触摸板见[双屏机型](#双屏机型侧置触摸板)） |
 | NumLock 漂移 | 2741 µm | `NUMPAD_09`：仍按长按处理的位移上限 |
 | 滑动阈值 | 4838 µm | `NUMPADGESTURE_05`：超过即取消本次按键、转为手势 |
-| 双指间距 | 40 mm | `NUMPADGESTURE_08`：两指间距超过此值判为滚动 |
-| 唤起手势 | 7000 µm | `NUMPAD_07`：计算器热区触发距离 |
+| 双指间距 | 40 mm | `NUMPADGESTURE_08`：滚动允许的最大指距，超过则按张开双指交给桌面 |
+| 应用手势 | 7000 µm | `NUMPAD_07`：多指手势的触发距离 |
 
 ### 键表
 

@@ -66,13 +66,11 @@
         </div>
         <div class="quick-cmd" role="group" aria-label="Quick install">
           <div class="quick-tabs" role="tablist">
-            <button class="qtab active" role="tab" data-qt="apt">Debian / Ubuntu</button>
-            <button class="qtab" role="tab" data-qt="dnf">Fedora</button>
+            <button class="qtab active" role="tab" data-qt="sh">apt / dnf / zypper / pacman / apk</button>
             <button class="qtab" role="tab" data-qt="nix">Nix</button>
           </div>
           <div class="quick-body">
-            <pre class="qcode" data-qt-body="apt"><code>sudo apt install asus-numpad</code></pre>
-            <pre class="qcode hidden" data-qt-body="dnf"><code>sudo dnf install asus-numpad</code></pre>
+            <pre class="qcode" data-qt-body="sh"><code>curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/install.sh | sudo sh</code></pre>
             <pre class="qcode hidden" data-qt-body="nix"><code>nix run github:asus-numpad/asus-numpad</code></pre>
             <button class="copy-btn" type="button" aria-label="Copy"><span data-i18n="copy">Copy</span></button>
           </div>
@@ -123,7 +121,7 @@
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5 12 4l8.5 4.5v7L12 20l-8.5-4.5v-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3.5 8.5 12 13l8.5-4.5M12 13v7" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
           <h3 data-i18n="feat.2.t">One package, whole ecosystem</h3>
-          <p data-i18n="feat.2.d">The deb is built on glibc 2.35 and covers Ubuntu 22.04–24.04 with Debian 12/13; the rpm is built on el9 and covers RHEL 9–10, Fedora and openSUSE. The release workflow installs the same file in every target before publishing.</p>
+          <p data-i18n="feat.2.d">The deb is built on glibc 2.35 and covers Ubuntu 22.04–24.04 with Debian 12/13; the rpm is built on el9 and covers RHEL 9–10, Fedora and openSUSE. The release workflow installs the same file in every target before publishing. Repositories and release assets are x86_64 only.</p>
         </article>
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
@@ -242,8 +240,13 @@
     <div class="wrap">
       <header class="sec-head reveal">
         <h2 data-i18n="inst.title">Install</h2>
-        <p data-i18n="inst.sub">Add the repository once; upgrades follow your package manager. Packages are unsigned — hashes are in the index.</p>
+        <p data-i18n="inst.sub">Add the repository once; upgrades follow your package manager. The index is GPG signed and the key ships with it.</p>
       </header>
+
+      <div class="oneline reveal">
+        <pre class="mini"><code>curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/install.sh | sudo sh</code></pre>
+        <p data-i18n="inst.oneline.n">Detects the distribution, imports the signing key, writes the repository and installs the package. Append <code>--repo-only</code> to write the repository without installing.</p>
+      </div>
 
       <div class="install reveal">
         <div class="tabs" role="tablist">
@@ -257,7 +260,10 @@
 
         <div class="pane" data-pane="apt">
           <p class="pane-note" data-i18n="inst.apt.n">Debian 12/13, Ubuntu 22.04–24.04, Mint 21+</p>
-          <pre><code>echo "deb [trusted=yes] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
+          <pre><code>sudo install -d -m 0755 /usr/share/keyrings
+curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.gpg \
+  | sudo tee /usr/share/keyrings/asus-numpad.gpg &gt;/dev/null
+echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update
 sudo apt install asus-numpad</code></pre>
@@ -265,40 +271,58 @@ sudo apt install asus-numpad</code></pre>
 
         <div class="pane hidden" data-pane="dnf">
           <p class="pane-note" data-i18n="inst.dnf.n">Fedora, RHEL / Rocky / Alma 9–10</p>
-          <pre><code>sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null &lt;&lt;'EOF'
+          <pre><code>sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+sudo tee /etc/yum.repos.d/asus-numpad.repo &gt;/dev/null &lt;&lt;'EOF'
 [asus-numpad]
 name=asus-numpad
 baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
 enabled=1
-gpgcheck=0
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
 EOF
 sudo dnf install asus-numpad</code></pre>
         </div>
 
         <div class="pane hidden" data-pane="zypper">
           <p class="pane-note" data-i18n="inst.zypper.n">openSUSE Leap 16 and Tumbleweed read the same rpm-md repo</p>
-          <pre><code>sudo zypper addrepo --no-gpgcheck --refresh \
-  "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
+          <pre><code>sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+sudo tee /etc/zypp/repos.d/asus-numpad.repo &gt;/dev/null &lt;&lt;'EOF'
+[asus-numpad]
+name=asus-numpad
+enabled=1
+autorefresh=1
+type=rpm-md
+baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+EOF
+sudo zypper refresh asus-numpad
 sudo zypper install asus-numpad</code></pre>
         </div>
 
         <div class="pane hidden" data-pane="pacman">
           <p class="pane-note" data-i18n="inst.pacman.n">Arch, Manjaro, EndeavourOS — AUR source package is <code>asus-numpad-rs</code></p>
-          <pre><code>sudo tee -a /etc/pacman.conf >/dev/null &lt;&lt;'EOF'
+          <pre><code>curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc -o /tmp/asus-numpad.asc
+sudo pacman-key --add /tmp/asus-numpad.asc
+sudo pacman-key --lsign-key 79F282157F2D3FF8E3C6806314C2BF611986E168
+sudo tee -a /etc/pacman.conf &gt;/dev/null &lt;&lt;'EOF'
 
 [asus-numpad]
-SigLevel = Optional TrustAll
+SigLevel = Required DatabaseRequired
 Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
-sudo pacman -Sy asus-numpad</code></pre>
+sudo pacman -Syu asus-numpad</code></pre>
         </div>
 
         <div class="pane hidden" data-pane="apk">
           <p class="pane-note" data-i18n="inst.apk.n">Alpine 3.19+ (musl build)</p>
-          <pre><code>echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
-  | sudo tee -a /etc/apk/repositories
+          <pre><code>curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
+  | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub &gt;/dev/null
+echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
 sudo apk update
-sudo apk add --allow-untrusted asus-numpad</code></pre>
+sudo apk add asus-numpad</code></pre>
         </div>
 
         <div class="pane hidden" data-pane="nix">
@@ -391,8 +415,8 @@ asus-numpad --lang en check</code></pre>
           <p data-i18n="faq.3.d">A machine that matches no row is refused at startup: the gate exits with code 3 and prints the supported models, instead of running parameters meant for other hardware. <code>--sku</code> or <code>asus-numpad sku &lt;id&gt;</code> remains the way in, and <code>asus-numpad check</code> prints what to send along.</p>
         </details>
         <details class="reveal">
-          <summary data-i18n="faq.4.q">Why are the packages not GPG signed?</summary>
-          <p data-i18n="faq.4.d">A key buys one signature check for a repository that holds a single package, and every user has to import a new key whenever it rotates. The index carries per-file hashes instead; if you need signature verification, install the package from Releases.</p>
+          <summary data-i18n="faq.4.q">Where is the signing key, and how do I check it?</summary>
+          <p data-i18n="faq.4.d">One GPG key signs the apt, rpm and pacman indexes; Alpine packages are signed with a separate RSA key. Both public keys ship in the repository under <code>keys/</code>, so <code>install.sh</code> imports them without a second download. Fingerprint: <code>79F2 8215 7F2D 3FF8 E3C6 8063 14C2 BF61 1986 E168</code>; details in <code>docs/signing.md</code>.</p>
         </details>
         <details class="reveal">
           <summary data-i18n="faq.5.q">Dual-screen Zephyrus Duo and Zenbook Duo?</summary>
