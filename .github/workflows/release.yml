@@ -728,7 +728,8 @@ jobs:
           smoke pacman archlinux:latest '
             set -eux
             pacman-key --init
-            pacman-key --add "$BASE/keys/asus-numpad-repo.asc" >/dev/null
+            curl -fsSL "$BASE/keys/asus-numpad-repo.asc" -o /tmp/asus-numpad.asc
+            pacman-key --add /tmp/asus-numpad.asc >/dev/null
             pacman-key --lsign-key "$FPR"
             printf '\n[asus-numpad]\nSigLevel = Required DatabaseRequired\nServer = %s/arch/$arch\n' "$BASE" \
               >> /etc/pacman.conf
