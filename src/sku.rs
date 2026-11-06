@@ -97,19 +97,19 @@ pub const SKUS: &[Sku] = &[
     },
     Sku {
         id: "g614",
-        display: "ASUS 枪神7 / 枪神8 及超竞版、魔霸新锐，16 英寸，2023–2024（G614 / G634）",
+        display: "ASUS 枪神7 / 枪神8 及超竞版，16 英寸，2023–2024（G614 / G634）",
         models: &["G614", "G634"],
         excludes: &[],
         modules: &["ASUE1416", "ASUF1416"],
-        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；型号前缀不保证有硬件：2023 代官方 10 个配置里 2 个是 4 区 RGB 版（尾缀 EACX）无 NumberPad，靠设备缺失自然不动键盘",
+        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；型号前缀不保证有硬件：2023 代官方 10 个配置里 2 个是 4 区 RGB 版（尾缀 EACX）无 NumberPad，国行「魔霸新锐」全系即此类，靠设备缺失自然不动键盘",
     },
     Sku {
         id: "g615",
-        display: "ASUS 枪神9 / 枪神10 及超竞版、魔霸新锐 2025，16 英寸，2025–2026（G615 / G635）",
+        display: "ASUS 枪神9 / 枪神10 及超竞版，16 英寸，2025–2026（G615 / G635）",
         models: &["G615", "G635"],
         excludes: &[],
         modules: &["ASCP1400", "ASCF1400"],
-        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。G615 为标准版、G635 为超竞版；2026 年的枪神10 沿用同一对代号，模组取值来自 2025 代。2025 代官方 25 个配置里有 1 个（90NR0LJ1-M005P0）是不带 NumberPad 的 4 区 RGB 版。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，不并入本配置",
+        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。G615 为标准版、G635 为超竞版；2026 年的枪神10 沿用同一对代号，模组取值来自 2025 代。2025 代官方 25 个配置里有 1 个（90NR0LJ1-M005P0）是不带 NumberPad 的 4 区 RGB 版，国行「魔霸新锐 2025」（G614PM / G614PR 8940HX 与酷睿版）同属此类。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，不并入本配置",
     },
     Sku {
         id: "gx550",
