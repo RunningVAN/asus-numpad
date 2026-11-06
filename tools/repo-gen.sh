@@ -185,9 +185,11 @@ do_apt() {
     cp -f "${debs[@]}" "$pool/"
     prune "$pool"
 
-    # 按 deb 架构分目录；apt 靠它决定给谁下发
+    # 按 deb 架构分目录；apt 靠它决定给谁下发。
+    # 不单独做 binary-all：Architecture: all 的包 dpkg-scanpackages 会算进各具体架构，
+    # 再额外来一份 binary-all 只会让 apt 拿到重复条目。
     local arch listed=0
-    for a in amd64 arm64 armhf all; do
+    for a in amd64 arm64 armhf; do
         local dir="$OUT/apt/dists/stable/main/binary-$a"
         mkdir -p "$dir"
         ( cd "$OUT/apt" && dpkg-scanpackages --multiversion --arch "$a" pool/main 2>/dev/null ) > "$dir/Packages" || true
@@ -203,22 +205,34 @@ do_apt() {
     # Release：不签名的仓库，apt 用 [trusted=yes] 绕过 GPG；校验值仍然写全，
     # 这样即使以后加签名也不用重做结构
     local rel="$OUT/apt/dists/stable/Release"
+
+    # 只声明真扫出包来的架构。声明了却没有对应索引的架构，apt 在本机架构上不报错，
+    # 但换到那个架构的机器上就是 404。
+    local archs="" a2
+    for a2 in amd64 arm64 armhf; do
+        [[ -s "$OUT/apt/dists/stable/main/binary-$a2/Packages" ]] && archs="$archs $a2"
+    done
+    archs="${archs# }"
+
     {
         printf 'Origin: asus-numpad\n'
         printf 'Label: asus-numpad\n'
         printf 'Suite: stable\n'
         printf 'Codename: stable\n'
         printf 'Version: %s\n' "$VERSION"
-        printf 'Architectures: amd64 arm64\n'
+        printf 'Architectures: %s\n' "${archs:-amd64}"
         printf 'Components: main\n'
         printf 'Description: ASUS NumberPad userspace driver for Linux\n'
         printf 'Date: %s\n' "$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S UTC')"
+        # 路径必须相对 dists/stable/。以前写成 dists/stable/main/...，apt 认不出这是
+        # 本仓库索引，update 静默跳过（退出码 0、无任何输出），装包时才报
+        # E: Unable to locate package asus-numpad。
         printf 'SHA256:\n'
-        ( cd "$OUT/apt" && find dists/stable/main -name 'Packages*' -type f | sort | while read -r f; do
+        ( cd "$OUT/apt/dists/stable" && find main -name 'Packages*' -type f | sort | while read -r f; do
             printf ' %s %s %s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$(wc -c < "$f" | tr -d ' ')" "$f"
         done )
         printf 'MD5Sum:\n'
-        ( cd "$OUT/apt" && find dists/stable/main -name 'Packages*' -type f | sort | while read -r f; do
+        ( cd "$OUT/apt/dists/stable" && find main -name 'Packages*' -type f | sort | while read -r f; do
             printf ' %s %s %s\n' "$(md5sum "$f" | cut -d' ' -f1)" "$(wc -c < "$f" | tr -d ' ')" "$f"
         done )
     } > "$rel"

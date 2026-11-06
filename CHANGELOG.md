@@ -36,14 +36,20 @@
 - 密钥管理与轮换见 [docs/signing.md](docs/signing.md)。
 - 版本记录订正：机型备注清理与数字模式边缘光标两节的改动在本版，不在 1.0.0 的包里。
 
+### 修掉签名源里两处会让用户装不上的问题
 
-# 变更记录
-
-版本号跟包版本一致；`-N` 后缀是发版前的构建号。
-
-1.0.0 起版本号在 `asus-numpad` 组织下重新起算。下面 1.2.4 及更早的记录来自旧仓库
-[`RunningVAN/asus-numpad`](https://github.com/RunningVAN/asus-numpad)，原样保留作存档，与 1.0.0
-之间没有升级路径。
+- apt：`Release` 里的索引路径原先写成 `dists/stable/main/...`，而 apt 要求的路径是相对
+  `dists/stable/` 的（即 `main/binary-amd64/Packages`）。路径对不上任何索引目标时 apt 会
+  静默跳过整个仓库：`apt-get update` 退出码仍为 0、也没有任何输出，用户装包时才看到
+  `E: Unable to locate package asus-numpad`。1.0.0 的 apt 源就是这个状态，本版修掉。
+- apt：`Architectures` 改为按实际扫出包来的架构动态写入，不再固定声明 `amd64 arm64`；
+  声明了却没有对应索引的架构，换到那类机器上就是 404；同时不再单独生成 `binary-all`，
+  `Architecture: all` 的包已经算进各具体架构的索引里。
+- 发版冒烟：容器内的脚本改成 quoted heredoc 从 stdin 喂给 shell。原先写成单引号参数，
+  而段内又有 `printf '...'`，外层单引号被提前闭合，`$basearch` / `$arch` 这类本该由容器内
+  解释的变量被 runner 展开，`set -u` 直接以 unbound variable 退出，dnf / pacman / apk
+  三段压根没跑。alpine 镜像没有 `bash`，apk 段改用 `sh`。
+- 顺手清掉文件里重复的一份标题与前言。
 
 ## 1.0.0
 

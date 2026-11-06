@@ -689,62 +689,67 @@ jobs:
             sleep 0.25
           done
           fail=0
-          smoke() { # $1 名字  $2 镜像  $3 容器内脚本
-            echo "===== $1 ====="
-            if ! docker run --rm --network host \
+          # 容器内脚本一律用 quoted heredoc 从 stdin 喂给 bash -s。早先是把脚本当成
+          # 单引号参数传进去，可段内又有 printf '...'，外层单引号被提前闭合，于是
+          # $basearch / $arch 这类本该由容器内解释的变量被 runner 展开，set -u 直接
+          # 报 unbound variable，dnf/pacman/apk 三段压根没跑。
+          smoke() { # $1 名字  $2 镜像  $3 容器内 shell（默认 bash，alpine 只有 sh）；脚本从 stdin 读
+            local name="$1" img="$2" shbin="${3:-bash}"
+            echo "===== $name ====="
+            if ! docker run --rm -i --network host \
                  -e BASE=http://127.0.0.1:8099 -e FPR="$GPG_KEY_ID" \
-                 "$2" bash -c "$3" > "/tmp/smoke-$1.log" 2>&1; then
+                 "$img" "$shbin" -s > "/tmp/smoke-$name.log" 2>&1; then
               fail=1
-              echo "---- $1 失败 ----"
-              tail -n 30 "/tmp/smoke-$1.log"
+              echo "---- $name 失败 ----"
+              tail -n 30 "/tmp/smoke-$name.log"
             else
-              tail -n 3 "/tmp/smoke-$1.log"
+              tail -n 3 "/tmp/smoke-$name.log"
             fi
           }
 
-          smoke apt debian:12 '
-            set -eux
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get update -qq
-            apt-get install -y -qq --no-install-recommends ca-certificates curl gnupg >/dev/null
-            install -d -m 0755 /usr/share/keyrings
-            curl -fsSL "$BASE/keys/asus-numpad-repo.gpg" -o /usr/share/keyrings/asus-numpad.gpg
-            echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] $BASE/apt stable main" \
-              > /etc/apt/sources.list.d/asus-numpad.list
-            apt-get update -qq
-            apt-get install -y -qq asus-numpad
-            asus-numpad --version
-          '
+          smoke apt debian:12 <<'APT'
+          set -eux
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends ca-certificates curl gnupg >/dev/null
+          install -d -m 0755 /usr/share/keyrings
+          curl -fsSL "$BASE/keys/asus-numpad-repo.gpg" -o /usr/share/keyrings/asus-numpad.gpg
+          echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] $BASE/apt stable main" \
+            > /etc/apt/sources.list.d/asus-numpad.list
+          apt-get update -qq
+          apt-get install -y -qq asus-numpad
+          asus-numpad --version
+          APT
 
-          smoke dnf almalinux:9 '
-            set -eux
-            rpm --import "$BASE/keys/asus-numpad-repo.asc"
-            printf '[asus-numpad]\nname=asus-numpad\nbaseurl=%s/rpm/$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=%s/keys/asus-numpad-repo.asc\n' \
-              "$BASE" "$BASE" > /etc/yum.repos.d/asus-numpad.repo
-            dnf install -y asus-numpad
-            asus-numpad --version
-          '
+          smoke dnf almalinux:9 <<'DNF'
+          set -eux
+          rpm --import "$BASE/keys/asus-numpad-repo.asc"
+          printf '[asus-numpad]\nname=asus-numpad\nbaseurl=%s/rpm/$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=%s/keys/asus-numpad-repo.asc\n' \
+            "$BASE" "$BASE" > /etc/yum.repos.d/asus-numpad.repo
+          dnf install -y asus-numpad
+          asus-numpad --version
+          DNF
 
-          smoke pacman archlinux:latest '
-            set -eux
-            pacman-key --init
-            curl -fsSL "$BASE/keys/asus-numpad-repo.asc" -o /tmp/asus-numpad.asc
-            pacman-key --add /tmp/asus-numpad.asc >/dev/null
-            pacman-key --lsign-key "$FPR"
-            printf '\n[asus-numpad]\nSigLevel = Required DatabaseRequired\nServer = %s/arch/$arch\n' "$BASE" \
-              >> /etc/pacman.conf
-            pacman -Sy --noconfirm asus-numpad
-            asus-numpad --version
-          '
+          smoke pacman archlinux:latest <<'PACMAN'
+          set -eux
+          pacman-key --init
+          curl -fsSL "$BASE/keys/asus-numpad-repo.asc" -o /tmp/asus-numpad.asc
+          pacman-key --add /tmp/asus-numpad.asc >/dev/null
+          pacman-key --lsign-key "$FPR"
+          printf '\n[asus-numpad]\nSigLevel = Required DatabaseRequired\nServer = %s/arch/x86_64\n' "$BASE" \
+            >> /etc/pacman.conf
+          pacman -Sy --noconfirm asus-numpad
+          asus-numpad --version
+          PACMAN
 
-          smoke apk alpine:latest '
-            set -eux
-            wget -qO /etc/apk/keys/asus-numpad-apk.rsa.pub "$BASE/keys/asus-numpad-apk.rsa.pub"
-            echo "$BASE/alpine/$(apk --print-arch)" >> /etc/apk/repositories
-            apk update
-            apk add asus-numpad
-            asus-numpad --version
-          '
+          smoke apk alpine:latest sh <<'APK'
+          set -eux
+          wget -qO /etc/apk/keys/asus-numpad-apk.rsa.pub "$BASE/keys/asus-numpad-apk.rsa.pub"
+          echo "$BASE/alpine/$(apk --print-arch)" >> /etc/apk/repositories
+          apk update
+          apk add asus-numpad
+          asus-numpad --version
+          APK
 
           if [ "$fail" -ne 0 ]; then
             echo "::error::签名源冒烟失败：四个生态里至少一个装不上，别发版"
