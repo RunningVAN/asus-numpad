@@ -1,6 +1,6 @@
 [package]
 name = "asus-numpad"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 rust-version = "1.75"
 description = "ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动，官方 AlgoParameters 对齐"
