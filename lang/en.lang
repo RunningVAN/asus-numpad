@@ -253,7 +253,7 @@ cli.cmd.sku = Model config: show what was detected, list the ids, or pick one by
 cli.cmd.sku.long = Without arguments it shows the detected model config, how it was chosen, plus the DMI identity and touchpad module; `sku list` lists every id; `sku g614` pins one by hand; `sku auto` goes back to auto-detection
 cli.cmd.sku.id = Model id, or auto / list
 layout.current = Layout: configured {layout}, effective {resolved} ({support})
-layout.list_title = Layouts recorded in the official AsusNUMPADFilter.inf (* verified / ~ family unverified / - different structure):
+layout.list_title = Layouts recorded in the official AsusNUMPADFilter.inf (* verified / ~ family, parameters from the INF, not checked on hardware / - no key-position reference):
 layout.legend = * verified   ~ same family, unverified (needs --allow-unverified)   - unsupported
 layout.ids_title = Touchpad HID hardware ID -> layout (models sharing an ID are interchangeable):
 layout.usage = Usage: asus-numpad layout                 show current layout and the table
@@ -267,7 +267,7 @@ layout.bad_name = Unknown layout name: {v}
 note.layout_unknown = layout_name={v} is not in the official layout table, using auto
 err.layout_unverified = Layout {layout} ({support}) is not verified on real hardware; startup stopped to avoid wrong keys. Add --allow-unverified once confirmed.
 err.layout_unverified.hint = To allow it: asus-numpad --allow-unverified run, or set "allow_unverified_layout": true in ~/.config/asus-numpad/asus-numpad.json
-err.layout_unsupported.hint = This layout's key table differs from GH3XLNDZ and would produce wrong keys; please report the `asus-numpad check` output so the key table can be added
+err.layout_unsupported.hint = This key table has never been checked on real hardware and there is no key-position reference for it, so applying it could produce wrong keys; please report the `asus-numpad check` output so it can be checked
 dev.report.layout = Layout: {layout} ({support}, source {source}, HID {hid})
 
 # 跨机型背光自检 / cross-model backlight self-check

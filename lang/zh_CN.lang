@@ -252,7 +252,7 @@ cli.cmd.sku = 机型配置：查看自动识别结果、列出可选机型、手
 cli.cmd.sku.long = 不带参数时显示识别出的机型、判定依据、本机 DMI 身份与触摸板模组；`sku list` 列出全部可选机型；`sku g614` 手动指定；`sku auto` 恢复自动识别
 cli.cmd.sku.id = 机型 id，或 auto / list
 layout.current = 当前布局：配置 {layout}，实际生效 {resolved}（{support}）
-layout.list_title = 官方 AsusNUMPADFilter.inf 收录的布局（* 已验证 / ~ 同族未验证 / - 结构不同）：
+layout.list_title = 官方 AsusNUMPADFilter.inf 收录的布局（* 已验证 / ~ 同族、参数照录但未上真机 / - 无键位依据）：
 layout.legend = * 已验证   ~ 同族未验证（需 --allow-unverified）   - 不支持
 layout.ids_title = 触摸板 HID 硬件 ID → 布局（同 ID 的机型可直接通用）：
 layout.usage = 用法：asus-numpad layout                 查看当前布局与布局表
@@ -263,7 +263,7 @@ layout.bad_name = 未知布局名：{v}
 note.layout_unknown = layout_name={v} 不在官方布局表内，按 auto 处理
 err.layout_unverified = 布局 {layout}（{support}）尚未真机验证，已停止启动以免按错键。确认可用后加 --allow-unverified。
 err.layout_unverified.hint = 放行方式：asus-numpad --allow-unverified run，或在 ~/.config/asus-numpad/asus-numpad.json 里设 "allow_unverified_layout": true
-err.layout_unsupported.hint = 该布局的键表结构与 GH3XLNDZ 不同，直接套用会按错键；请把 `asus-numpad check` 的输出反馈给维护者以补充键表
+err.layout_unsupported.hint = 这套键表从未在真机上核对过，也没有键位排布依据，直接套用可能按错键；请把 `asus-numpad check` 的输出反馈给维护者以补充核对
 dev.report.layout = 布局：{layout}（{support}，来源 {source}，HID {hid}）
 
 # 跨机型背光自检 / cross-model backlight self-check

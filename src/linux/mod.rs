@@ -199,7 +199,7 @@ pub fn resolve_layout(cfg: &Config, device_name: &str) -> ResolvedLayout {
 
 /// 未验证布局闸门：返回 Some(说明) 表示应停止，不再往触摸板上套键表。
 ///
-/// 只有 `Unsupported`（键表结构不同）与 `Family`（同结构未验证）会被拦，
+/// `Family`（同结构、参数已照录但没上过真机）与 `Unsupported`（无键位依据）都会被拦，
 /// 放行方式：配置 `allow_unverified_layout: true` 或命令行 `--allow-unverified`。
 pub fn layout_gate(cfg: &Config, rl: &ResolvedLayout) -> Option<String> {
     use crate::layout::LayoutSupport;

@@ -14,7 +14,7 @@ use crate::keycodes as kc;
 pub const UM_PER_LAYOUT_UNIT: i32 = 100;
 
 /// GH3XLNDZ（ROG Strix SCAR 16 G634JY 等）官方 15 个布局参数。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Layout {
     pub columns: i32,
     /// _01 第 0 列左侧留 1.7 mm
@@ -62,6 +62,31 @@ pub const GH3XLNDZ: Layout = Layout {
     numadv_level: 0,
     invalid_index: 11,
     invalid_level: 9,
+};
+
+/// 官方 GVM 原值：冰刃双屏的侧置触摸板（`GX550` / `GX551` / `GX650`，模组 `ASUE1404` /
+/// `ASUE1408`）。灵耀双屏 `UX582` / `UX482` 走的是 `NVM`，不用这一份。
+///
+/// 官方 inf 对 `NUMPADLAYOUT_GVM_*` 只列到 `_06`（列数、左右留白、上下留白、NumLockEdge），
+/// `_07` 往后的有效区内缩与 NumAdv / InValid 边没有给出——Windows 驱动读不到的注册表值即为
+/// 缺省 0，所以这里同样填 0，不做推测。`_05` / `_06` 的注释写明是给 GVMA 用的，
+/// 因此 `GVM_A` 与本布局共用这一份参数。
+pub const GVM: Layout = Layout {
+    columns: 5,
+    index0: 14,
+    index4: 14,
+    level0: 11,
+    level3: 12,
+    numlock_index: 14,
+    numlock_level: 14,
+    left: 0,
+    right: 0,
+    up: 0,
+    down: 0,
+    numadv_index: 0,
+    numadv_level: 0,
+    invalid_index: 0,
+    invalid_level: 0,
 };
 
 /// 网格格子内容。
@@ -395,9 +420,12 @@ impl Geometry {
 pub enum LayoutSupport {
     /// 与 GH3XLNDZ 相同的网格结构（5 列 4 行、15 个官方参数齐全）。
     Verified,
-    /// 5 列 4 行同族布局：15 个官方参数齐全，网格结构与 GH3XLNDZ 一致。
+    /// 5 列 4 行同族布局：官方 inf 给出的 `NUMPADLAYOUT_<NAME>_*` 项全部照录（官方没列的项按 0，
+    /// 与 Windows 驱动读不到注册表值时的缺省一致），列数与 GH3XLNDZ 相同；键位排布未在真机上
+    /// 逐键核对，所以仍需显式放行。
     Family,
-    /// 官方 INF 收录了参数，但键表/网格结构与 GH3XLNDZ 不同，直接套用会按错键。
+    /// 官方 inf 收录了这套参数，但该键表从未在真机上核对过，也没有键位排布依据，直接套用可能
+    /// 按错键——启动时不放行。
     Unsupported,
 }
 
@@ -411,9 +439,9 @@ pub struct LayoutEntry {
 
 /// 官方 AsusNUMPADFilter.inf（v17.0.0.27）里 `NUMPADLAYOUT_<NAME>_00..14` 的全部取值。
 ///
-/// 单位一律 0.1 mm；13 参数的旧式布局（NH/CH 系列）缺 `_13`/`_14`
-/// （NumLock InValidEdge），此处按 0 填并标为 `Unsupported`——它们不能与本实现的
-/// 5x4 键表混用。
+/// 单位一律 0.1 mm；官方并非每套布局都给满 15 项：`GVM` 只到 `_06`、`NVM` 只到 `_12`，
+/// `NH`/`CH` 系列多为 13 项（缺 `_13`/`_14` 的 NumLock InValidEdge）。官方没列的项按 0 填，
+/// 与 Windows 驱动读不到该注册表值时的缺省一致，不做数值推测。
 pub const LAYOUTS: &[LayoutEntry] = &[
     LayoutEntry {
         name: "CH3XLNDZ",
@@ -564,24 +592,8 @@ pub const LAYOUTS: &[LayoutEntry] = &[
     },
     LayoutEntry {
         name: "GVM",
-        layout: Layout {
-            columns: 5,
-            index0: 14,
-            index4: 14,
-            level0: 11,
-            level3: 12,
-            numlock_index: 14,
-            numlock_level: 14,
-            left: 0,
-            right: 0,
-            up: 0,
-            down: 0,
-            numadv_index: 0,
-            numadv_level: 0,
-            invalid_index: 0,
-            invalid_level: 0,
-        },
-        support: LayoutSupport::Unsupported,
+        layout: GVM,
+        support: LayoutSupport::Family,
     },
     LayoutEntry {
         name: "NH2XLNDZ",
@@ -898,6 +910,10 @@ pub const LAYOUTS: &[LayoutEntry] = &[
         },
         support: LayoutSupport::Unsupported,
     },
+    // 官方 inf 对 `NUMPADLAYOUT_NVM_*` 只列到 `_12`（`_13` / `_14` 的 NumLock InValidEdge
+    // 没有给出，按缺省 0 填）。列数同为 5，网格结构与 GH3XLNDZ 一致，所以归同族；
+    // 灵耀双屏的触摸板竖排在键盘右侧、数字模式由键盘上的专用键切换，尚未上真机逐键核对，
+    // 因此是 `Family` 而不是 `Verified`——要跑起来仍需显式放行。
     LayoutEntry {
         name: "NVM",
         layout: Layout {
@@ -917,15 +933,16 @@ pub const LAYOUTS: &[LayoutEntry] = &[
             invalid_index: 0,
             invalid_level: 0,
         },
-        support: LayoutSupport::Unsupported,
+        support: LayoutSupport::Family,
     },
-    // 以下三项在官方 inf 的 HID 映射里出现过，但没有可解析的 15 参数
-    // （GVM_A / NH2XLNDZ9LED / NH2XLOL 为变体名）。参数借用 GH3XLNDZ 仅作占位，
-    // 实际不会派发按键：`support = Unsupported` 会被启动闸门拦下并要求反馈。
+    // `GVM_A` 是 `GVM` 的变体名，官方 inf 里没有独立的 `NUMPADLAYOUT_GVM_A_*`：
+    // `HID\ASUE1408&Col02` 注为 `GVM_A'`，而 `NUMPADLAYOUT_GVM_05` / `_06` 的注释直接写
+    // 「0.1mm offset (Index/Level NumLockEdge) for GVMA」——即 GVMA 用的就是 GVM 那组参数，
+    // 这两个参数本来就是给它加的。所以这里指向同一份参数，不再借 GH3XLNDZ 占位。
     LayoutEntry {
         name: "GVM_A",
-        layout: GH3XLNDZ,
-        support: LayoutSupport::Unsupported,
+        layout: GVM,
+        support: LayoutSupport::Family,
     },
     LayoutEntry {
         name: "UNKNOWN",
@@ -978,7 +995,8 @@ pub const HID_LAYOUTS: &[(&str, &str)] = &[
     ("ELAN1400", "NHL"),
     ("ELAN1401", "NHM"),
     ("ELAN1402", "NHS"),
-    // ELAN1403 与 ASUE1403 是同模组的两种命名（官方 SupportList 两者并列），
+    // ELAN1403 与 ASUE1403 是同一款模组的两种命名（官方 SupportList 只列了 ASUE1403，
+    // 其余 1400–1407 都成对出现 Elan / ASUE 两种写法，这里按同一模组处理），
     // 归入 GH2XLNDZ：结构同族，按 family 放行需人工逐键核对。
     ("ELAN1403", "GH2XLNDZ"),
     ("ELAN1404", "GVM"),
@@ -1131,6 +1149,19 @@ mod tests {
         assert_eq!(by_name("GH2XLNDZ").unwrap().support, LayoutSupport::Family);
         assert_eq!(by_name("GH4XLNDZ").unwrap().support, LayoutSupport::Family);
         assert_eq!(by_name("NHL").unwrap().support, LayoutSupport::Unsupported);
+        // 双屏机的三张键表：官方参数已照录、列数同为 5，归同族；但没上过真机，仍需显式放行
+        for name in ["GVM", "GVM_A", "NVM"] {
+            let e = by_name(name).expect("双屏键表必须在表内");
+            assert_eq!(e.support, LayoutSupport::Family, "{name} 应为同族");
+            assert_eq!(e.layout.columns, 5, "{name} 应为 5 列");
+            assert!(e.support.needs_confirm(), "{name} 不能免确认直接跑");
+        }
+        // GVM_A 用 GVM 那组参数（NUMPADLAYOUT_GVM_05/_06 注为 for GVMA），不再借 GH3XLNDZ 占位
+        assert_eq!(by_name("GVM_A").unwrap().layout, GVM);
+        assert_ne!(by_name("GVM_A").unwrap().layout, GH3XLNDZ);
+        assert_eq!(for_hid_id("ASUE1408").map(|e| e.name), Some("GVM_A"));
+        assert_eq!(for_hid_id("ASUE1404").map(|e| e.name), Some("GVM"));
+        assert_eq!(for_hid_id("ASUE1406").map(|e| e.name), Some("NVM"));
         // G634（SCAR 16/18 2023）用的两个模组 ID 都必须解析到已验证的 GH3XLNDZ
         for hid in ["ASUE1416", "ASUF1416"] {
             let e = for_hid_id(hid).expect("G634 模组 ID 必须在表内");

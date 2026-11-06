@@ -146,9 +146,12 @@ use vendor defaults.
 | `gx550` | Zephyrus Duo 15 / 16, side-mounted, 2022–2023 | `GX550`, `GX551`, `GX650` | `ASUE1408`, `ASUE1404` | `GVM_A`, `GVM` | none in the official lists |
 | `ux582` | Zenbook Duo, side-mounted, 2021 | `UX582`, `UX482` | `ASUE1406`, `ELAN1406` | `NVM` | not verified per configuration |
 
-The `GVM_A` / `GVM` / `NVM` keymaps are named by the official filter but their 15-position parameters
-are not parsed yet, so they carry `LayoutSupport::Unsupported`: `gx550` and `ux582` are detected and
-reported, then refused at startup by the same gate as any other unrecorded module.
+The `GVM_A` / `GVM` / `NVM` parameters are copied verbatim from the official filter, which simply does
+not list all 15 of them: `GVM` stops at `_06`, `NVM` at `_12`. The missing entries are filled with `0`,
+the same default the Windows driver sees when the value is absent, and nothing is guessed. `GVM_A`
+shares the `GVM` values — `NUMPADLAYOUT_GVM_05` / `_06` are annotated "for GVMA" in the filter. Both
+rows carry `LayoutSupport::Family`: 5 columns, same grid, never checked key by key on real hardware, so
+they are refused at startup unless `--allow-unverified` is given.
 
 This table is the support list: a model id switches parameters by hand (`asus-numpad sku <id>`) and
 makes the detection result visible, and a machine outside the table is refused at startup. `G614` and `G634` cover the
@@ -184,9 +187,10 @@ Product images from the ASUS product pages.
 
 ### Dual-screen models: side-mounted touchpad
 
-Status: the `GVM` / `GVM_A` / `NVM` keymap parameters are not parsed yet, so these two rows stop at
-detection and are refused by the layout gate. What follows is the behaviour the driver is built for,
-not a working default.
+Status: `GVM` / `GVM_A` / `NVM` carry the official parameters (the entries the filter omits are `0`),
+so these two rows are `family`: the grid is the usual 5 columns, but no one has confirmed key positions
+on this hardware yet. Startup needs `--allow-unverified`. What follows is the behaviour the driver is
+built for.
 
 On the Zephyrus Duo and Zenbook Duo the secondary screen takes half of the palm rest, so the touchpad
 is a vertical strip to the right of the keyboard instead of sitting under the palms. Number mode on
@@ -230,8 +234,8 @@ names from the vendor INF. Each keymap carries a support level.
 | Level | Behaviour |
 | --- | --- |
 | `verified` | starts as is |
-| `family` | same 5x4 grid, 15 parameters complete, not verified on hardware: refused until allowed |
-| `unsupported` | parameters recorded but the grid differs from the reference keymap: refused, `check` output requested |
+| `family` | same 5x4 grid, official parameters copied in full (entries the INF omits default to `0`), not verified key by key on hardware: refused until allowed |
+| `unsupported` | parameters recorded but no key-position reference and never checked on hardware: refused, `check` output requested |
 
 A module the table does not know resolves to `UNKNOWN` and is refused the same way, so an unfamiliar
 panel never gets mapped onto a keymap that would emit the wrong keys. The gate applies to the keymap

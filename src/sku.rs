@@ -111,7 +111,7 @@ pub const SKUS: &[Sku] = &[
         models: &["GX550", "GX551", "GX650"],
         excludes: &[],
         modules: &["ASUE1408", "ASUE1404"],
-        note: "GX550 / GX551 / GX650 同属 gx551 键位族；GX550 模组 ASUE1408 → GVM_A。触摸板竖排在键盘右侧，数字模式由键盘上的专用键切换，不是长按图标区（见 README「双屏机型：侧置触摸板」）",
+        note: "GX550 / GX551 / GX650 同属 gx551 键位族；模组 ASUE1408 → GVM_A、ASUE1404 → GVM。GVM_A 与 GVM 共用同一份参数（官方 NUMPADLAYOUT_GVM_* 只列到 _06，其余项按缺省 0），键表状态是同族、未上真机。触摸板竖排在键盘右侧，数字模式由键盘上的专用键切换，不是长按图标区（见 README「双屏机型：侧置触摸板」）",
     },
     Sku {
         id: "ux582",
@@ -119,7 +119,7 @@ pub const SKUS: &[Sku] = &[
         models: &["UX582", "UX482"],
         excludes: &[],
         modules: &["ASUE1406", "ELAN1406"],
-        note: "模组 ASUE1406 / ELAN1406 → 键表 NVM。触摸板在键盘右侧，数字模式由键盘上的专用键切换，不是长按图标区",
+        note: "模组 ASUE1406 / ELAN1406 → 键表 NVM（官方 NUMPADLAYOUT_NVM_* 只列到 _12，其余项按缺省 0），键表状态是同族、未上真机。触摸板在键盘右侧，数字模式由键盘上的专用键切换，不是长按图标区",
     },
 ];
 
