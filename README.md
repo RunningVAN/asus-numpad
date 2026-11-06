@@ -70,16 +70,16 @@ distribution. Native packages are also on
 .SRCINFO, apk, static tarball. Alpine, Gentoo, NixOS and manual tarball steps are in
 [docs/install.md](docs/install.md).
 
-CI installs every package in a clean container for each target distribution and runs `--version`;
-a package that fails to install blocks the release.
+`ci.yml` builds a package per ecosystem on every push and checks the package metadata. `release.yml`
+additionally installs each package in a clean container of every target distribution and runs
+`asus-numpad --version`; a package that does not install blocks the release.
 
-There is one package. The model is detected at runtime: the same binary reads DMI fields and the
-touchpad module, then picks the matching parameters and keymap, so no package names a model and none
-can be the wrong one for the machine. A machine that matches no row of the table is not started: the
-gate exits with code 3 and prints the supported models, rather than running parameters meant for other
-hardware. If the hardware cannot be read reliably (virtual machines, whitebox chassis, BIOS
-placeholder strings), pin the model by hand, see [Model detection](#model-detection). Runtime
-dependency: glibc, or musl on Alpine.
+Runtime model detection means a package is never tied to one model: the same binary reads the DMI
+fields and the touchpad module, then picks the matching parameter set and keymap. A machine that
+matches no row of the table is not started: the gate exits with code 3 and prints the supported
+models, rather than running parameters meant for other hardware. If the hardware cannot be read
+reliably (virtual machines, whitebox chassis, BIOS placeholder strings), pin the model by hand, see
+[Model detection](#model-detection). Runtime dependency: glibc, or musl on Alpine.
 
 ## Usage
 
@@ -143,8 +143,8 @@ use vendor defaults.
 | `g533` | Strix SCAR 15 / Strix G15, 15", 2022 | `G533Z`, `G513R` — 2021 `G533Q` / `G513Q` / `G513I` excluded | `ASUE1403`, `ELAN1403` | `GH2XLNDZ` | 3 of 5 Strix G15 2022 |
 | `g614` | Strix SCAR 16 / Strix G16, 16", 2023–2024 | `G614`, `G634` | `ASUE1416`, `ASUF1416` | `GH3XLNDZ` | 2 of 10 Strix G16 2023 |
 | `g615` | Strix SCAR 16 / Strix G16, 16", 2025–2026 | `G615`, `G635` | `ASCP1400`, `ASCF1400` | `GH4XLNDZ` | 1 of 25 Strix G16 2025 |
-| `gx550` | Zephyrus Duo 15 / 16, side-mounted, 2022–2023 | `GX550`, `GX551`, `GX650` | `ASUE1408`, `ASUE1404` | `GVM_A`, `GVM` | none in the official lists |
-| `ux582` | Zenbook Duo, side-mounted, 2021 | `UX582`, `UX482` | `ASUE1406`, `ELAN1406` | `NVM` | not verified per configuration |
+| `gx550` | Zephyrus Duo 15 / Duo 15 SE / Duo 16, side-mounted, 15"–16", 2020–2023 | `GX550`, `GX551`, `GX650` | `ASUE1408`, `ASUE1404` | `GVM_A`, `GVM` | none in the official lists |
+| `ux582` | Zenbook Duo 14 / Zenbook Pro Duo 15 OLED, side-mounted, 14"–15", 2020–2021 | `UX582`, `UX482` | `ASUE1406`, `ELAN1406` | `NVM` | not verified per configuration |
 
 The `GVM_A` / `GVM` / `NVM` parameters are copied verbatim from the official filter, which simply does
 not list all 15 of them: `GVM` stops at `_06`, `NVM` at `_12`. The missing entries are filled with `0`,
@@ -171,16 +171,18 @@ is in [docs/machines.md](docs/machines.md#同一型号不是都有-numpad按配�
 A model row holds the DMI name prefixes of the generation it serves, plus an `excludes` list for
 generations that reuse the same code prefix without the hardware. An excluded prefix falls through to
 the module check and, when that misses as well, to the same refusal. A manual `sku` pin outranks
-both.
+both. Prefixes are reused across regional line-ups as well: `G614P*` ships in China as the 2025
+Strix (魔霸 10 / 魔霸 9), and the per-configuration counts above do not cover those listings; the
+touchpad module still decides the keymap.
 
 The model code in DMI is authoritative; marketing names are for orientation only. The old per-model
 package names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades move to `asus-numpad`.
 
 | | |
 | --- | --- |
-| ![SCAR 15 / Strix G15 2022](docs/images/models/g533.webp) | ![SCAR 16 / Strix G16 2023](docs/images/models/g614.webp) |
+| ![SCAR 15 / Strix G15 2022](site/assets/models/g533.webp) | ![SCAR 16 / Strix G16 2023](site/assets/models/g614.webp) |
 | SCAR 15 / Strix G15 (2022) | SCAR 16 / Strix G16 (2023) |
-| ![SCAR 16 / Strix G16 2025](docs/images/models/g615.webp) | ![Zephyrus Duo 16 2022](docs/images/models/gx550.webp) |
+| ![SCAR 16 / Strix G16 2025](site/assets/models/g615.webp) | ![Zephyrus Duo 16 (GX650)](site/assets/models/gx550.webp) |
 | SCAR 16 / Strix G16 (2025) | Zephyrus Duo 16 (2022), side-mounted touchpad |
 
 Product images from the ASUS product pages.
@@ -267,11 +269,11 @@ generally do not:
   panel that was never tuned for numpad use, and tap and swipe recognition will not match the
   Windows driver.
 
-Support is therefore limited to panels that have both. The model table in `src/sku.rs` is the support
+Support therefore stops at panels that provide both. The model table in `src/sku.rs` is the support
 list and gates startup; keymaps and their support level live in `HID_LAYOUTS` (`src/layout.rs`) and are
 picked separately by the touchpad module, so an uncovered module stops at the
-[layout gate](#layout-gate). A panel that has both takes one table row plus the layout constants.
-Patches are welcome.
+[layout gate](#layout-gate). Adding a panel that has both takes one model row and one set of layout
+constants.
 
 ### Why a userspace driver instead of a kernel module?
 
@@ -287,15 +289,10 @@ Patches are welcome.
 
 ### Will this be merged into asusctl?
 
-No.
-
-- Only a small number of ASUS models ship this touchpad.
-- Once installed there is little left to adjust: the numpad works as it is, so adding it to asusctl
-  offers little to the rest of its users.
-- The maintainer does not have the time to adapt it to asusctl's architecture and release cycle.
-
-Contributions are welcome either way: patches to this project, or an implementation of these features
-in asusctl.
+Not planned. The touchpad ships on a handful of models, the driver has nothing left to configure once
+it runs, and folding it into asusctl would mean following that project's architecture and release
+cadence for a feature most of its users do not have. Patches to this project, or an implementation of
+these features in asusctl, are both welcome.
 
 ## How it works
 
@@ -312,12 +309,13 @@ touchpad --evdev(/dev/input/eventN)--> frame buffer (8 ms) --> state machine --u
 | Parameter | Value | Meaning |
 | --- | --- | --- |
 | Frame length | 8 ms | Time base of the state machine; a long press is 62 frames (496 ms) |
-| Length unit | 0.1 mm | Unit for layout geometry and thresholds |
-| Tap duration | 350 ms | Separates a tap from a swipe |
-| NumLock long press | 62 frames | Toggles number mode from the icon area (centre-mounted pads; see [dual-screen models](#dual-screen-models-side-mounted-touchpad)) |
-| Swipe threshold | 4838 µm | Movement below this is not a swipe |
-| Two-finger gap | 40 mm | Detects two-finger scrolling |
-| Launch gesture | 7000 µm | Distance that triggers the calculator hot zone |
+| Length units | µm / 0.1 mm | Gesture and swipe thresholds are micrometres, layout offsets are 0.1 mm steps |
+| Tap interval | 350 ms | `NUMPADGESTURE_03/04`: minimum gap before a second tap counts as a separate one |
+| NumLock long press | 62 frames | `NUMPAD_GH2XLNDZ_01` / `_GH3XLNDZ_01`; toggles number mode from the icon area (centre-mounted pads; see [dual-screen models](#dual-screen-models-side-mounted-touchpad)) |
+| NumLock drift | 2741 µm | `NUMPAD_09`: movement still counted as a long press |
+| Swipe threshold | 4838 µm | `NUMPADGESTURE_05`: movement above this cancels the key and becomes a gesture |
+| Scroll finger distance | 40 mm | `NUMPADGESTURE_08`: two fingers further apart than this scroll |
+| Launch gesture | 7000 µm | `NUMPAD_07`: distance that triggers the calculator hot zone |
 
 ### Key layout
 
@@ -366,6 +364,8 @@ No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs
 | `src/i18n.rs` | Three languages, overridable with external `.lang` files |
 | `src/linux/` | evdev, uinput, hidraw and i2c backends |
 | `lang/` | zh-CN, zh-TW, en strings |
+| `site/` | Website sources, published to https://asus-numpad.github.io/ |
+| `tools/` | `push-site.sh` (site publish), `repo-gen.sh` (repository indexes) |
 | `packaging/` | deb, rpm, Arch, Alpine, Gentoo, Nix, tarball scripts and repo tools |
 
 ## Building
@@ -384,6 +384,11 @@ RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
 Packaging details: [packaging/README.md](packaging/README.md). A `v*` tag runs
 `.github/workflows/release.yml`, which builds in per-distribution containers, generates four
 repository indexes, publishes the release and commits `repo/` back to `main`.
+
+The website sources are in `site/`: `./tools/push-site.sh` copies them to the
+`asus-numpad/asus-numpad.github.io` repository, which serves https://asus-numpad.github.io/.
+`docs/` holds project documentation only; `docs/index.html` is the redirect that keeps the old
+project-pages URL working.
 
 ## License
 

@@ -68,11 +68,11 @@ Tumbleweed：spec 只用標準巨集，執行期僅相依 glibc 與 systemd，�
 .SRCINFO 的 PKGBUILD、apk、靜態 tarball。Alpine、Gentoo、NixOS 與手動 tarball 步驟見
 [docs/install.md](docs/install.md)。
 
-CI 在每個目標發行版的乾淨容器中安裝每個套件並執行 `--version`，裝不起來的套件會擋下發佈。
+`ci.yml` 每次推送都為每個生態建置套件並檢查套件中介資料；`release.yml` 另在每個目標發行版的
+乾淨容器中安裝每個套件並執行 `asus-numpad --version`，裝不起來的套件會擋下發佈。
 
-只有一個套件。機型在執行期辨識：同一份二進位檔讀取 DMI 型號與觸控板模組，據此選擇參數與鍵表；
-套件名稱不帶機型，也就不存在裝錯套件。表中對不上的機器不啟動：閘門以結束碼 3 中止並列出支援
-機型，不拿別的機型的參數去套未知硬體。硬體資訊讀不準（虛擬機、白牌機殼、BIOS 佔位字串）時可
+套件只有一個，機型在執行期辨識：同一份二進位檔讀取 DMI 型號與觸控板模組，據此選擇參數與鍵表。
+表中對不上的機器不啟動：閘門以結束碼 3 中止並列出支援機型，不拿別的機型的參數去套未知硬體。硬體資訊讀不準（虛擬機、白牌機殼、BIOS 佔位字串）時可
 手動指定，見[機型辨識](#機型辨識)。執行期相依：glibc，Alpine 上為 musl。
 
 ## 使用
@@ -137,8 +137,8 @@ asus-numpad --lang en check     # 僅本次生效
 | `g533` | Strix SCAR 15 / Strix G15，15 吋，2022 | `G533Z`、`G513R`——2021 代的 `G533Q` / `G513Q` / `G513I` 已排除 | `ASUE1403`、`ELAN1403` | `GH2XLNDZ` | Strix G15 2022 五個配置裡三個 |
 | `g614` | Strix SCAR 16 / Strix G16，16 吋，2023–2024 | `G614`、`G634` | `ASUE1416`、`ASUF1416` | `GH3XLNDZ` | Strix G16 2023 十個配置裡兩個 |
 | `g615` | Strix SCAR 16 / Strix G16，16 吋，2025–2026 | `G615`、`G635` | `ASCP1400`、`ASCF1400` | `GH4XLNDZ` | Strix G16 2025 二十五個配置裡一個 |
-| `gx550` | Zephyrus Duo，側置觸控板，15 / 16 吋，2022–2023 | `GX550`、`GX551`、`GX650` | `ASUE1408`、`ASUE1404` | `GVM_A`、`GVM` | 官方列表中沒有 |
-| `ux582` | Zenbook Duo，側置觸控板，2021 | `UX582`、`UX482` | `ASUE1406`、`ELAN1406` | `NVM` | 未逐配置核驗 |
+| `gx550` | Zephyrus Duo 15 / Duo 15 SE / Duo 16（西風之神），側置觸控板，15–16 吋，2020–2023 | `GX550`、`GX551`、`GX650` | `ASUE1408`、`ASUE1404` | `GVM_A`、`GVM` | 官方列表中沒有 |
+| `ux582` | Zenbook Duo 14 / Zenbook Pro Duo 15 OLED，側置觸控板，14–15 吋，2020–2021 | `UX582`、`UX482` | `ASUE1406`、`ELAN1406` | `NVM` | 未逐配置核驗 |
 
 `GVM_A` / `GVM` / `NVM` 的參數就是從官方 inf 抄下來的，只是官方本身沒給滿 15 項（`GVM` 到 `_06`、
 `NVM` 到 `_12`），缺的項按 Windows 驅動的預設 `0` 填，不做數值推測；`GVM_A` 與 `GVM` 共用同一份
@@ -161,19 +161,20 @@ NumberPad，且 DMI 前綴與帶 NumberPad 的配置完全相同（`G614JV…-0E
 
 一列機型條目由該世代的 DMI 型號前綴與 `excludes` 組成：`excludes` 收的是沿用同一代號前綴、
 但沒有這塊觸控板的舊世代。被排除的前綴會落到模組判據，兩者都對不上時同樣拒絕啟動；手動指定的
-`sku` 優先於兩者。
+`sku` 優先於兩者。代號在不同區域產品線之間同樣會重用：`G614P*` 在中國市場以 2025 年款魔霸 10 /
+魔霸 9 銷售，上表的逐配置統計沒有涵蓋這些產品線，鍵表仍由觸控板模組決定。
 
 以 DMI 中的機型代碼為準，市場名稱僅供對照。舊版按機型拆分的套件名稱（`asus-numpad-g614`
 等）留在 `Obsoletes` 中，升級時由 `asus-numpad` 接手。
 
 | | |
 | --- | --- |
-| ![Strix SCAR 15 2022](docs/images/models/g533.webp) | ![Strix SCAR 16 2023](docs/images/models/g614.webp) |
+| ![Strix SCAR 15 2022](site/assets/models/g533.webp) | ![Strix SCAR 16 2023](site/assets/models/g614.webp) |
 | Strix SCAR 15 / Strix G15（2022） | Strix SCAR 16 / Strix G16（2023） |
-| ![Strix SCAR 16 2025](docs/images/models/g615.webp) | ![Zephyrus Duo 16 2022](docs/images/models/gx550.webp) |
-| Strix SCAR 16 / Strix G16（2025） | Zephyrus Duo 16（側置觸控板，2022） |
+| ![Strix SCAR 16 2025](site/assets/models/g615.webp) | ![Zephyrus Duo 16 (GX650)](site/assets/models/gx550.webp) |
+| Strix SCAR 16 / Strix G16（2025） | Zephyrus Duo 16（側置觸控板，GX650） |
 
-產品圖取自華碩官網。
+產品圖取自華碩產品頁，僅用於辨識機型。
 
 ### 雙螢幕機型：側置觸控板
 
@@ -259,13 +260,9 @@ ACPI 物件，任意多點觸控板走的是同一條程式路徑。移植工作
 
 ### 會考慮 PR 進 asusctl 嗎？
 
-不會。
-
-- 只有少數華碩機型搭載這塊觸控板。
-- 裝好之後幾乎沒有需要調整的地方，小鍵盤直接可用，合入 asusctl 對其餘使用者收益很小。
-- 維護者沒有精力適配 asusctl 的架構與發佈節奏。
-
-兩條路都歡迎：向本專案提交修補，或在 asusctl 側實作這部分功能。
+暫無計畫。這塊觸控板只在少數機型上出現，驅動跑起來之後沒有需要持續調整的地方，合併進去意味著
+要跟著 asusctl 的架構與發佈節奏走，而它的其餘使用者用不到這個功能。向本專案提交修補，或在
+asusctl 側實作同樣的功能，兩條路都歡迎。
 
 ## 工作原理
 
@@ -282,11 +279,12 @@ ACPI 物件，任意多點觸控板走的是同一條程式路徑。移植工作
 | 參數 | 取值 | 含義 |
 | --- | --- | --- |
 | 幀長 | 8 ms | 狀態機時基，長按 62 幀（496 ms） |
-| 長度單位 | 0.1 mm | 佈局幾何與閾值的單位 |
-| 點擊判定 | 350 ms | 區分點按與滑動 |
-| NumLock 長按 | 62 幀 | 圖示區切換數字模式（置中式觸控板；側置觸控板見[雙螢幕機型](#雙螢幕機型側置觸控板)） |
-| 滑動閾值 | 4838 µm | 低於此位移不算滑動 |
-| 雙指間距 | 40 mm | 雙指捲動辨識 |
+| 長度單位 | µm / 0.1 mm | 手勢與滑動閾值以微米計，佈局偏移以 0.1 mm 計 |
+| 點擊間隔 | 350 ms | `NUMPADGESTURE_03/04`：第二次點按算作獨立按鍵的最小間隔 |
+| NumLock 長按 | 62 幀 | `NUMPAD_GH2XLNDZ_01` / `_GH3XLNDZ_01`，圖示區切換數字模式（置中式觸控板；側置觸控板見[雙螢幕機型](#雙螢幕機型側置觸控板)） |
+| NumLock 漂移 | 2741 µm | `NUMPAD_09`：仍按長按處理的位移上限 |
+| 滑動閾值 | 4838 µm | `NUMPADGESTURE_05`：超過即取消本次按鍵、轉為手勢 |
+| 雙指間距 | 40 mm | `NUMPADGESTURE_08`：兩指間距超過此值判為捲動 |
 | 喚起手勢 | 7000 µm | 計算機熱區觸發距離 |
 
 ### 鍵表
@@ -334,6 +332,8 @@ ACPI 物件，任意多點觸控板走的是同一條程式路徑。移植工作
 | `src/i18n.rs` | 三種語言，可用外部 `.lang` 檔覆寫 |
 | `src/linux/` | evdev、uinput、hidraw、i2c 後端 |
 | `lang/` | zh-CN、zh-TW、en 文案 |
+| `site/` | 官網原始碼，發佈到 https://asus-numpad.github.io/ |
+| `tools/` | `push-site.sh`（官網同步）、`repo-gen.sh`（倉庫索引） |
 | `packaging/` | deb、rpm、Arch、Alpine、Gentoo、Nix、tarball 腳本與倉庫工具 |
 
 ## 建置
@@ -352,6 +352,10 @@ RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
 打包細節見 [packaging/README.md](packaging/README.md)。推送 `v*` 標籤會觸發
 `.github/workflows/release.yml`，在按發行版劃分的容器裡建置、產生四套倉庫索引、發佈 release
 並把 `repo/` 提交回 `main`。
+
+官網原始碼就在本倉的 `site/`：`./tools/push-site.sh` 將它同步到
+`asus-numpad/asus-numpad.github.io` 倉庫，由該倉庫提供 https://asus-numpad.github.io/ 。
+`docs/` 只放專案文件，`docs/index.html` 是讓舊的專案站台網址繼續可用的轉向頁。
 
 ## 授權
 
