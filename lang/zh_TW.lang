@@ -292,6 +292,7 @@ sku.source.dmi = 由 DMI 型號自動辨識
 sku.source.hardware = 由觸控板模組自動辨識
 sku.detail = 判定依據：{detail}
 sku.note = 機型備註：{note}
+sku.compat = 相容情況詳見官網：https://asus-numpad.github.io/
 sku.dmi = 本機 DMI 身分：{dmi}
 sku.dmi_unknown = 本機 DMI 身分：讀不到（非 Linux 或 /sys/class/dmi/id 不可讀）
 sku.hw = 本機觸控板模組：{hw}

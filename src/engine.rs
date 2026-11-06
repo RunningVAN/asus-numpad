@@ -387,6 +387,17 @@ impl Engine {
         self.pointer.is_some()
     }
 
+    /// 数字键盘点亮接管期间，单指不再当光标。
+    ///
+    /// 官方 `dwSupport_MixedMode = 1` 要的是「按键与指针并存」，不是「键区外一律透传」：
+    /// 触摸板四周留白、行列之间的缝隙落在格区之外，按不到键却会把光标拖走，
+    /// 从边缘起步时尤其明显。点亮态下这些单指触点直接吞掉，双指滚动/手势仍在
+    /// `enter_multi` 里走 [`Self::mixed_active`]，不受影响。
+    /// `mixed_mode = on` 可恢复旧行为（键区外一律透传）。
+    fn single_pointer_forward(&self) -> bool {
+        self.mixed_active() && !(self.enabled && self.lit && self.cfg.mixed_mode != MixedMode::On)
+    }
+
     /// GESTURE_03/04 = 350 ms：上一次手势结束后，原地再次按下的判定窗口。
     fn tap_window_open(&self) -> bool {
         if !self.gesture_seen {
@@ -434,8 +445,13 @@ impl Engine {
         self.armed_key = None;
         self.mode = Mode::Gesture;
         self.gesture_seen = true;
-        self.forwarding = self.mixed_active();
-        self.flush_pending();
+        self.forwarding = self.single_pointer_forward();
+        if self.forwarding {
+            self.flush_pending();
+        } else {
+            // 数字键盘点亮期间：滑动只取消这次按键，不把触点交给桌面
+            self.pending_events.clear();
+        }
     }
 
     /// 多指间距（GESTURE_08 = 40 mm 只约束滚动，不约束单指手势）。
@@ -763,8 +779,9 @@ impl Engine {
             }
         }
         self.mode = Mode::None;
-        // 混合模式：落在键区外的触点就是普通光标，整段还给桌面
-        self.forwarding = self.mixed_active();
+        // 混合模式：落在键区外的触点就是普通光标，整段还给桌面；
+        // 数字键盘点亮期间不这么做——见 single_pointer_forward
+        self.forwarding = self.single_pointer_forward();
         if self.forwarding {
             // 按下点判定等 X/Y 到齐，首个坐标可能已在缓冲里，补发掉
             self.flush_pending();
@@ -1093,6 +1110,10 @@ impl Engine {
             }
             return;
         }
+        if self.mode == Mode::None && self.enabled && self.lit {
+            // 数字键盘点亮期间格区外的落点：不出键，也不排队等补发，直接丢
+            return;
+        }
         if matches!(self.mode, Mode::None | Mode::Armed) {
             // 未定：先存着，判键则丢、判手势则补发。
             // ABS_MT_SLOT 也一起存——它总在 TRACKING_ID 之前到达，按原序补发仍是合法的
@@ -1388,5 +1409,129 @@ impl Engine {
 
     pub fn mixed_mode(&self) -> MixedMode {
         self.cfg.mixed_mode
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::GH3XLNDZ;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    struct FakeClock;
+    impl Clock for FakeClock {
+        fn now_ms(&self) -> f64 {
+            0.0
+        }
+    }
+
+    struct FakeLed;
+    impl LedSink for FakeLed {
+        fn send(&mut self, _v: u8) -> bool {
+            true
+        }
+        fn channel(&self) -> String {
+            "fake".to_string()
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeKeys {
+        log: Vec<(u16, i32)>,
+    }
+    impl KeySink for Rc<RefCell<FakeKeys>> {
+        fn press(&mut self, code: u16) {
+            self.borrow_mut().log.push((code, 1));
+        }
+        fn release(&mut self, code: u16) {
+            self.borrow_mut().log.push((code, 0));
+        }
+    }
+
+    impl PointerSink for Rc<RefCell<Vec<Event>>> {
+        fn feed(&mut self, ev: &Event) {
+            self.borrow_mut().push(*ev);
+        }
+    }
+
+    struct NumLockOn;
+    impl NumLockSource for NumLockOn {
+        fn numlock_on(&self) -> Option<bool> {
+            Some(true)
+        }
+    }
+
+    struct FakeGrab;
+    impl GrabSink for FakeGrab {
+        fn grab(&mut self) -> bool {
+            true
+        }
+        fn ungrab(&mut self) {}
+    }
+
+    /// 造一台「有虚拟触摸板 + 小键盘模组」的引擎。
+    fn engine(mixed: MixedMode) -> (Engine, Rc<RefCell<Vec<Event>>>) {
+        let cfg = Config {
+            mixed_mode: mixed,
+            ..Config::default()
+        };
+        let geom = Geometry::new(0, 3000, 0, 2000, 10.0, 10.0, GH3XLNDZ);
+        let pointer: Rc<RefCell<Vec<Event>>> = Rc::new(RefCell::new(Vec::new()));
+        let keys: Rc<RefCell<FakeKeys>> = Rc::new(RefCell::new(FakeKeys::default()));
+        let deps = Deps {
+            led: Box::new(FakeLed),
+            keys: Box::new(keys),
+            pointer: Some(Box::new(pointer.clone())),
+            numlock: Some(Box::new(NumLockOn)),
+            grabber: Some(Box::new(FakeGrab)),
+            clock: Box::new(FakeClock),
+        };
+        let mut e = Engine::new(cfg, geom, deps, true, false);
+        e.enable();
+        assert!(e.lit, "小键盘态应已点亮");
+        (e, pointer)
+    }
+
+    /// 数字键盘点亮时，从触摸板边缘起步的单指滑动不该把光标拖走。
+    #[test]
+    fn edge_slide_does_not_move_pointer_in_digit_mode() {
+        let (mut e, pointer) = engine(MixedMode::Auto);
+        assert!(e.mixed_active(), "混合模式本身仍然生效");
+
+        e.cur_x = e.geometry.xmin + 1;
+        e.cur_y = e.geometry.ymin + 1;
+        e.begin_contact();
+        assert!(!e.forwarding, "点亮态下键区外落点不交给桌面");
+
+        // 沿边缘滑动并抬手
+        e.cur_x = e.geometry.xmin + 400;
+        e.cur_y = e.geometry.ymin + 40;
+        e.route(&Event::abs(kc::ABS_MT_POSITION_X, e.cur_x));
+        e.cur_x = e.geometry.xmin + 900;
+        e.route(&Event::abs(kc::ABS_MT_POSITION_Y, e.cur_y));
+        e.end_contact();
+
+        assert!(pointer.borrow().is_empty(), "光标不该收到任何触点事件");
+    }
+
+    /// `mixed_mode = on` 保留旧行为：键区外一律透传，用户可自行选回。
+    #[test]
+    fn edge_slide_forwarded_when_mixed_mode_forced_on() {
+        let (mut e, pointer) = engine(MixedMode::On);
+        e.cur_x = e.geometry.xmin + 1;
+        e.cur_y = e.geometry.ymin + 1;
+        e.begin_contact();
+        assert!(e.forwarding, "强制混合模式仍把键区外触点还给桌面");
+        e.route(&Event::abs(kc::ABS_MT_POSITION_X, e.geometry.xmin + 300));
+        assert!(!pointer.borrow().is_empty());
+    }
+
+    /// 纯数字键盘（mixed_mode = off）本来就没有虚拟触摸板，别回归。
+    #[test]
+    fn no_pointer_when_mixed_mode_off() {
+        let (e, pointer) = engine(MixedMode::Off);
+        assert!(!e.mixed_active());
+        assert!(pointer.borrow().is_empty());
     }
 }

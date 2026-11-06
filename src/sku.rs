@@ -95,7 +95,7 @@ pub const SKUS: &[Sku] = &[
         models: &["G614", "G634"],
         excludes: &[],
         modules: &["ASUE1416", "ASUF1416"],
-        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘。这是唯一上过真机的配置（G634JY）",
+        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
     },
     Sku {
         id: "g615",
@@ -103,7 +103,7 @@ pub const SKUS: &[Sku] = &[
         models: &["G615", "G635"],
         excludes: &[],
         modules: &["ASCP1400", "ASCF1400"],
-        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。G615 为标准版、G635 为超竞版；2026 年的枪神10 沿用同一对代号，模组取值来自 2025 代，2026 代尚未上真机。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，不并入本配置",
+        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。G615 为标准版、G635 为超竞版；2026 年的枪神10 沿用同一对代号，模组取值来自 2025 代。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，不并入本配置",
     },
     Sku {
         id: "gx550",

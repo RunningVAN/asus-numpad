@@ -110,7 +110,7 @@ asus-numpad --lang en check     # 仅本次生效
 | `numlock` | `sync` / `toggle` / `off` | 跟随系统 NumLock 状态 |
 | `calc_gesture` | `true` / `false` | 手势唤起计算器 |
 | `calc_gesture_mode` | `long` / `off` | 触发方式 |
-| `mixed_mode` | `auto` / `on` / `off` | 按键与指针并存，需要 `/dev/uinput` |
+| `mixed_mode` | `auto` / `on` / `off` | `auto`：点亮期间只有双指及以上交给桌面，单指留在数字区；`on`：键区外一律交给桌面；`off`：纯数字键盘。`auto` / `on` 需要 `/dev/uinput` |
 | `grab` | `true` / `false` | 独占触摸板；关闭后点击交给桌面 |
 | `led_kind` | `auto` / `hidraw` / `i2c` / `none` | 背光通道 |
 | `follow_keyboard_brightness` | `true` / `false` | 跟随键盘背光，默认 `true` |
@@ -138,8 +138,8 @@ asus-numpad --lang en check     # 仅本次生效
 不必新增一行。
 
 这张表就是支持范围。机型 id 用来手动切换参数（`asus-numpad sku <id>`），并让自动识别的结果
-看得见；表外的机器拒绝启动。实测机型只有 `G634JY`（枪神7 超竞版），其余各行依据触摸板模组数据
-与键表映射。
+看得见；表外的机器拒绝启动。每行的归属依据触摸板模组数据与键表映射判定，不按整机型号逐个验证；
+各机型当前的兼容情况详见[官网](https://asus-numpad.github.io/)。
 
 一行机型条目由该代的 DMI 型号前缀与 `excludes` 组成：`excludes` 收的是复用了同一代号前缀、
 但没有这块触摸板的老代际。命中的代号落到模组判据，都对不上则同样拒绝启动；手动指定的 `sku`

@@ -119,7 +119,7 @@ use vendor defaults.
 | `numlock` | `sync` / `toggle` / `off` | Follow the system NumLock state |
 | `calc_gesture` | `true` / `false` | Gesture launches the calculator |
 | `calc_gesture_mode` | `long` / `off` | Trigger type |
-| `mixed_mode` | `auto` / `on` / `off` | Keys and pointer together, needs `/dev/uinput` |
+| `mixed_mode` | `auto` / `on` / `off` | `auto` keeps the pointer only for two-finger gestures while the pad is lit; `on` always passes touches outside the key grid to the desktop; `off` = keys only. `auto` / `on` need `/dev/uinput` |
 | `grab` | `true` / `false` | Grab the touchpad; when off, clicks reach the desktop |
 | `led_kind` | `auto` / `hidraw` / `i2c` / `none` | Backlight channel |
 | `follow_keyboard_brightness` | `true` / `false` | Mirror the keyboard backlight, default `true` |
@@ -146,8 +146,9 @@ makes the detection result visible, and a machine outside the table is refused a
 2023 and 2024 model years (SCAR 16 -> SCAR 16 2024), `G615` and `G635` cover 2025 and 2026 (Strix
 G16 2025 -> 2026 and SCAR 16 2025 -> 2026; `G615` is the standard model, `G635` the SCAR variant):
 the trailing characters track CPU refreshes, the touchpad does not change. 2026 keeps the same codes,
-so the table needs no extra row. Only `G634JY` (SCAR 16, 2023) has been on a physical machine; the
-other rows map from touchpad module data and keymap tables.
+so the table needs no extra row. A row is assigned from touchpad module data and keymap tables rather
+than validated machine by machine; per-model compatibility lives on the
+[website](https://asus-numpad.github.io/).
 
 A model row holds the DMI name prefixes of the generation it serves, plus an `excludes` list for
 generations that reuse the same code prefix without the hardware. An excluded prefix falls through to

@@ -111,7 +111,7 @@ asus-numpad --lang en check     # 僅本次生效
 | `numlock` | `sync` / `toggle` / `off` | 跟隨系統 NumLock 狀態 |
 | `calc_gesture` | `true` / `false` | 手勢喚起計算機 |
 | `calc_gesture_mode` | `long` / `off` | 觸發方式 |
-| `mixed_mode` | `auto` / `on` / `off` | 按鍵與指標並存，需要 `/dev/uinput` |
+| `mixed_mode` | `auto` / `on` / `off` | `auto`：點亮期間只有雙指以上交給桌面，單指留在數字區；`on`：鍵區外一律交給桌面；`off`：純數字鍵盤。`auto` / `on` 需要 `/dev/uinput` |
 | `grab` | `true` / `false` | 獨佔觸控板；關閉後點擊交給桌面 |
 | `led_kind` | `auto` / `hidraw` / `i2c` / `none` | 背光通道 |
 | `follow_keyboard_brightness` | `true` / `false` | 跟隨鍵盤背光，預設 `true` |
@@ -139,8 +139,8 @@ asus-numpad --lang en check     # 僅本次生效
 2026 年沒有更換代號，機型表因此不必新增一列。
 
 這張表就是支援範圍。機型 id 用來手動切換參數（`asus-numpad sku <id>`），並讓自動辨識的結果
-看得見；表外的機器拒絕啟動。實測機型只有 `G634JY`（SCAR 16，2023），其餘各列依據觸控板模組
-資料與鍵表對應推定。
+看得見；表外的機器拒絕啟動。每一列的歸屬依觸控板模組資料與鍵表對應判定，不按整機型號逐台驗證；
+各機型目前的相容情況詳見[官網](https://asus-numpad.github.io/)。
 
 一列機型條目由該世代的 DMI 型號前綴與 `excludes` 組成：`excludes` 收的是沿用同一代號前綴、
 但沒有這塊觸控板的舊世代。被排除的前綴會落到模組判據，兩者都對不上時同樣拒絕啟動；手動指定的

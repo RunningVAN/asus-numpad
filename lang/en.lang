@@ -292,6 +292,7 @@ sku.source.dmi = detected from the DMI model string
 sku.source.hardware = detected from the touchpad module
 sku.detail = Matched: {detail}
 sku.note = Model note: {note}
+sku.compat = Compatibility details: https://asus-numpad.github.io/
 sku.dmi = Local DMI identity: {dmi}
 sku.dmi_unknown = Local DMI identity: unavailable (not Linux or /sys/class/dmi/id unreadable)
 sku.hw = Local touchpad module: {hw}

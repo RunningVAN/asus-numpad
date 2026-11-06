@@ -296,6 +296,8 @@ pub struct Config {
     pub numlock: NumLockMode,
     pub calc_gesture: bool,
     pub calc_gesture_mode: CalcMode,
+    /// `auto` 只在点亮期间把双指及以上放给桌面，单指留在数字区（避免从边缘
+    /// 留白、格缝处拖走光标）；`on` 恢复「键区外一律透传」；`off` 纯数字键盘
     pub mixed_mode: MixedMode,
     pub grab: bool,
     // ---- 几何兜底（resolution 缺失时使用） ----

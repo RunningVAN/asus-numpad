@@ -1706,6 +1706,9 @@ fn sku_block(cfg: &Config) -> String {
         out.push_str(&i18n::tf("sku.hw", &[("hw", &hw.label())]));
         out.push('\n');
     }
+    // 机型兼容情况只维护在官网，程序内不再写死「哪台机器上过真机」
+    out.push_str(&i18n::t("sku.compat"));
+    out.push('\n');
     out
 }
 
