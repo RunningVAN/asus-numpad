@@ -166,6 +166,12 @@ same model ship a 4-zone RGB touchpad with no NumberPad while keeping an identic
 keymap therefore still follows the touchpad module, never the model code; the per-configuration check
 is in [docs/machines.md](docs/machines.md#同一型号不是都有-numpad按配置核验).
 
+The Zephyrus M16 / G16 / Flow X16 line (幻16 in China; `GU603` through `GV601`) is absent by design,
+not by omission: every generation lists a plain `Touchpad` in the official keyboard field, so there is
+no icon area to drive. The dual-screen `GX650` (冰刃 6 / 7 双屏) does carry the hardware and is served
+by `gx550`. Evidence per generation:
+[docs/machines.md](docs/machines.md#幻16-系列无-numberpad已核验).
+
 A model row holds the DMI name prefixes of the generation it serves, plus an `excludes` list for
 generations that reuse the same code prefix without the hardware. An excluded prefix falls through to
 the module check and, when that misses as well, to the same refusal. A manual `sku` pin outranks

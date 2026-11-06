@@ -61,6 +61,7 @@
     "models.nux": "侧置触摸板，数字模式由键盘专用键切换",
     "models.shots": "产品图取自华硕官网产品页，与上列机型一一对应。",
     "models.fine": "DMI 里的机型代号为准，宣传名称仅供参考。硬件读不准时用 <code>asus-numpad sku g614</code> 手动指定，<code>asus-numpad sku auto</code> 恢复自动识别。",
+    "models.noz": "幻16 系列（<code>GU603</code>–<code>GV601</code>，即 Zephyrus M16 / G16 / Flow X16）逐代无 NumberPad，不在表内；双屏 <code>GX650</code> 有，已由 <code>gx550</code> 覆盖。",
 
     "inst.title": "安装",
     "inst.sub": "软件源加一次，之后随包管理器升级。索引带 GPG 签名，公钥随索引一起发布。",
@@ -167,6 +168,7 @@
     "models.nux": "側置觸控板，數字模式由鍵盤專用鍵切換",
     "models.shots": "產品圖取自華碩官網產品頁，與上列機型一一對應。",
     "models.fine": "以 DMI 裡的機型代號為準，宣傳名稱僅供對照。硬體讀不準時用 <code>asus-numpad sku g614</code> 手動指定，<code>asus-numpad sku auto</code> 回復自動辨識。",
+    "models.noz": "幻16 系列（<code>GU603</code>–<code>GV601</code>，即 Zephyrus M16 / G16 / Flow X16）逐代無 NumberPad，不在表內；雙螢幕 <code>GX650</code> 有，已由 <code>gx550</code> 涵蓋。",
 
     "inst.title": "安裝",
     "inst.sub": "軟體來源加入一次，之後隨套件管理員升級。索引帶 GPG 簽章，公鑰隨索引一起發佈。",
