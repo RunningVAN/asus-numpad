@@ -653,6 +653,12 @@ jobs:
           test -f repo/rpm/x86_64/repodata/repomd.xml
           test -f repo/arch/x86_64/asus-numpad.db.tar.gz
           test -f repo/alpine/x86_64/APKINDEX.tar.gz
+          # 索引文件在、里面却是空的或只有 debug 包，pacman 端就是 target not found。
+          # prune 误删正式包时在这里就红，不必等冒烟。
+          tar tzf repo/arch/x86_64/asus-numpad.db.tar.gz | grep -qE '^asus-numpad-[0-9]' \
+            || { echo "::error::pacman 索引里没有 asus-numpad 正式包"; exit 1; }
+          test -f repo/arch/x86_64/asus-numpad.db.sig \
+            || echo "提示: 未生成 asus-numpad.db.sig（未签名仓库可忽略）"
           # 签名开着就必须四类签名产物全在：缺哪个，哪个生态的用户就会被
           # 「Release 未签名 / repomd 未签名 / db 未签名 / APKINDEX 未签名」挡住
           if [ -n "${SIGN_ARGS:-}" ]; then

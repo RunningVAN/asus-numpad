@@ -56,6 +56,13 @@
 - apk：源地址原先写成 `<base>/alpine/$(apk --print-arch)`，而 apk 自己还会再拼一层
   `<arch>`，实际请求变成 `/alpine/x86_64/x86_64/APKINDEX.tar.gz` 而 404。官网、三语 README、
   `docs/install.md` 与 `index.html` 里的命令统一改成 `<base>/alpine`，由 apk 自己补架构。
+- 仓库裁剪（`prune`）改成按「版本」保留最近 N 个，而不是按文件名整串保留 N 个：
+  老写法把 `*.pkg.tar.zst.sig` 也算成一个包，且 `sort -V` 排整串时
+  `asus-numpad-1.0.1-…` 落在 `asus-numpad-debug-1.0.1-…` 前面，最新正式包被当成最旧的一批删掉，
+  `repo-add` 只剩 debug 包，`pacman -Sy` 就是 `target not found`。现在同版本的
+  正式包 / debug 包 / 各生态包同进同退，`.sig` 随包一起清，`.deb`/`.rpm`/`.apk` 一并受益。
+- `repo-add` 前断言仓库里还有正式包，发版校验里断言 pacman 索引内确有 `asus-numpad`，
+  这类「索引在但包没了」的问题不用等用户装不上才暴露。
 - 顺手清掉文件里重复的一份标题与前言。
 
 ## 1.0.0

@@ -161,15 +161,59 @@ fi
 # --------------------------------------------------------------------------- #
 # 清理旧版本：仓库在 git 里，无限堆积会把仓库撑爆
 # --------------------------------------------------------------------------- #
+# 按「版本」保留最近 KEEP 个，而不是按文件名整串保留 KEEP 个。
+#
+# 老写法有两个坑，pacman 那条线都被踩到了：
+#   1. '*.pkg.tar.*' 会把 asus-numpad-1.0.1-1-x86_64.pkg.tar.zst.sig 也算一个包，
+#      计数虚高，drop 数量算多了；
+#   2. sort -V 排整串时 'asus-numpad-1.0.1-...' 排在 'asus-numpad-debug-1.0.1-...'
+#      前面，最新正式包反而被当成最旧的一批删掉，repo-add 于是只索引到 debug 包，
+#      pacman 端就是 target not found。
+# 现在先按版本号分组（同一版本的正式包 / debug 包 / 各生态包同进同退），
+# 再删最旧的那几个版本，连带的 .sig 一起清。
 prune() {
-    local dir="$1" count
-    count=$(find "$dir" -maxdepth 1 -type f -name '*.deb' -o -maxdepth 1 -type f -name '*.rpm' \
-            -o -maxdepth 1 -type f -name '*.pkg.tar.*' -o -maxdepth 1 -type f -name '*.apk' 2>/dev/null | wc -l | tr -d ' ')
-    ((count <= KEEP)) && return 0
-    local drop=$((count - KEEP))
-    log "清理 $dir 下最旧 $drop 个包"
-    find "$dir" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.*' -o -name '*.apk' \) \
-        | sort -V | head -n "$drop" | while read -r f; do rm -f -- "$f"; done
+    local dir="$1"
+    local -a pkgs=()
+    local f b v x seen
+
+    while IFS= read -r f; do pkgs+=("$f"); done < <(
+        find "$dir" -maxdepth 1 -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*.apk' \) | sort
+    )
+    ((${#pkgs[@]})) || return 0
+
+    local -a vers=()
+    for f in "${pkgs[@]}"; do
+        b=${f##*/}
+        v=$(printf '%s\n' "$b" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
+        [[ -n "$v" ]] || continue
+        if ((${#vers[@]})); then
+            seen=0
+            for x in "${vers[@]}"; do [[ "$x" == "$v" ]] && { seen=1; break; }; done
+            ((seen)) && continue
+        fi
+        vers+=("$v")
+    done
+    ((${#vers[@]})) || return 0
+
+    local -a sorted=()
+    while IFS= read -r v; do sorted+=("$v"); done < <(printf '%s\n' "${vers[@]}" | sort -V)
+
+    local nver=${#sorted[@]}
+    ((nver <= KEEP)) && return 0
+    local drop=$((nver - KEEP))
+    log "清理 $dir 下最旧 $drop 个版本（保留最近 $KEEP 个）"
+    local i old newest=${sorted[$((nver - 1))]}
+    for ((i = 0; i < drop; i++)); do
+        old=${sorted[$i]}
+        # 最新版本永远不删，KEEP 被人设成 0 也不能删到当次构建。
+        [[ "$old" == "$newest" ]] && continue
+        log "  删除 $old"
+        find "$dir" -maxdepth 1 -type f \
+            \( -name "*-${old}-*" -o -name "*-${old}.*" -o -name "*_${old}-*" -o -name "*_${old}.*" \) \
+            -exec rm -f -- {} +
+    done
+    return 0
 }
 
 # --------------------------------------------------------------------------- #
@@ -362,9 +406,13 @@ do_arch() {
         ( cd "$d" && rm -f asus-numpad.db* asus-numpad.files* )
         if have repo-add; then
             log "生成 pacman 数据库: $(basename "$d")"
-            local files=()
-            while IFS= read -r f; do files+=("$(basename "$f")"); done \
-                < <(find "$d" -maxdepth 1 -name 'asus-numpad-*.pkg.tar.*' ! -name '*.sig' | sort)
+            local files=() mains=0
+            while IFS= read -r f; do
+                files+=("$(basename "$f")")
+                [[ "${f##*/}" == asus-numpad-debug-* ]] || mains=$((mains + 1))
+            done < <(find "$d" -maxdepth 1 -name 'asus-numpad-*.pkg.tar.zst' ! -name '*.sig' | sort)
+            # 只剩 debug 包说明 prune 把正式包删了，直接失败，不要等用户装不上才发现。
+            ((mains)) || die "pacman 仓库里没有正式包（只剩 debug 或为空）: $d"
             ( cd "$d" && repo-add -q asus-numpad.db.tar.gz "${files[@]}" >/dev/null )
             if ((GPG_SIG)); then
                 # 不用 repo-add --sign：CI 里 repo-add 是从 Arch 容器借来的，
