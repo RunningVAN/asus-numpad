@@ -75,9 +75,86 @@ pub const RANK_WARN_NO_FEATURE: u8 = 2;
 /// 需要在日志里提示“回落到 ASUS 通用节点”的候选 rank 阈值。
 pub const RANK_WARN_ASUS_FALLBACK: u8 = 4;
 
+/// 单个节点「有没有 NumberPad 特征」的探测结论（跨平台口径，`linux::led` 负责填）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumpadProbe {
+    /// 描述符里确有 FEATURE 报告 `0x0d`
+    Has,
+    /// 描述符读到了，确实没有该 FEATURE
+    Missing,
+    /// 没权限读描述符，判不了
+    NoAccess,
+    /// 节点异常 / 司机刚消失
+    Unknown,
+}
+
+/// 本机到底有没有 NumberPad 硬件。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumpadPresence {
+    /// 至少一个触摸板节点带 FEATURE `0x0d`
+    Present,
+    /// 节点都在、描述符也读到了，但没有一个带该 FEATURE
+    Absent,
+    /// 节点在，没权限读描述符，判不了
+    NoAccess,
+    /// 没扫到候选节点（非 ELAN / PixArt / ASUS 触摸板，或 hidraw 未加载）
+    Unknown,
+}
+
+/// 把逐节点的探测结果收敛成一个结论。
+///
+/// 优先级：有就是有 → 有「确实没有」才敢判无硬件 → 只剩「没权限」就说明判不了。
+/// 「没权限」绝不能被当成「没有这块硬件」：udev 的 `uaccess` 没生效时读不到描述符，
+/// 按无硬件拒绝启动会把排查方向直接带偏。
+pub fn presence_from(probes: &[NumpadProbe]) -> NumpadPresence {
+    if probes.contains(&NumpadProbe::Has) {
+        return NumpadPresence::Present;
+    }
+    if probes.contains(&NumpadProbe::Missing) {
+        return NumpadPresence::Absent;
+    }
+    if probes.contains(&NumpadProbe::NoAccess) {
+        return NumpadPresence::NoAccess;
+    }
+    NumpadPresence::Unknown
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{presence_from, NumpadPresence, NumpadProbe, *};
+
+    #[test]
+    fn numpad_presence_any_has_wins() {
+        // 触摸板会导出多个 hidraw 接口，只有带 0x0d 的那个算数
+        let probes = [
+            NumpadProbe::Missing,
+            NumpadProbe::Has,
+            NumpadProbe::NoAccess,
+        ];
+        assert_eq!(presence_from(&probes), NumpadPresence::Present);
+    }
+
+    #[test]
+    fn numpad_presence_missing_is_absent() {
+        // 4 区 RGB 配置：节点都在、描述符读得到，就是没有 0x0d
+        let probes = [NumpadProbe::Missing, NumpadProbe::Missing];
+        assert_eq!(presence_from(&probes), NumpadPresence::Absent);
+    }
+
+    #[test]
+    fn numpad_presence_no_access_is_not_absent() {
+        let probes = [NumpadProbe::NoAccess, NumpadProbe::Unknown];
+        assert_eq!(presence_from(&probes), NumpadPresence::NoAccess);
+    }
+
+    #[test]
+    fn numpad_presence_nothing_is_unknown() {
+        assert_eq!(presence_from(&[]), NumpadPresence::Unknown);
+        assert_eq!(
+            presence_from(&[NumpadProbe::Unknown]),
+            NumpadPresence::Unknown
+        );
+    }
 
     #[test]
     fn omni_receiver_is_never_a_candidate() {

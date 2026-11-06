@@ -343,8 +343,8 @@ use crate::led_policy::OMNI_PID;
 /// ELAN / ASUS vendor 与候选打分统一由跨平台模块 [`crate::led_policy`] 提供，
 /// 避免 Linux 侧与测试侧出现两套逻辑。
 pub use crate::led_policy::{
-    candidate_rank, pick_best, ASUS_VID, ELAN_VID, KNOWN_NUMPAD_PIDS, PIXART_VID,
-    RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE,
+    candidate_rank, pick_best, presence_from, NumpadPresence, NumpadProbe, ASUS_VID, ELAN_VID,
+    KNOWN_NUMPAD_PIDS, PIXART_VID, RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE,
 };
 /// OMNI RECEIVER 无线接收器 vendor。
 const OMNI_VID: u32 = ASUS_VID;
@@ -525,6 +525,41 @@ pub fn probe_candidates() -> Vec<LedCandidate> {
     }
     out.sort_by_key(|c| c.rank);
     out
+}
+
+/// 扫描 `/sys/class/hidraw`，判断本机有没有 NumberPad 硬件。
+///
+/// 与 [`find_hidraw`] 同一套粗筛口径，区别只在于这里**不需要**选出可用节点，
+/// 只要有一个节点带 FEATURE `0x0d` 就算有硬件。权限不足单独归为
+/// [`NumpadPresence::NoAccess`]——那种情况不能当成「没有这块硬件」。
+pub fn probe_numpad_presence() -> NumpadPresence {
+    let Ok(rd) = std::fs::read_dir("/sys/class/hidraw") else {
+        return NumpadPresence::Unknown;
+    };
+    let mut probes: Vec<NumpadProbe> = Vec::new();
+    for entry in rd.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let dev = format!("/dev/{name}");
+        if !Path::new(&dev).exists() {
+            continue;
+        }
+        let Some((vid, pid)) = hid_id(&entry.path()) else {
+            continue;
+        };
+        if vid != ELAN_VID && vid != PIXART_VID && vid != ASUS_VID {
+            continue;
+        }
+        if vid == OMNI_VID && pid == OMNI_PID {
+            continue;
+        }
+        probes.push(match probe_feature_report(&dev, LED_FEATURE_REPORT_ID) {
+            FeatureProbe::Has => NumpadProbe::Has,
+            FeatureProbe::Missing => NumpadProbe::Missing,
+            FeatureProbe::NoAccess => NumpadProbe::NoAccess,
+            FeatureProbe::Unknown => NumpadProbe::Unknown,
+        });
+    }
+    presence_from(&probes)
 }
 
 /// 背光 i2c 从地址探测（0x38 优先，其次 0x15），供 self-check 使用。

@@ -304,3 +304,6 @@ note.sku_unknown = Model id "{id}" is not in the model table (ignored, automatic
 err.not_asus = This machine's vendor is {vendor}, not ASUS, so asus-numpad was not started.
 err.unsupported_model = This machine is not in the supported model list ({ids}), so asus-numpad was not started.
 err.unsupported_hint = If the hardware info is wrong or unreadable (virtual machine, placeholder DMI), force the model by hand: asus-numpad sku <id>
+err.no_numpad = This touchpad has no NumberPad hardware: its HID report descriptor carries no FEATURE report 0x0d, so neither the numpad backlight nor the icon area exists. Not starting.
+err.no_numpad.hint = Only configurations with a NumberPad expose FEATURE 0x0d. The 4-zone RGB configurations of the same model share the touchpad module but have no icon area, and no software can add one. If the hardware really does have a NumberPad, report the output of `asus-numpad check`.
+err.numpad_no_access = Cannot read the touchpad report descriptor (permission denied), so NumberPad presence is unknown. Continuing; if the numpad does not respond, check the udev uaccess rule first.

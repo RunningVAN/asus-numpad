@@ -3,7 +3,8 @@
 pub mod dev;
 pub mod led;
 pub use self::led::{
-    probe_candidates, probe_feature_report, probe_i2c, FeatureProbe, LedCandidate,
+    probe_candidates, probe_feature_report, probe_i2c, probe_numpad_presence, FeatureProbe,
+    LedCandidate, NumpadPresence,
 };
 
 use std::cell::RefCell;

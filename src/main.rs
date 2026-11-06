@@ -1660,6 +1660,30 @@ fn sku_gate(cfg: &Config) -> Option<i32> {
     }
 }
 
+/// 挡掉没有 NumberPad 硬件的机器：DMI 型号对得上也不放行。
+///
+/// 判据是触摸板 HID 接口里有没有 FEATURE 报告 `0x0d`。4 区 RGB 键盘的配置（国行
+/// 「魔霸新锐」、同型号的减配档）用同一块触摸板模组，DMI 与模组都分不出来，但描述符里
+/// 没有这条 FEATURE——数字区背光和图标区都不存在，启动起来只会白抓触摸板。
+#[cfg(target_os = "linux")]
+fn numpad_gate() -> Option<i32> {
+    use asus_numpad::linux::{probe_numpad_presence, NumpadPresence};
+    match probe_numpad_presence() {
+        NumpadPresence::Absent => {
+            println!("{}", banner());
+            println!("{}", i18n::t("err.no_numpad"));
+            println!("{}", i18n::t("err.no_numpad.hint"));
+            Some(3)
+        }
+        NumpadPresence::NoAccess => {
+            // 读不到描述符是权限问题，不能当成「没有这块硬件」把人挡回去
+            eprintln!("{}", i18n::t("err.numpad_no_access"));
+            None
+        }
+        NumpadPresence::Present | NumpadPresence::Unknown => None,
+    }
+}
+
 /// 「这台不在支持列表」的两条提示：厂商明确不是 ASUS / 只是认不出机型。
 fn unsupported_text(u: &sku::Unsupported, ids: &str) -> String {
     match &u.non_asus {
@@ -1762,6 +1786,10 @@ fn cmd_sku(cfg: &Config, cfg_path: &Path, arg: Option<&str>) -> Result<i32> {
 
 fn cmd_run(cfg: Config, verbose: bool) -> Result<i32> {
     if let Some(code) = sku_gate(&cfg) {
+        return Ok(code);
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(code) = numpad_gate() {
         return Ok(code);
     }
     println!("{}", banner());

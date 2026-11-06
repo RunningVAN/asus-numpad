@@ -304,3 +304,6 @@ note.sku_unknown = 機型 id「{id}」不在機型表裡（已忽略，仍按自
 err.not_asus = 本機廠商是 {vendor}，不是 ASUS 機器，已停止啟動。
 err.unsupported_model = 本機不在支援的機型清單裡（{ids}），已停止啟動。
 err.unsupported_hint = 硬體資訊讀不準時（虛擬機、白牌機箱、BIOS 佔位串）可手動指定機型：asus-numpad sku <id>
+err.no_numpad = 本機觸控板沒有 NumberPad 硬體：HID 報告描述符裡沒有 FEATURE 報告 0x0d，數字區背光與圖示區都不存在，已停止啟動。
+err.no_numpad.hint = 只有帶 NumberPad 的配置才匯出 FEATURE 0x0d。4 區 RGB 鍵盤的配置（同型號的減配檔）觸控板與帶硬體的機型同款，但上面沒有圖示區，軟體補不出來。硬體確實帶 NumberPad 卻報此錯時，把 `asus-numpad check` 的輸出回饋給維護者。
+err.numpad_no_access = 讀不到觸控板的報告描述符（權限不足），無法確認 NumberPad 是否存在，繼續啟動；數字區若沒有反應，先檢查 udev 的 uaccess 規則。

@@ -101,7 +101,7 @@ pub const SKUS: &[Sku] = &[
         models: &["G614", "G634"],
         excludes: &[],
         modules: &["ASUE1416", "ASUF1416"],
-        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；型号前缀不保证有硬件：2023 代官方 10 个配置里 2 个是 4 区 RGB 版（尾缀 EACX）无 NumberPad，国行「魔霸新锐」全系即此类，靠设备缺失自然不动键盘",
+        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；型号前缀不保证有硬件：2023 代官方 10 个配置里 2 个是 4 区 RGB 版（尾缀 EACX）无 NumberPad，国行「魔霸新锐」全系即此类，启动时探测不到 FEATURE 0x0d 即按不兼容拒绝启动",
     },
     Sku {
         id: "g615",
