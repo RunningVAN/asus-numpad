@@ -6,15 +6,7 @@
 [`RunningVAN/asus-numpad`](https://github.com/RunningVAN/asus-numpad)，原样保留作存档，与 1.0.0
 之间没有升级路径。
 
-## 1.0.0
-
-### 迁入组织
-
-- 仓库迁到 [`asus-numpad/asus-numpad`](https://github.com/asus-numpad/asus-numpad)，官网改为
-  `https://asus-numpad.github.io/`，软件源改为 `.../asus-numpad/asus-numpad/main/repo`；旧仓库与
-  旧官网地址保留跳转。
-- 版本号从 1.0.0 重新起算。旧源的 1.2.4 装不上 1.0.0（rpm / deb 都不降级），换源前先卸一次：
-  `sudo dnf remove asus-numpad` 或 `sudo apt remove asus-numpad`。
+## 1.0.1
 
 ### 机型备注不再写进程序
 
@@ -30,6 +22,38 @@
   没有键，从边缘起步的滑动原先会把光标拖走，还会连带把落点事件排进补发队列。
 - 双指及以上手势、`mixed_mode = on` 的行为不变；`on` 仍是「键区外一律交给桌面」的旧口径，
   需要旧手感的用户可显式打开。
+
+### 软件源改用签名索引
+
+- apt / dnf / pacman / apk 四个生态的索引与包体全部带上签名：apt 用 `signed-by` 钉公钥，
+  dnf 开 `gpgcheck=1` 与 `repo_gpgcheck=1`，pacman 用 `SigLevel = Required DatabaseRequired`，
+  apk 走 `/etc/apk/keys/` 公钥校验。原先 `trusted=yes` / `gpgcheck=0` / `Optional TrustAll` /
+  `--allow-untrusted` 的绕过写法全部撤掉。
+- 公钥随索引发布在 `repo/keys/`：GPG 一份（apt 用二进制 `.gpg`，dnf 与 pacman 用 `.asc`），
+  apk 一份 RSA 公钥。用户只在首次加源时导入一次，之后每次升级都是端到端校验。
+- 发版流程在出包后追加签名冒烟：按官网给的命令在四个干净容器里原样装一遍，全程开着严格校验，
+  密钥缺失、公钥没随索引发出、签名顺序错了都会让发版失败。
+- 密钥管理与轮换见 [docs/signing.md](docs/signing.md)。
+- 版本记录订正：机型备注清理与数字模式边缘光标两节的改动在本版，不在 1.0.0 的包里。
+
+
+# 变更记录
+
+版本号跟包版本一致；`-N` 后缀是发版前的构建号。
+
+1.0.0 起版本号在 `asus-numpad` 组织下重新起算。下面 1.2.4 及更早的记录来自旧仓库
+[`RunningVAN/asus-numpad`](https://github.com/RunningVAN/asus-numpad)，原样保留作存档，与 1.0.0
+之间没有升级路径。
+
+## 1.0.0
+
+### 迁入组织
+
+- 仓库迁到 [`asus-numpad/asus-numpad`](https://github.com/asus-numpad/asus-numpad)，官网改为
+  `https://asus-numpad.github.io/`，软件源改为 `.../asus-numpad/asus-numpad/main/repo`；旧仓库与
+  旧官网地址保留跳转。
+- 版本号从 1.0.0 重新起算。旧源的 1.2.4 装不上 1.0.0（rpm / deb 都不降级），换源前先卸一次：
+  `sudo dnf remove asus-numpad` 或 `sudo apt remove asus-numpad`。
 
 ### 认不出机型就拒绝启动
 

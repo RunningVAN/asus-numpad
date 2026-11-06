@@ -62,38 +62,50 @@ Fedora / openSUSE Leap 16 / Tumbleweed，逐个跑 `--version`，有一处装不
 ### Debian / Ubuntu / Mint
 
 ```bash
-echo "deb [trusted=yes] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
+sudo install -d -m 0755 /usr/share/keyrings
+curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.gpg \
+  | sudo tee /usr/share/keyrings/asus-numpad.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update
 sudo apt install asus-numpad
 ```
 
-`trusted=yes` 表示跳过 GPG 校验；`apt` 仍会按 `Release` 里的 SHA256 校验包体。
+`signed-by` 把公钥钉在这一个源上：`apt` 只认这把钥签的 `Release` / `InRelease`，
+顺带按 `Release` 里的 SHA256 校验包体，两处对不上就装不进去。公钥随索引一起发布在
+`repo/keys/` 下，换钥时重抄一遍上面的命令即可。
 
 ### Fedora / RHEL / Rocky / Alma
 
 ```bash
+sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
 sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
 [asus-numpad]
 name=asus-numpad
 baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
 enabled=1
-gpgcheck=0
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
 EOF
 sudo dnf install asus-numpad
 ```
+
+`gpgcheck=1` 校验包签名，`repo_gpgcheck=1` 校验 `repomd.xml` 的签名：索引被改过、
+包和索引对不上，`dnf` 都直接拒。`gpgkey` 指回仓库自己的公钥，不用另找地方下载。
 
 ### openSUSE Leap / Tumbleweed
 
 仓库是 rpm-md，zypper 直接读，不需要另编一份 SUSE 包：
 
 ```bash
-sudo zypper addrepo --no-gpgcheck --refresh \
+sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+sudo zypper addrepo --refresh \
   "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
 sudo zypper install asus-numpad
 ```
 
-`--no-gpgcheck` 对应 dnf 侧的 `gpgcheck=0`：仓库不签名。源里和 Release 里就只有
+`rpm --import` 之后 zypper 走默认的签名校验，和 dnf 侧同一个 rpm-md 源、同一把钥。源里和 Release 里就只有
 这份 rpm，spec 只用标准宏、不读发行版私有宏，运行时只依赖 glibc 与 systemd，
 所以 Leap 16、SLES 16 与 Tumbleweed 上照装；Leap 15 系已 EOL 且 glibc 低于本包要求，
 不在覆盖范围内。
@@ -105,14 +117,21 @@ Arch、Alpine）里真装一次、跑一遍 `--version`，有一个装不上就�
 ### Arch / Manjaro
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc -o /tmp/asus-numpad.asc
+sudo pacman-key --add /tmp/asus-numpad.asc
+sudo pacman-key --lsign-key 79F282157F2D3FF8E3C6806314C2BF611986E168
 sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 
 [asus-numpad]
-SigLevel = Optional TrustAll
+SigLevel = Required DatabaseRequired
 Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
 sudo pacman -Sy asus-numpad
 ```
+
+`Required DatabaseRequired` 要求包与数据库都必须有有效签名：`.sig` 缺失、钥没导入都对不上。
+`--lsign-key` 只是把钥标成本地信任级（`pacman-key` 的信任网在没有 keyring 签名仪式时本来
+就到不了 ultimate），校验本身一样严格。
 
 ### Arch / Manjaro：AUR
 
@@ -136,11 +155,16 @@ PKGBUILD 真编真装、跑 `--version` 并校验 systemd 单元与 udev 规则�
 ### Alpine
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
+  | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
 echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
   | sudo tee -a /etc/apk/repositories
 sudo apk update
-sudo apk add --allow-untrusted asus-numpad
+sudo apk add asus-numpad
 ```
+
+`apk` 认 `/etc/apk/keys/` 里的公钥，文件名必须与签名成员名 `.SIGN.RSA.asus-numpad-apk.rsa.pub`
+对上——所以公钥落盘时不能改名。
 
 ## 直接装包
 
@@ -159,7 +183,7 @@ sudo apk add --allow-untrusted asus-numpad
 sudo apt install ./asus-numpad_1.0.0_amd64.deb
 sudo dnf install ./asus-numpad-1.0.0-1.el9.x86_64.rpm
 sudo pacman -U asus-numpad-1.0.0-1-x86_64.pkg.tar.zst
-sudo apk add --allow-untrusted ./asus-numpad-1.0.0-r0.apk
+sudo apk add ./asus-numpad-1.0.0-r0.apk   # 已按上一节导入公钥；没导入时加 --allow-untrusted
 ```
 
 发版同时产出 `SHA256SUMS`，校验方式：

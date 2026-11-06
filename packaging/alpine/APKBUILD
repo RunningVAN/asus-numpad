@@ -12,7 +12,7 @@
 # `cargo vendor` 打一份依赖 tarball 放进 source（依赖只有 serde / clap / libc）。
 
 pkgname=asus-numpad
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=0
 pkgdesc="ASUS NumberPad userspace driver for Linux (official AlgoParameters aligned)"
 url="https://github.com/asus-numpad/asus-numpad"

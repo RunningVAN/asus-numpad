@@ -444,6 +444,11 @@ jobs:
     needs: [package, tarball, install-check, aur]
     if: needs.package.result == 'success' && needs.tarball.result == 'success' && needs.install-check.result == 'success' && needs.aur.result == 'success'
     runs-on: ubuntu-latest
+    env:
+      # 两个私钥都从 Secrets 取。没配就跳过签名，仓库照样发，只是安装命令退回
+      # trusted=yes / gpgcheck=0 / --allow-untrusted，不至于因为缺密钥卡死发版。
+      REPO_GPG_PRIVATE_KEY: ${{ secrets.REPO_GPG_PRIVATE_KEY }}
+      REPO_APK_PRIVATE_KEY: ${{ secrets.REPO_APK_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -522,7 +527,35 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            dpkg-dev createrepo-c ca-certificates
+            dpkg-dev createrepo-c ca-certificates gnupg rpm
+
+      # 私钥只在这个 job 的内存与 $RUNNER_TEMP 里存在，不落 artifacts、不进 git。
+      - name: 导入签名私钥
+        if: env.REPO_GPG_PRIVATE_KEY != '' || env.REPO_APK_PRIVATE_KEY != ''
+        run: |
+          set -euo pipefail
+          sign_args=""
+          if [ -n "${REPO_GPG_PRIVATE_KEY:-}" ]; then
+            export GNUPGHOME="${RUNNER_TEMP:-$PWD}/gnupg"
+            mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
+            printf '%s\n' "$REPO_GPG_PRIVATE_KEY" | gpg --batch --quiet --import
+            fpr="$(gpg --batch --list-secret-keys --with-colons | awk -F: '/^fpr/{print $10; exit}')"
+            [ -n "$fpr" ] || { echo "::error::GPG 私钥导入后取不到指纹"; exit 1; }
+            echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+            echo "GPG_KEY_ID=$fpr"     >> "$GITHUB_ENV"
+            echo "导入了 GPG 私钥：$fpr"
+            sign_args="$sign_args --gpg-key $fpr"
+          fi
+          if [ -n "${REPO_APK_PRIVATE_KEY:-}" ]; then
+            kdir="${RUNNER_TEMP:-$PWD}/keys-private"; mkdir -p "$kdir"
+            # 文件名不能改：apk 认的是签名成员 .SIGN.RSA.<私钥文件名>.pub，
+            # 用户端 /etc/apk/keys 里的公钥必须同名才校验得过
+            printf '%s\n' "$REPO_APK_PRIVATE_KEY" > "$kdir/asus-numpad-apk.rsa"
+            chmod 600 "$kdir/asus-numpad-apk.rsa"
+            echo "导入了 apk 私钥"
+            sign_args="$sign_args --apk-key $kdir/asus-numpad-apk.rsa"
+          fi
+          echo "SIGN_ARGS=$sign_args" >> "$GITHUB_ENV"
 
       # repo-add / apk 是 Arch 与 Alpine 专属工具，临时借容器跑，
       # 免得为了两条索引命令把整个 job 搬进容器
@@ -541,8 +574,38 @@ jobs:
           set -euo pipefail
           exec docker run --rm -v "$PWD:/w" -w /w alpine:latest apk "$@"
           SH
-          chmod +x "$HOME/shim/repo-add" "$HOME/shim/apk"
-          echo "$HOME/shim" >> "$GITHUB_PATH"
+          # abuild-sign 只有 Alpine 有（apk 的签名格式就它认），借容器跑。
+          # 私钥与待签文件都得先进 $PWD 再挂载：容器里看不到宿主机别的路径，
+          # 而且私钥文件名决定签名成员名（.SIGN.RSA.<名字>.pub），不能改。
+          cat > "$HOME/shim/abuild-sign" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          key=""; files=()
+          while [ $# -gt 0 ]; do
+            case "$1" in
+              -k) key="$2"; shift 2 ;;
+              *)  files+=("$1"); shift ;;
+            esac
+          done
+          kbase="$(basename "$key")"
+          # 私钥名 = 签名成员名（.SIGN.RSA.<名字>.pub），用户端公钥要同名才认。
+          # 待签文件可能在任意位置（staging 目录），统一搬进 $PWD 再挂给容器，
+          # 签完拷回去——只依赖文件内容，不依赖宿主机路径在容器里可见。
+          kdir="$PWD/.apk-sign-key"
+          wdir="$PWD/.apk-sign-work"
+          mkdir -p "$kdir" "$wdir"
+          cp -f "$key" "$kdir/$kbase"
+          args=(-k "/w/.apk-sign-key/$kbase")
+          for f in "${files[@]}"; do
+            cp -f "$f" "$wdir/${f##*/}"
+            args+=("/w/.apk-sign-work/${f##*/}")
+          done
+          docker run --rm -v "$PWD:/w" -w /w alpine:latest \
+            sh -c 'apk add --no-cache abuild >/dev/null 2>&1; abuild-sign "$@"' _ "${args[@]}"
+          for f in "${files[@]}"; do cp -f "$wdir/${f##*/}" "$f"; done
+          SH
+          chmod +x "$HOME/shim/repo-add" "$HOME/shim/apk" "$HOME/shim/abuild-sign"
+          printf '%s\n' "$HOME/shim" >> "$GITHUB_PATH"
 
       - name: 校验产物齐全（缺任何一类就不发版）
         run: |
@@ -570,7 +633,8 @@ jobs:
         run: |
           set -o pipefail
           # 失败时把最后几十行打成 annotation，公开可查，不必登录看日志
-          if ! bash -x ./tools/repo-gen.sh --dist pkg --out repo --keep 3 2>&1 | tee /tmp/repo-gen.log; then
+          # shellcheck disable=SC2086  # SIGN_ARGS 就是故意分词展开的
+          if ! bash -x ./tools/repo-gen.sh --dist pkg --out repo --keep 3 ${SIGN_ARGS:-} 2>&1 | tee /tmp/repo-gen.log; then
             echo "::error::repo-gen.sh 失败，关键行与尾部输出如下"
             { grep -aE "错误|失败|unrecognized|not found|No such|denied|fatal|invalid" /tmp/repo-gen.log | tail -n 20
               echo "---- tail ----"
@@ -589,6 +653,103 @@ jobs:
           test -f repo/rpm/x86_64/repodata/repomd.xml
           test -f repo/arch/x86_64/asus-numpad.db.tar.gz
           test -f repo/alpine/x86_64/APKINDEX.tar.gz
+          # 签名开着就必须四类签名产物全在：缺哪个，哪个生态的用户就会被
+          # 「Release 未签名 / repomd 未签名 / db 未签名 / APKINDEX 未签名」挡住
+          if [ -n "${SIGN_ARGS:-}" ]; then
+            for f in \
+              repo/keys/asus-numpad-repo.asc \
+              repo/keys/asus-numpad-repo.gpg \
+              repo/apt/dists/stable/InRelease \
+              repo/apt/dists/stable/Release.gpg \
+              repo/rpm/x86_64/repodata/repomd.xml.asc \
+              repo/arch/x86_64/asus-numpad.db.tar.gz.sig \
+            ; do
+              test -f "$f" || { echo "::error::缺签名产物 $f"; exit 1; }
+            done
+            # apk 的签名是塞进 tar 里的成员，没有独立文件，只能翻索引内容
+            tar tzf repo/alpine/x86_64/APKINDEX.tar.gz | grep -q '^\.SIGN\.RSA\.' \
+              || { echo "::error::APKINDEX.tar.gz 里没有签名成员"; exit 1; }
+            echo "签名产物齐全"
+          else
+            echo "未配置签名密钥，跳过签名产物检查"
+          fi
+
+      # 只把包装上还不够：这里照 index.html 给用户的命令原样走一遍，并且全程
+      # 开着严格校验（signed-by / gpgcheck / Required / 不带 --allow-untrusted）。
+      # 密钥没配对、公钥没随仓库发，都会在这一步红掉，而不是等用户装的时候才发现。
+      - name: 签名源冒烟（照抄官网命令）
+        if: env.SIGN_ARGS != ''
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8099 --bind 127.0.0.1 --directory repo >/dev/null 2>&1 &
+          SRV=$!
+          trap 'kill $SRV 2>/dev/null || true' EXIT
+          for _ in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:8099/keys/asus-numpad-repo.asc >/dev/null 2>&1 && break
+            sleep 0.25
+          done
+          fail=0
+          smoke() { # $1 名字  $2 镜像  $3 容器内脚本
+            echo "===== $1 ====="
+            if ! docker run --rm --network host \
+                 -e BASE=http://127.0.0.1:8099 -e FPR="$GPG_KEY_ID" \
+                 "$2" bash -c "$3" > "/tmp/smoke-$1.log" 2>&1; then
+              fail=1
+              echo "---- $1 失败 ----"
+              tail -n 30 "/tmp/smoke-$1.log"
+            else
+              tail -n 3 "/tmp/smoke-$1.log"
+            fi
+          }
+
+          smoke apt debian:12 '
+            set -eux
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends ca-certificates curl gnupg >/dev/null
+            install -d -m 0755 /usr/share/keyrings
+            curl -fsSL "$BASE/keys/asus-numpad-repo.gpg" -o /usr/share/keyrings/asus-numpad.gpg
+            echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] $BASE/apt stable main" \
+              > /etc/apt/sources.list.d/asus-numpad.list
+            apt-get update -qq
+            apt-get install -y -qq asus-numpad
+            asus-numpad --version
+          '
+
+          smoke dnf almalinux:9 '
+            set -eux
+            rpm --import "$BASE/keys/asus-numpad-repo.asc"
+            printf '[asus-numpad]\nname=asus-numpad\nbaseurl=%s/rpm/$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=%s/keys/asus-numpad-repo.asc\n' \
+              "$BASE" "$BASE" > /etc/yum.repos.d/asus-numpad.repo
+            dnf install -y asus-numpad
+            asus-numpad --version
+          '
+
+          smoke pacman archlinux:latest '
+            set -eux
+            pacman-key --init
+            pacman-key --add "$BASE/keys/asus-numpad-repo.asc" >/dev/null
+            pacman-key --lsign-key "$FPR"
+            printf '\n[asus-numpad]\nSigLevel = Required DatabaseRequired\nServer = %s/arch/$arch\n' "$BASE" \
+              >> /etc/pacman.conf
+            pacman -Sy --noconfirm asus-numpad
+            asus-numpad --version
+          '
+
+          smoke apk alpine:latest '
+            set -eux
+            wget -qO /etc/apk/keys/asus-numpad-apk.rsa.pub "$BASE/keys/asus-numpad-apk.rsa.pub"
+            echo "$BASE/alpine/$(apk --print-arch)" >> /etc/apk/repositories
+            apk update
+            apk add asus-numpad
+            asus-numpad --version
+          '
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::签名源冒烟失败：四个生态里至少一个装不上，别发版"
+            exit 1
+          fi
+          echo "四个生态都能照命令装上了"
 
       - name: 生成校验和
         run: |

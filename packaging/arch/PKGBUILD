@@ -7,7 +7,7 @@
 # shellcheck disable=SC2034  # pkgver/arch/depends 等由 makepkg 读取，本文件内看似未使用
 # shellcheck disable=SC2154  # srcdir / pkgdir 由 makepkg 注入
 pkgname=asus-numpad
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="ASUS 触摸板数字小键盘（NumberPad）用户态驱动，官方 AlgoParameters 对齐"
 arch=('x86_64' 'aarch64')

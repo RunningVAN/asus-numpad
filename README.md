@@ -23,33 +23,49 @@ which is why the removal below is not optional:
 
 ```bash
 # Debian / Ubuntu
-echo "deb [trusted=yes] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
+sudo install -d -m 0755 /usr/share/keyrings
+curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.gpg \
+  | sudo tee /usr/share/keyrings/asus-numpad.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/asus-numpad.list
 sudo apt update && sudo apt install asus-numpad
 
 # Fedora / RHEL / Rocky / Alma
+sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
 sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
 [asus-numpad]
 name=asus-numpad
 baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
 enabled=1
-gpgcheck=0
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
 EOF
 sudo dnf install asus-numpad
 
 # openSUSE Leap / Tumbleweed, same rpm-md repo, zypper reads it directly
-sudo zypper addrepo --no-gpgcheck --refresh \
+sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+sudo zypper addrepo --refresh \
   "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
 sudo zypper install asus-numpad
 
 # Arch / Manjaro
+curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc -o /tmp/asus-numpad.asc
+sudo pacman-key --add /tmp/asus-numpad.asc
+sudo pacman-key --lsign-key 79F282157F2D3FF8E3C6806314C2BF611986E168
 sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 
 [asus-numpad]
-SigLevel = Optional TrustAll
+SigLevel = Required DatabaseRequired
 Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
 EOF
 sudo pacman -Sy asus-numpad
+
+# Alpine
+curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
+  | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
+echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
+sudo apk update && sudo apk add asus-numpad
 
 # Arch / Manjaro, source package asus-numpad-rs
 # PKGBUILD and asus-numpad-rs.install from the release page in one directory:

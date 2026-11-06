@@ -2,19 +2,29 @@
 # 把 dist/ 里的包整理成四套可被包管理器直接消费的仓库，供给 GitHub 分发。
 #
 # 产出目录（默认 <repo>/repo）：
-#   apt/     Debian / Ubuntu      deb [trusted=yes] <base>/apt stable main
+#   apt/     Debian / Ubuntu      deb [signed-by=...] <base>/apt stable main
 #   rpm/     Fedora / RHEL / SUSE baseurl=<base>/rpm/$basearch
 #   arch/    Arch / Manjaro       Server = <base>/arch/$arch
-#   alpine/  Alpine               <base>/alpine/v3.x/main 形式的手工源
+#   alpine/  Alpine               <base>/alpine/$arch 形式的手工源
+#   keys/    对外分发的公钥（GPG + apk RSA）
 #   index.html                    给人看的安装说明
 #
 # 索引工具缺失时只跳过对应生态并告警，不中断其它生态——打包机不必装齐所有工具。
 #
+# 签名：
+#   --gpg-key <KEYID> 给 apt（InRelease / Release.gpg）、rpm（repomd.xml.asc + 包签名）、
+#                     pacman（db 签名 + 每包 .sig）签名；--apk-key <PEM> 给 Alpine 的
+#                     包与 APKINDEX 签名。两个密钥都不给时退化为未签名仓库，
+#                     安装命令里自动写 trusted=yes / gpgcheck=0。
+#   签名必须在算索引之前完成（包内容一变，索引里的校验和就失效），
+#   因此带签名时先把产物复制到 staging 目录签好，再从 staging 建索引。
+#
 # 用法:
-#   ./tools/repo-gen.sh                       # dist/ -> repo/
+#   ./tools/repo-gen.sh                       # dist/ -> repo/（未签名）
 #   ./tools/repo-gen.sh --dist DIR --out DIR
 #   ./tools/repo-gen.sh --keep 2              # 每个生态只留最近 2 个版本
 #   ./tools/repo-gen.sh --base-url https://... # 写进 index.html 的地址
+#   ./tools/repo-gen.sh --gpg-key 79F28215 --apk-key ~/keys/apk.rsa
 
 set -euo pipefail
 
@@ -23,6 +33,10 @@ DIST="$ROOT/dist"
 OUT="$ROOT/repo"
 KEEP=3
 BASE_URL="https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo"
+
+# 签名密钥。CI 里通过环境变量注入，本地不给就是未签名仓库。
+GPG_KEY="${REPO_GPG_KEY:-}"
+APK_KEY="${REPO_APK_KEY:-}"
 
 log()  { printf '==> %s\n' "$*"; }
 warn() { printf '警告: %s\n' "$*" >&2; }
@@ -35,7 +49,9 @@ while (($#)); do
         --out)      OUT="${2:?}"; shift 2 ;;
         --keep)     KEEP="${2:?}"; shift 2 ;;
         --base-url) BASE_URL="${2:?}"; shift 2 ;;
-        -h|--help)  sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        --gpg-key)  GPG_KEY="${2:?}"; shift 2 ;;
+        --apk-key)  APK_KEY="${2:?}"; shift 2 ;;
+        -h|--help)  sed -n '2,32p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *)          die "未知参数: $1" ;;
     esac
 done
@@ -85,6 +101,64 @@ fi
 mkdir -p "$OUT"
 
 # --------------------------------------------------------------------------- #
+# 签名准备
+# --------------------------------------------------------------------------- #
+GPG_SIG=0
+if [[ -n "$GPG_KEY" ]]; then
+    have gpg || die "给了 --gpg-key 但找不到 gpg"
+    # 私钥不在 keyring 里就别装作签过了：后面整条链路都靠它
+    gpg --batch --list-secret-keys "$GPG_KEY" >/dev/null 2>&1 \
+        || die "私钥不在 keyring 里: ${GPG_KEY}（先 gpg --import 或设 GNUPGHOME）"
+    GPG_SIG=1
+fi
+APK_SIG=0
+if [[ -n "$APK_KEY" ]]; then
+    [[ -r "$APK_KEY" ]] || die "apk 私钥读不到: $APK_KEY"
+    have abuild-sign || die "给了 --apk-key 但找不到 abuild-sign（apk add abuild）"
+    APK_SIG=1
+fi
+
+# 无密码私钥 + 无 tty 的 CI 环境，必须 loopback 才能签，否则 gpg 会卡住等口令
+gpg_common() { gpg --batch --yes --pinentry-mode loopback --local-user "$GPG_KEY" "$@"; }
+gpg_detach()  { gpg_common --detach-sign -o "$2" "$1"; }           # 二进制 .sig（pacman / apt Release.gpg）
+gpg_asc()     { gpg_common --armor --detach-sign -o "$2" "$1"; }   # 文本 .asc（dnf repomd.xml.asc）
+gpg_clear()   { gpg_common --clearsign -o "$2" "$1"; }             # apt InRelease
+
+# 每个生态一个状态位：index.html 的安装命令按位生成。
+# 不能「配了密钥就写 gpgcheck=1」——环境里缺 rpm / abuild-sign 时包其实没签，
+# 那样写等于给用户一条必然失败的安装命令。
+APT_SIGNED=0
+RPM_SIGNED=0
+ARCH_SIGNED=0
+APK_SIGNED=0
+# 每个生态分两步签（包 / 索引），两步都成了才算这个源能开强校验
+RPM_PKG_SIGNED=0
+RPM_REPO_SIGNED=0
+ARCH_PKG_SIGNED=0
+ARCH_DB_SIGNED=0
+APK_PKG_SIGNED=0
+APK_IDX_SIGNED=0
+
+GPG_FPR=""
+if ((GPG_SIG)); then
+    GPG_FPR="$(gpg --batch --with-colons --list-secret-keys "$GPG_KEY" 2>/dev/null \
+               | awk -F: '/^fpr/{print $10; exit}')"
+    log "签名密钥指纹 ${GPG_FPR}"
+fi
+
+# 签名会改写包本身（rpm 加签名头、apk 加尾部签名、arch 生成 .sig），
+# 而索引里存的是包的校验和——所以先在 staging 里签完，再从 staging 建索引。
+SRC="$DIST"
+STAGE=""
+if ((GPG_SIG || APK_SIG)); then
+    STAGE="$(mktemp -d "${TMPDIR:-/tmp}/asus-numpad-repo.XXXXXX")"
+    trap 'rm -rf -- "$STAGE"' EXIT
+    cp -a "$DIST"/. "$STAGE"/
+    SRC="$STAGE"
+    log "签名模式：包先复制到 $STAGE 签好再建索引"
+fi
+
+# --------------------------------------------------------------------------- #
 # 清理旧版本：仓库在 git 里，无限堆积会把仓库撑爆
 # --------------------------------------------------------------------------- #
 prune() {
@@ -102,7 +176,7 @@ prune() {
 # APT
 # --------------------------------------------------------------------------- #
 do_apt() {
-    local debs; shopt -s nullglob; debs=("$DIST"/asus-numpad_*.deb); shopt -u nullglob
+    local debs; shopt -s nullglob; debs=("$SRC"/asus-numpad_*.deb); shopt -u nullglob
     ((${#debs[@]})) || { log "跳过 apt（没有 .deb）"; return 0; }
 
     log "布置 apt 仓库"
@@ -149,6 +223,17 @@ do_apt() {
         done )
     } > "$rel"
     gzip -9c "$rel" > "$rel.gz"
+
+    # 签的必须是「指回 Packages.gz 的那份 Release」，所以顺序只能是先写 Release 再签。
+    # InRelease 是内嵌签名（新 apt 优先用），Release.gpg 是分离签名（老 apt 兜底），
+    # 两个都得出，缺一个都会让一部分发行版退回 trusted=yes 的老路子。
+    if ((GPG_SIG)); then
+        log "签名 apt Release"
+        rm -f "$rel.gpg" "$OUT/apt/dists/stable/InRelease"
+        gpg_detach "$rel" "$rel.gpg"
+        gpg_clear  "$rel" "$OUT/apt/dists/stable/InRelease"
+        APT_SIGNED=1
+    fi
 }
 
 # --------------------------------------------------------------------------- #
@@ -156,9 +241,30 @@ do_apt() {
 # --------------------------------------------------------------------------- #
 do_rpm() {
     shopt -s nullglob
-    local rpms=("$DIST"/asus-numpad-*.rpm)
+    local rpms=("$SRC"/asus-numpad-*.rpm)
     shopt -u nullglob
     ((${#rpms[@]})) || { log "跳过 rpm（没有 .rpm）"; return 0; }
+
+    # 包签名必须早于 createrepo：repomd 记录的是包的头/校验和，
+    # 先建索引后签名会让 dnf 拿到「元数据对得上但包没签」的组合。
+    if ((GPG_SIG)); then
+        local signer=""
+        if have rpmsign; then signer=rpmsign
+        elif have rpm; then signer=rpm
+        fi
+        if [[ -n "$signer" ]]; then
+            log "给 rpm 包加签名（${signer}）"
+            if "$signer" --define "_gpg_name $GPG_KEY" \
+                         --define "_gpg_path ${GNUPGHOME:-$HOME/.gnupg}" \
+                         --addsign "${rpms[@]}" >/dev/null 2>&1; then
+                RPM_PKG_SIGNED=1
+            else
+                warn "rpm --addsign 失败：rpm 源只能给 gpgcheck=0"
+            fi
+        else
+            warn "缺少 rpm/rpmsign，跳过包签名：rpm 源只能给 gpgcheck=0"
+        fi
+    fi
 
     local arch
     for r in "${rpms[@]}"; do
@@ -184,8 +290,20 @@ do_rpm() {
             createrepo --quiet --update --database "$d"
         else
             warn "缺少 createrepo_c，跳过 $(basename "$d") 的元数据（apt install createrepo-c）"
+            continue
+        fi
+        # repomd.xml.asc 是 dnf 校验「元数据本身」的签名文件：没有它，
+        # 即使包装了签名、写 repo_gpgcheck=1 也会直接报错。
+        if ((GPG_SIG)) && [[ -f "$d/repodata/repomd.xml" ]]; then
+            log "签名 repomd.xml: $(basename "$d")"
+            rm -f "$d/repodata/repomd.xml.asc"
+            gpg_asc "$d/repodata/repomd.xml" "$d/repodata/repomd.xml.asc"
+            RPM_REPO_SIGNED=1
         fi
     done
+
+    # 只有「包签了 + 元数据签了」才能让用户开 gpgcheck=1 / repo_gpgcheck=1
+    if ((RPM_PKG_SIGNED && RPM_REPO_SIGNED)); then RPM_SIGNED=1; fi
 }
 
 # --------------------------------------------------------------------------- #
@@ -193,12 +311,26 @@ do_rpm() {
 # --------------------------------------------------------------------------- #
 do_arch() {
     shopt -s nullglob
-    local pkgs=("$DIST"/asus-numpad-*.pkg.tar.*)
+    local pkgs=("$SRC"/asus-numpad-*.pkg.tar.*)
     shopt -u nullglob
     ((${#pkgs[@]})) || { log "跳过 arch（没有 .pkg.tar.*）"; return 0; }
 
+    # pacman 的包签名是同目录下的 <包名>.sig。repo-add 只读包本身，
+    # 所以 .sig 先于建库生成、并跟着包一起搬进仓库目录即可。
+    if ((GPG_SIG)); then
+        log "给 pacman 包签 .sig"
+        local p
+        for p in "${pkgs[@]}"; do
+            if [[ "$p" == *.sig ]]; then continue; fi
+            rm -f "$p.sig"
+            gpg_detach "$p" "$p.sig"
+        done
+        ARCH_PKG_SIGNED=1
+    fi
+
     local arch
     for p in "${pkgs[@]}"; do
+        if [[ "$p" == *.sig ]]; then continue; fi
         arch="$(basename "$p")"
         case "$arch" in
             *.aarch64.*) arch=aarch64 ;;
@@ -207,6 +339,7 @@ do_arch() {
         local dir="$OUT/arch/$arch"
         mkdir -p "$dir"
         cp -f "$p" "$dir/"
+        if ((GPG_SIG)); then cp -f "$p.sig" "$dir/"; fi
     done
 
     for d in "$OUT"/arch/*/; do
@@ -217,12 +350,25 @@ do_arch() {
             log "生成 pacman 数据库: $(basename "$d")"
             local files=()
             while IFS= read -r f; do files+=("$(basename "$f")"); done \
-                < <(find "$d" -maxdepth 1 -name 'asus-numpad-*.pkg.tar.*' | sort)
+                < <(find "$d" -maxdepth 1 -name 'asus-numpad-*.pkg.tar.*' ! -name '*.sig' | sort)
             ( cd "$d" && repo-add -q asus-numpad.db.tar.gz "${files[@]}" >/dev/null )
+            if ((GPG_SIG)); then
+                # 不用 repo-add --sign：CI 里 repo-add 是从 Arch 容器借来的，
+                # 容器里既没有 gpg 也没有私钥。建完库由宿主机签，顺序也更稳——
+                # 签完不能再动 db，否则 pacman 端一律 sig invalid。
+                rm -f "$d/asus-numpad.db.tar.gz.sig"
+                if gpg_detach "$d/asus-numpad.db.tar.gz" "$d/asus-numpad.db.tar.gz.sig"; then
+                    ARCH_DB_SIGNED=1
+                else
+                    warn "签名 pacman 数据库失败：pacman 源只能 Optional TrustAll"
+                fi
+            fi
         else
             warn "缺少 repo-add（pacman），跳过 $(basename "$d") 的数据库"
         fi
     done
+
+    if ((ARCH_PKG_SIGNED && ARCH_DB_SIGNED)); then ARCH_SIGNED=1; fi
 }
 
 # --------------------------------------------------------------------------- #
@@ -230,9 +376,20 @@ do_arch() {
 # --------------------------------------------------------------------------- #
 do_alpine() {
     shopt -s nullglob
-    local apks=("$DIST"/*.apk)
+    local apks=("$SRC"/*.apk)
     shopt -u nullglob
     ((${#apks[@]})) || { log "跳过 alpine（没有 .apk）"; return 0; }
+
+    # apk 的签名是追加在包尾的独立段，会改变文件内容 → 必须签完再 apk index，
+    # 否则索引里的 csum 指向的是未签名那份，装的时候校验直接对不上。
+    if ((APK_SIG)); then
+        log "给 apk 包签名"
+        local a
+        for a in "${apks[@]}"; do
+            abuild-sign -k "$APK_KEY" "$a" || die "apk 包签名失败: $(basename "$a")"
+        done
+        APK_PKG_SIGNED=1
+    fi
 
     for a in "${apks[@]}"; do
         local arch
@@ -258,10 +415,20 @@ do_alpine() {
                 warn "apk index 失败（$(basename "$d")）"
                 return 1
             fi
+            # 索引本身也要签：apk update 会拿 /etc/apk/keys 里的公钥校 APKINDEX.tar.gz，
+            # 只签包不签索引，用户端在 trust 这一步就过不去
+            if ((APK_SIG)); then
+                log "签名 APKINDEX: $(basename "$d")"
+                ( cd "$d" && abuild-sign -k "$APK_KEY" APKINDEX.tar.gz ) \
+                    || die "APKINDEX 签名失败（$(basename "$d")）"
+                APK_IDX_SIGNED=1
+            fi
         else
             warn "缺少 apk 工具，跳过 $(basename "$d") 的索引（apk-tools）"
         fi
     done
+
+    if ((APK_PKG_SIGNED && APK_IDX_SIGNED)); then APK_SIGNED=1; fi
 }
 
 do_apt
@@ -270,9 +437,112 @@ do_arch
 do_alpine
 
 # --------------------------------------------------------------------------- #
+# 公钥：随仓库一起分发，用户 curl 一个文件就够，不必去别处找
+# --------------------------------------------------------------------------- #
+KEYS_SRC="$ROOT/tools/keys"
+if [[ -d "$KEYS_SRC" ]]; then
+    mkdir -p "$OUT/keys"
+    for f in "$KEYS_SRC"/*; do
+        [[ -f "$f" ]] || continue
+        # 私钥绝不允许跟着仓库走：拦在这里，比事后从 git 历史里擦干净便宜
+        case "${f##*/}" in
+            *.secret.*|*secret*|*private*) warn "跳过 ${f##*/}：看着像私钥，不进仓库"; continue ;;
+        esac
+        cp -f "$f" "$OUT/keys/"
+    done
+    if ((GPG_SIG)); then
+        [[ -f "$OUT/keys/asus-numpad-repo.asc" ]] \
+            || warn "签名开着，但 tools/keys/ 里没有 asus-numpad-repo.asc：用户拿不到公钥"
+    fi
+    if ((APK_SIG)); then
+        [[ -f "$OUT/keys/asus-numpad-apk.rsa.pub" ]] \
+            || warn "apk 签名开着，但 tools/keys/ 里没有 asus-numpad-apk.rsa.pub"
+    fi
+    log "公钥已随仓库发布: $(ls "$OUT/keys" | tr '\n' ' ')"
+else
+    warn "没有 tools/keys/，仓库里不会带公钥"
+fi
+
+# --------------------------------------------------------------------------- #
 # 人看的入口页
 # --------------------------------------------------------------------------- #
+# 安装命令按「这个生态到底签成没签」生成，绝不给用户一条必然失败的命令。
 log "生成 index.html"
+
+if ((APT_SIGNED)); then
+APT_CMD="sudo install -d -m 0755 /usr/share/keyrings
+curl -fsSL ${BASE_URL}/keys/asus-numpad-repo.gpg \\
+  | sudo tee /usr/share/keyrings/asus-numpad.gpg >/dev/null
+echo \"deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] ${BASE_URL}/apt stable main\" \\
+  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
+sudo apt update && sudo apt install asus-numpad"
+else
+APT_CMD="echo \"deb [trusted=yes] ${BASE_URL}/apt stable main\" \\
+  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
+sudo apt update && sudo apt install asus-numpad"
+fi
+
+if ((RPM_SIGNED)); then
+RPM_CMD="sudo rpm --import ${BASE_URL}/keys/asus-numpad-repo.asc
+sudo tee /etc/yum.repos.d/asus-numpad.repo <<'EOF'
+[asus-numpad]
+name=asus-numpad
+baseurl=${BASE_URL}/rpm/\$basearch
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=${BASE_URL}/keys/asus-numpad-repo.asc
+EOF
+sudo dnf install asus-numpad"
+else
+RPM_CMD="sudo tee /etc/yum.repos.d/asus-numpad.repo <<'EOF'
+[asus-numpad]
+name=asus-numpad
+baseurl=${BASE_URL}/rpm/\$basearch
+enabled=1
+gpgcheck=0
+EOF
+sudo dnf install asus-numpad"
+fi
+
+if ((ARCH_SIGNED)); then
+ARCH_CMD="curl -fsSL ${BASE_URL}/keys/asus-numpad-repo.asc -o /tmp/asus-numpad.asc
+sudo pacman-key --add /tmp/asus-numpad.asc
+sudo pacman-key --lsign-key ${GPG_FPR}
+sudo tee -a /etc/pacman.conf <<'EOF'
+
+[asus-numpad]
+SigLevel = Required DatabaseRequired
+Server = ${BASE_URL}/arch/\$arch
+EOF
+sudo pacman -Sy asus-numpad"
+else
+ARCH_CMD="sudo tee -a /etc/pacman.conf <<'EOF'
+
+[asus-numpad]
+SigLevel = Optional TrustAll
+Server = ${BASE_URL}/arch/\$arch
+EOF
+sudo pacman -Sy asus-numpad"
+fi
+
+if ((APK_SIGNED)); then
+APK_CMD="curl -fsSL ${BASE_URL}/keys/asus-numpad-apk.rsa.pub \\
+  | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
+echo \"${BASE_URL}/alpine/\$(apk --print-arch)\" | sudo tee -a /etc/apk/repositories
+sudo apk update && sudo apk add asus-numpad"
+else
+APK_CMD="echo \"${BASE_URL}/alpine/\$(apk --print-arch)\" \\
+  | sudo tee -a /etc/apk/repositories
+sudo apk update && sudo apk add --allow-untrusted asus-numpad"
+fi
+
+if ((APT_SIGNED || RPM_SIGNED || ARCH_SIGNED || APK_SIGNED)); then
+SIGN_LINE="所有源用同一把 GPG 密钥签名，指纹 <code>${GPG_FPR}</code>；公钥在 <code>keys/</code> 下，下面每条命令都已含导入公钥这一步。"
+else
+SIGN_LINE="仓库未做 GPG 签名，命令里因此带 <code>trusted=yes</code> / <code>gpgcheck=0</code> / <code>--allow-untrusted</code>；介意的话请到 Releases 下 .deb/.rpm/.pkg.tar.zst/.apk 手工装。"
+fi
+
 cat > "$OUT/index.html" <<HTML
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -291,43 +561,27 @@ cat > "$OUT/index.html" <<HTML
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
   th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid #8883; }
+  .fp { font-size: 12px; word-break: break-all; opacity: .7; }
 </style>
 </head>
 <body>
 <h1>asus-numpad ${VERSION}</h1>
 <p class="sub">ASUS 触摸板数字小键盘（NumberPad）的 Linux 用户态驱动 · GPL-3.0-or-later</p>
 
-<p>本页是软件源根地址：<code>${BASE_URL}</code>。下面的命令直接可用，无需下载密钥。</p>
+<p>本页是软件源根地址：<code>${BASE_URL}</code>。${SIGN_LINE}</p>
+<p class="fp">签名指纹：${GPG_FPR:-无（未签名仓库）}</p>
 
 <h2>Debian / Ubuntu / Mint</h2>
-<pre><code>echo "deb [trusted=yes] ${BASE_URL}/apt stable main" \\
-  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
-sudo apt update &amp;&amp; sudo apt install asus-numpad</code></pre>
-<p>仓库未做 GPG 签名，因此用 <code>trusted=yes</code>。介意的话请改用 Release 里的 .deb 手工装。</p>
+<pre><code>${APT_CMD//&/&amp;}</code></pre>
 
 <h2>Fedora / RHEL / Rocky / openSUSE</h2>
-<pre><code>sudo tee /etc/yum.repos.d/asus-numpad.repo &lt;&lt;'EOF'
-[asus-numpad]
-name=asus-numpad
-baseurl=${BASE_URL}/rpm/\$basearch
-enabled=1
-gpgcheck=0
-EOF
-sudo dnf install asus-numpad</code></pre>
+<pre><code>${RPM_CMD//&/&amp;}</code></pre>
 
 <h2>Arch / Manjaro</h2>
-<pre><code>sudo tee -a /etc/pacman.conf &lt;&lt;'EOF'
-
-[asus-numpad]
-SigLevel = Optional TrustAll
-Server = ${BASE_URL}/arch/\$arch
-EOF
-sudo pacman -Sy asus-numpad</code></pre>
+<pre><code>${ARCH_CMD//&/&amp;}</code></pre>
 
 <h2>Alpine</h2>
-<pre><code>echo "${BASE_URL}/alpine/\$(apk --print-arch)" \\
-  | sudo tee -a /etc/apk/repositories
-sudo apk update &amp;&amp; sudo apk add --allow-untrusted asus-numpad</code></pre>
+<pre><code>${APK_CMD//&/&amp;}</code></pre>
 
 <h2>Nix / NixOS</h2>
 <pre><code>nix run github:asus-numpad/asus-numpad
@@ -345,6 +599,7 @@ cd asus-numpad-${VERSION} &amp;&amp; sudo ./install.sh</code></pre>
 <tr><td><code>rpm/&lt;arch&gt;/</code></td><td>RPM 仓库（含 repodata）</td></tr>
 <tr><td><code>arch/&lt;arch&gt;/</code></td><td>Pacman 仓库（asus-numpad.db）</td></tr>
 <tr><td><code>alpine/&lt;arch&gt;/</code></td><td>Alpine 仓库（APKINDEX）</td></tr>
+<tr><td><code>keys/</code></td><td>公钥：apt 用 .gpg、dnf 与 pacman 用 .asc、apk 用 .rsa.pub</td></tr>
 </table>
 <p class="sub">每个生态只保留最近 ${KEEP} 个版本；更早的版本仍可从 GitHub Releases 取。</p>
 </body>
@@ -353,3 +608,6 @@ HTML
 
 log "仓库已生成于 $OUT"
 find "$OUT" -maxdepth 2 -type d | sort | sed 's/^/  /'
+if ((APT_SIGNED || RPM_SIGNED || ARCH_SIGNED || APK_SIGNED)); then
+    log "签名状态：apt=$APT_SIGNED rpm=$RPM_SIGNED pacman=$ARCH_SIGNED apk=$APK_SIGNED"
+fi
