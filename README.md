@@ -155,6 +155,13 @@ so the table needs no extra row. A row is assigned from touchpad module data and
 than validated machine by machine; per-model compatibility lives on the
 [website](https://asus-numpad.github.io/).
 
+A model id is not proof that the machine carries the hardware. Some retail configurations of the
+same model ship a 4-zone RGB touchpad with no NumberPad — 2 of 10 Strix G16 2023 configurations,
+1 of 25 Strix G16 2025, 3 of 5 Strix G15 2022 — and the DMI prefix is identical to the version that
+has it (`G614JV…-0EAGX…` has it, `G614JV…-0EACX…` does not). The keymap therefore still follows the
+touchpad module, never the model code; the per-configuration check is in
+[docs/machines.md](docs/machines.md#同一型号不是都有-numpad按配置核验).
+
 A model row holds the DMI name prefixes of the generation it serves, plus an `excludes` list for
 generations that reuse the same code prefix without the hardware. An excluded prefix falls through to
 the module check and, when that misses as well, to the same refusal. A manual `sku` pin outranks

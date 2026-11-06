@@ -87,7 +87,7 @@ pub const SKUS: &[Sku] = &[
         // 靠模组判据之外再按代际挡一道，免得识别成 g533 给出「这台有小键盘」的错觉。
         excludes: &["G533Q", "G513Q", "G513I"],
         modules: &["ASUE1403", "ELAN1403"],
-        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）。2022 代（枪神6 G533Z*、魔霸6 15 英寸 G513R*）才有 NumberPad；2021 代（G533Q* / G513Q* / G513I*）官方规格无此硬件，由 excludes 挡在识别之外，落通用配置",
+        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）。2022 代（枪神6 G533Z*、魔霸6 15 英寸 G513R*）才有 NumberPad；2021 代（G533Q* / G513Q* / G513I*）官方规格无此硬件，由 excludes 挡在识别之外，落通用配置。注意 2022 代也非全配：魔霸6 官方 5 个配置里 3 个是 4 区 RGB 版，无此硬件",
     },
     Sku {
         id: "g614",
@@ -95,7 +95,7 @@ pub const SKUS: &[Sku] = &[
         models: &["G614", "G634"],
         excludes: &[],
         modules: &["ASUE1416", "ASUF1416"],
-        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；低配 EACX 无此硬件，靠设备缺失自然不动键盘",
+        note: "G614 与 G634 同一块触摸板（ASUE1416 / ASUF1416 → GH3XLNDZ）；型号前缀不保证有硬件：2023 代官方 10 个配置里 2 个是 4 区 RGB 版（尾缀 EACX）无 NumberPad，靠设备缺失自然不动键盘",
     },
     Sku {
         id: "g615",
@@ -103,7 +103,7 @@ pub const SKUS: &[Sku] = &[
         models: &["G615", "G635"],
         excludes: &[],
         modules: &["ASCP1400", "ASCF1400"],
-        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。G615 为标准版、G635 为超竞版；2026 年的枪神10 沿用同一对代号，模组取值来自 2025 代。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，不并入本配置",
+        note: "PixArt ASCP1400 / ASCF1400 → GH4XLNDZ（同族）。G615 为标准版、G635 为超竞版；2026 年的枪神10 沿用同一对代号，模组取值来自 2025 代。2025 代官方 25 个配置里有 1 个（90NR0LJ1-M005P0）是不带 NumberPad 的 4 区 RGB 版。同代的 ProArt P16（H7606）触控板是 DialPad 智能旋钮，不属于 NumberPad，不并入本配置",
     },
     Sku {
         id: "gx550",
