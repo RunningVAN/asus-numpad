@@ -7,15 +7,6 @@ ASUS NumberPad 的 Linux 使用者空間驅動程式。透過 evdev 獨佔觸控
 
 時序與幾何常數取自廠商檔案 `AsusNUMPADFilter.inf` 中的 `AlgoParameters`。
 
-1.0 起版本號在 `asus-numpad` 組織下重新起算：專案由 `RunningVAN/asus-numpad` 遷來，舊倉庫的
-1.0.0 到 1.2.4 歷史唯讀保留。舊來源的套件無法就地升級，換來源前先移除一次。這裡的軟體源只發佈 1.0.0 及以後的版本，而 1.0.0
-的版本號低於舊源的 1.2.4，套件管理器不會把它當作升級，所以下面這一步不能省：
-
-```bash
-# rpm: sudo dnf remove asus-numpad
-# deb: sudo apt remove asus-numpad
-```
-
 ## 安裝
 
 ```bash

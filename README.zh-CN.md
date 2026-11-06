@@ -7,15 +7,6 @@ ASUS NumberPad 的 Linux 用户态驱动。通过 evdev 独占触摸板，把触
 
 时序与几何常量取自厂商文件 `AsusNUMPADFilter.inf` 中的 `AlgoParameters`。
 
-1.0 起版本号在 `asus-numpad` 组织下重新起算：项目由 `RunningVAN/asus-numpad` 迁来，旧仓库的
-1.0.0 到 1.2.4 历史只读保留。旧源的包无法就地升级，换源前先卸一次。这里的软件源只发布 1.0.0 及以后的版本，而 1.0.0 的版本号
-低于旧源的 1.2.4，包管理器不会把它当作升级，所以下面这一步不能省：
-
-```bash
-# rpm: sudo dnf remove asus-numpad
-# deb: sudo apt remove asus-numpad
-```
-
 ## 安装
 
 ```bash
