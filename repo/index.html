@@ -25,6 +25,10 @@
 <p>本页是软件源根地址：<code>https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo</code>。所有源用同一把 GPG 密钥签名，指纹 <code>79F282157F2D3FF8E3C6806314C2BF611986E168</code>；公钥在 <code>keys/</code> 下，下面每条命令都已含导入公钥这一步。</p>
 <p class="fp">签名指纹：79F282157F2D3FF8E3C6806314C2BF611986E168</p>
 
+<h2>一条命令（导入公钥 + 写源 + 安装）</h2>
+<p>脚本自己认发行版，按上面的方式写源再装，重复运行不会重复追加；只想写源不装就加 <code>--repo-only</code>。</p>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/install.sh | sudo sh</code></pre>
+
 <h2>Debian / Ubuntu / Mint</h2>
 <pre><code>sudo install -d -m 0755 /usr/share/keyrings
 curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.gpg \

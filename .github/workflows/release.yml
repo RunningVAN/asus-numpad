@@ -703,6 +703,7 @@ jobs:
             local name="$1" img="$2" shbin="${3:-bash}"
             echo "===== $name ====="
             if ! docker run --rm -i --network host \
+                 -v "$PWD/repo:/repo:ro" \
                  -e BASE=http://127.0.0.1:8099 -e FPR="$GPG_KEY_ID" \
                  "$img" "$shbin" -s > "/tmp/smoke-$name.log" 2>&1; then
               fail=1
@@ -757,6 +758,26 @@ jobs:
           apk add asus-numpad
           asus-numpad --version
           APK
+
+          # install.sh 是把上面三段合起来的那条命令，必须自己也跑通：
+          # 挂载 repo/ 进容器，用本地 http 服务当上游，走完整流程（导入公钥 → 写源 → 安装）。
+          smoke install-sh-deb debian:12 <<'INSTDEB'
+          set -eux
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends ca-certificates curl >/dev/null
+          ASUS_NUMPAD_BASE="$BASE" sh /repo/install.sh
+          INSTDEB
+
+          smoke install-sh-rpm almalinux:9 <<'INSTRPM'
+          set -eux
+          ASUS_NUMPAD_BASE="$BASE" sh /repo/install.sh
+          INSTRPM
+
+          smoke install-sh-apk alpine:latest sh <<'INSTAPK'
+          set -eu
+          ASUS_NUMPAD_BASE="$BASE" sh /repo/install.sh
+          INSTAPK
 
           if [ "$fail" -ne 0 ]; then
             echo "::error::签名源冒烟失败：四个生态里至少一个装不上，别发版"
