@@ -64,7 +64,7 @@ sudo pacman -Sy asus-numpad
 # Alpine
 curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
   | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
+echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine" | sudo tee -a /etc/apk/repositories
 sudo apk update && sudo apk add asus-numpad
 
 # Arch / Manjaro, source package asus-numpad-rs

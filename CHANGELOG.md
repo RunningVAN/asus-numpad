@@ -49,6 +49,13 @@
   而段内又有 `printf '...'`，外层单引号被提前闭合，`$basearch` / `$arch` 这类本该由容器内
   解释的变量被 runner 展开，`set -u` 直接以 unbound variable 退出，dnf / pacman / apk
   三段压根没跑。alpine 镜像没有 `bash`，apk 段改用 `sh`。
+- pacman：`repo-add` 建完库后只签了 `asus-numpad.db.tar.gz.sig`，而 `pacman -Sy` 取的是
+  库名对应的 `asus-numpad.db.sig`，这一步 404 就会 `failed to synchronize all databases`。
+  现在按 repo-add 的符号链接约定补上 `asus-numpad.db.sig`（以及存在签名时的
+  `asus-numpad.files.sig`），与 `db.tar.gz.sig` 共用同一份签名。
+- apk：源地址原先写成 `<base>/alpine/$(apk --print-arch)`，而 apk 自己还会再拼一层
+  `<arch>`，实际请求变成 `/alpine/x86_64/x86_64/APKINDEX.tar.gz` 而 404。官网、三语 README、
+  `docs/install.md` 与 `index.html` 里的命令统一改成 `<base>/alpine`，由 apk 自己补架构。
 - 顺手清掉文件里重复的一份标题与前言。
 
 ## 1.0.0

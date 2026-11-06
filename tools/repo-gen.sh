@@ -5,7 +5,7 @@
 #   apt/     Debian / Ubuntu      deb [signed-by=...] <base>/apt stable main
 #   rpm/     Fedora / RHEL / SUSE baseurl=<base>/rpm/$basearch
 #   arch/    Arch / Manjaro       Server = <base>/arch/$arch
-#   alpine/  Alpine               <base>/alpine/$arch 形式的手工源
+#   alpine/  Alpine               <base>/alpine（apk 自己拼 <arch>）
 #   keys/    对外分发的公钥（GPG + apk RSA）
 #   index.html                    给人看的安装说明
 #
@@ -370,8 +370,16 @@ do_arch() {
                 # 不用 repo-add --sign：CI 里 repo-add 是从 Arch 容器借来的，
                 # 容器里既没有 gpg 也没有私钥。建完库由宿主机签，顺序也更稳——
                 # 签完不能再动 db，否则 pacman 端一律 sig invalid。
-                rm -f "$d/asus-numpad.db.tar.gz.sig"
+                rm -f "$d/asus-numpad.db.tar.gz.sig" "$d/asus-numpad.db.sig" "$d/asus-numpad.files.sig"
                 if gpg_detach "$d/asus-numpad.db.tar.gz" "$d/asus-numpad.db.tar.gz.sig"; then
+                    # pacman -Sy 取的是「库名 + .sig」，也就是 asus-numpad.db.sig；
+                    # 只签 db.tar.gz.sig 的话它请求会 404，直接
+                    # failed to synchronize all databases。db / files 本来就是
+                    # repo-add 建的符号链接，这里同规格指过去，共用同一份签名。
+                    for base_name in asus-numpad.db asus-numpad.files; do
+                        [[ -e "$d/$base_name.tar.gz.sig" ]] \
+                            && ln -sf "$base_name.tar.gz.sig" "$d/$base_name.sig"
+                    done
                     ARCH_DB_SIGNED=1
                 else
                     warn "签名 pacman 数据库失败：pacman 源只能 Optional TrustAll"
@@ -543,10 +551,10 @@ fi
 if ((APK_SIGNED)); then
 APK_CMD="curl -fsSL ${BASE_URL}/keys/asus-numpad-apk.rsa.pub \\
   | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo \"${BASE_URL}/alpine/\$(apk --print-arch)\" | sudo tee -a /etc/apk/repositories
+echo \"${BASE_URL}/alpine\" | sudo tee -a /etc/apk/repositories
 sudo apk update && sudo apk add asus-numpad"
 else
-APK_CMD="echo \"${BASE_URL}/alpine/\$(apk --print-arch)\" \\
+APK_CMD="echo \"${BASE_URL}/alpine\" \\
   | sudo tee -a /etc/apk/repositories
 sudo apk update && sudo apk add --allow-untrusted asus-numpad"
 fi

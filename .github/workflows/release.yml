@@ -745,7 +745,8 @@ jobs:
           smoke apk alpine:latest sh <<'APK'
           set -eux
           wget -qO /etc/apk/keys/asus-numpad-apk.rsa.pub "$BASE/keys/asus-numpad-apk.rsa.pub"
-          echo "$BASE/alpine/$(apk --print-arch)" >> /etc/apk/repositories
+          # apk 自己会拼 <arch>，这里只给到 /alpine，多写一层就变成 /alpine/x86_64/x86_64
+          echo "$BASE/alpine" >> /etc/apk/repositories
           apk update
           apk add asus-numpad
           asus-numpad --version

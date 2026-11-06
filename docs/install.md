@@ -157,7 +157,7 @@ PKGBUILD 真编真装、跑 `--version` 并校验 systemd 单元与 udev 规则�
 ```bash
 curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
   | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
+echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine" \
   | sudo tee -a /etc/apk/repositories
 sudo apk update
 sudo apk add asus-numpad

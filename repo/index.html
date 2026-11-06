@@ -49,7 +49,7 @@ EOF
 sudo pacman -Sy asus-numpad</code></pre>
 
 <h2>Alpine</h2>
-<pre><code>echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
+<pre><code>echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine" \
   | sudo tee -a /etc/apk/repositories
 sudo apk update &amp;&amp; sudo apk add --allow-untrusted asus-numpad</code></pre>
 
