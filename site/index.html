@@ -188,7 +188,7 @@
     <div class="wrap">
       <header class="sec-head reveal">
         <h2 data-i18n="models.title">Supported models</h2>
-        <p data-i18n="models.sub">The list below is the support range. A model id switches parameters by hand; a machine outside it is refused at startup.</p>
+        <p data-i18n="models.sub">The list below is the support range. A model id switches parameters by hand; a machine outside it is refused at startup, and so is a listed model whose pad turns out to be missing.</p>
       </header>
       <div class="model-shots reveal">
         <figure>
@@ -202,14 +202,14 @@
           <img src="assets/models/g614.webp" alt="ROG Strix SCAR 16 / G16 (2023)" width="900" height="690" decoding="async">
           <figcaption>
             <code>g614</code><span data-i18n="models.m614">ROG Strix SCAR 16 / Strix G16 (2023–2024) — G614, G634</span>
-            <em data-i18n="models.n614">Verified on G634JY</em>
+            <em data-i18n="models.n614">Verified on G634JY; the Chinese-market Strix G (魔霸新锐) is a 4-zone RGB SKU and carries no pad</em>
           </figcaption>
         </figure>
         <figure>
           <img src="assets/models/g615.webp" alt="ROG Strix SCAR 16 (2025)" width="900" height="716" decoding="async">
           <figcaption>
             <code>g615</code><span data-i18n="models.m615">ROG Strix SCAR 16 / Strix G16 (2025–2026) — G615, G635</span>
-            <em data-i18n="models.n615">2026 keeps the same codes</em>
+            <em data-i18n="models.n615">2026 keeps the same codes; the 2025 Chinese-market Strix G (魔霸新锐) is 4-zone RGB as well</em>
           </figcaption>
         </figure>
         <figure>
@@ -232,6 +232,12 @@
         The 幻16 line (Zephyrus M16 / G16 / Flow X16, <code>GU603</code>–<code>GV601</code>) has no
         NumberPad in any generation, so it stays out of the list; the dual-screen <code>GX650</code>
         does have one and is covered by <code>gx550</code>.
+      </p>
+      <p class="fine reveal" data-i18n="models.gate">
+        The pad itself has the last word. After the model code matches, the driver looks for HID FEATURE
+        report <code>0x0d</code> and refuses to start without it: a 4-zone RGB configuration of a listed
+        model shares the touchpad module but has no icon area, so nothing can be drawn on it — same code,
+        no hardware, and no software can supply it.
       </p>
       <p class="fine reveal" data-i18n="models.fine">
         The DMI model code is authoritative; marketing names are for orientation only. Pin a model with
@@ -416,8 +422,8 @@ asus-numpad --lang en check</code></pre>
           <p data-i18n="faq.2.d">Only while numpad mode is on. With <code>grab</code> off, clicks still reach the desktop; with <code>mixed_mode</code> on, keys and pointer work together once <code>/dev/uinput</code> is available.</p>
         </details>
         <details class="reveal">
-          <summary data-i18n="faq.3.q">My model is not in the table — will it work?</summary>
-          <p data-i18n="faq.3.d">A machine that matches no row is refused at startup: the gate exits with code 3 and prints the supported models, instead of running parameters meant for other hardware. <code>--sku</code> or <code>asus-numpad sku &lt;id&gt;</code> remains the way in, and <code>asus-numpad check</code> prints what to send along.</p>
+          <summary data-i18n="faq.3.q">My model is not in the table, or it has no NumberPad — will it work?</summary>
+          <p data-i18n="faq.3.d">A machine that matches no row is refused at startup: the gate exits with code 3 and prints the supported models, instead of running parameters meant for other hardware. <code>--sku</code> or <code>asus-numpad sku &lt;id&gt;</code> remains the way in, and <code>asus-numpad check</code> prints what to send along. A model that is in the table but has no pad stops at the same exit code 3: the driver reads HID FEATURE report <code>0x0d</code>, and a 4-zone RGB configuration does not carry one.</p>
         </details>
         <details class="reveal">
           <summary data-i18n="faq.4.q">Where is the signing key, and how do I check it?</summary>
