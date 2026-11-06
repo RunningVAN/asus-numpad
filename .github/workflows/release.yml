@@ -796,18 +796,26 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           V="${{ steps.ver.outputs.version }}"
+          # Release 说明只写本版要点：优先用 docs/release-notes/<版本>.md（手写一两句），
+          # 没写就退回 CHANGELOG 本版的小节标题。整份 CHANGELOG 上万字，绝不整份塞进 Release。
+          NOTES="$RUNNER_TEMP/notes.md"
+          if [ -f "docs/release-notes/$V.md" ]; then
+            cp "docs/release-notes/$V.md" "$NOTES"
+          elif [ -f CHANGELOG.md ]; then
+            bash tools/release-notes.sh "$V" "$NOTES"
+          else
+            echo "完整变更见 CHANGELOG。" > "$NOTES"
+          fi
+          cat "$NOTES"
           if gh release view "v$V" >/dev/null 2>&1; then
             gh release delete-asset "v$V" default.SRCINFO -y >/dev/null 2>&1 || true
             gh release upload "v$V" pkg/* --clobber
             # 重打 tag 时旧 Release 会失去 tag 关联、退化成草稿（网页上看不到），
-            # 这里强制把它绑回当前 tag 并置为已发布。
-            gh release edit "v$V" --tag "v$V" --draft=false
-          elif [ -f CHANGELOG.md ]; then
-            gh release create "v$V" pkg/* --title "asus-numpad $V" \
-              --notes-file CHANGELOG.md --target main
+            # 这里强制把它绑回当前 tag 并置为已发布；说明也随之一并刷新。
+            gh release edit "v$V" --tag "v$V" --draft=false --notes-file "$NOTES"
           else
             gh release create "v$V" pkg/* --title "asus-numpad $V" \
-              --generate-notes --target main
+              --notes-file "$NOTES" --target main
           fi
 
       - name: 把 repo/ 提交回 main
