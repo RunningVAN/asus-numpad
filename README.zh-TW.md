@@ -82,7 +82,7 @@ asus-numpad --dump-config  # 目前生效設定
 ```
 
 ```bash
-asus-numpad bright 0..3         # 檔位，0 為關（關閉跟隨）；上界由檔數決定
+asus-numpad bright 0..N         # 檔位，0 為關（關閉跟隨）；N 為檔數，預設 4
 asus-numpad bright up|down|cycle
 asus-numpad bright follow on|off
 asus-numpad bright status
@@ -131,7 +131,7 @@ asus-numpad --lang en check     # 僅本次生效
 
 | 機型 id | 機型與年份 | DMI 代號前綴 | 觸控板模組 | 鍵表 | 有配置不帶該硬體 |
 | --- | --- | --- | --- | --- | --- |
-| `g533` | Strix SCAR 15 / Strix G15，15 吋，2022 | `G533Z`、`G513R`——2021 代的 `G533Q` / `G513Q` / `G513I` 已排除 | `ASUE1403`、`ELAN1403` | `GH2XLNDZ` | Strix G15 2022 五個配置裡三個 |
+| `g533` | Strix SCAR 15 / Strix G15，15 吋，2022 | 前綴 `G533*`、`G513*`——2021 代的 `G533Q*` / `G513Q*` / `G513I*` 已排除 | `ASUE1403`、`ELAN1403` | `GH2XLNDZ` | Strix G15 2022 五個配置裡三個 |
 | `g614` | Strix SCAR 16 / Strix G16，16 吋，2023–2024 | `G614`、`G634` | `ASUE1416`、`ASUF1416` | `GH3XLNDZ` | Strix G16 2023 十個配置裡兩個 |
 | `g615` | Strix SCAR 16 / Strix G16，16 吋，2025–2026 | `G615`、`G635` | `ASCP1400`、`ASCF1400` | `GH4XLNDZ` | Strix G16 2025 二十五個配置裡一個 |
 | `gx550` | Zephyrus Duo 15 / Duo 15 SE / Duo 16（西風之神），側置觸控板，15–16 吋，2020–2023 | `GX550`、`GX551`、`GX650` | `ASUE1408`、`ASUE1404` | `GVM_A`、`GVM` | 官方列表中沒有 |

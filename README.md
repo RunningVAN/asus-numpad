@@ -89,7 +89,7 @@ asus-numpad --dump-config  # effective configuration
 ```
 
 ```bash
-asus-numpad bright 0..3         # step, 0 = off (follow disabled); the range ends at the step count
+asus-numpad bright 0..N         # step, 0 = off (follow disabled); N is the step count (4 by default)
 asus-numpad bright up|down|cycle
 asus-numpad bright follow on|off
 asus-numpad bright status
@@ -138,7 +138,7 @@ use vendor defaults.
 
 | Model id | Models and model year | DMI prefixes | Touchpad module | Keymap | Configurations without the hardware |
 | --- | --- | --- | --- | --- | --- |
-| `g533` | Strix SCAR 15 / Strix G15, 15", 2022 | `G533Z`, `G513R` — 2021 `G533Q` / `G513Q` / `G513I` excluded | `ASUE1403`, `ELAN1403` | `GH2XLNDZ` | 3 of 5 Strix G15 2022 |
+| `g533` | Strix SCAR 15 / Strix G15, 15", 2022 | prefix `G533*`, `G513*` — 2021 `G533Q*` / `G513Q*` / `G513I*` excluded | `ASUE1403`, `ELAN1403` | `GH2XLNDZ` | 3 of 5 Strix G15 2022 |
 | `g614` | Strix SCAR 16 / Strix G16, 16", 2023–2024 | `G614`, `G634` | `ASUE1416`, `ASUF1416` | `GH3XLNDZ` | 2 of 10 Strix G16 2023 |
 | `g615` | Strix SCAR 16 / Strix G16, 16", 2025–2026 | `G615`, `G635` | `ASCP1400`, `ASCF1400` | `GH4XLNDZ` | 1 of 25 Strix G16 2025 |
 | `gx550` | Zephyrus Duo 15 / Duo 15 SE / Duo 16, side-mounted, 15"–16", 2020–2023 | `GX550`, `GX551`, `GX650` | `ASUE1408`, `ASUE1404` | `GVM_A`, `GVM` | none in the official lists |
