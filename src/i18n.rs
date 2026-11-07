@@ -311,6 +311,20 @@ pub fn t(key: &str) -> String {
     catalog().get(key).to_string()
 }
 
+/// 取文案，键不存在时用调用方给的原文兜底。
+///
+/// 用于「文案本体由代码里的数据表带着、只有译文才放进语言文件」的场合：
+/// 例如机型展示名与判定依据，中文原文写在 `sku.rs` 的表里，
+/// `lang/*.lang` 只补译文；某份语言文件没翻译时应当显示原文，而不是裸键名。
+pub fn t_or(key: &str, fallback: &str) -> String {
+    let v = catalog().get(key);
+    if v == key {
+        fallback.to_string()
+    } else {
+        v.to_string()
+    }
+}
+
 /// 取文案并替换 `{name}` 占位符。
 pub fn tf(key: &str, args: &[(&str, &str)]) -> String {
     let mut text = t(key);
@@ -413,11 +427,10 @@ mod tests {
     fn missing_key_falls_back_to_english_then_key() {
         let c = Catalog::from_text(Lang::ZhTw, "only.here = 只有這一條\n");
         assert_eq!(c.get("only.here"), "只有這一條");
-        // 英文内置里有 bright.follow.on，繁体缺失时应回落到英文
-        assert_eq!(
-            c.get("bright.follow.on"),
-            Catalog::from_text(Lang::En, "").get("bright.follow.on")
-        );
+        // 英文内置里有 bright.follow_on，繁体缺这条时应回落到英文原文（不是键名）
+        let en = Catalog::from_text(Lang::En, "");
+        assert_eq!(c.get("bright.follow_on"), en.get("bright.follow_on"));
+        assert_ne!(c.get("bright.follow_on"), "bright.follow_on");
         assert_eq!(c.get("no.such.key.at.all"), "no.such.key.at.all");
     }
 

@@ -17,6 +17,10 @@
 //! 3. 触摸板模组名命中（[`SkuSource::Hardware`]）——DMI 写成占位串时的第二判据；
 //! 4. 都没命中 → 拒绝启动（退出码 `3`）：本包只跑机型表里的机器。
 //!
+//! 命中机型只是第一道闸门。表内也有不带这块硬件的配置（同型号的 4 区 RGB 版共用
+//! 同一块触摸板模组），所以启动前还要读触摸板 HID 描述符里的 FEATURE 报告 `0x0d`，
+//! 没有就同样退出码 `3`。读取失败属于权限问题，按「未知」放行而不是当成没有硬件。
+//!
 //! ## 认不出机型就拒绝启动
 //!
 //! 早期版本在「认不出」时落一套通用配置照常运行。那套兜底看起来体贴，实际是拿别人
@@ -50,8 +54,8 @@ pub struct Sku {
     /// DMI `product_name` 里出现的机型前缀；为空表示不做机型校验
     pub models: &'static [&'static str],
     /// 与 [`Sku::models`] 共用同一代号前缀、但**没有**该硬件的代际代号（如 `G513Q`
-    /// 之于 `G513`）。命中即判定这不是本配置的机器，不再参与 DMI 识别，继续走
-    /// 触摸板模组判据 / 通用配置。DMI 里没有年份字段，代际只能靠代号第三位字母区分。
+    /// 之于 `G513`）。命中即判定这不是本配置的机器，不参与 DMI 识别，改为继续走
+    /// 触摸板模组判据。DMI 里没有年份字段，代际只能靠代号第三位字母区分。
     pub excludes: &'static [&'static str],
     /// 该机型号对应的触摸板模组名（`ASUE1416` / `ASCP1400` …），与
     /// [`crate::layout::HID_LAYOUTS`] 的键同源。硬件层面的第二判据，见 [`HardwareProbe`]。
@@ -77,7 +81,7 @@ pub struct Sku {
 ///
 /// 不并入任何配置的机型：17 英寸 `G713`（机身自带物理数字键）与 ProArt P16
 /// `H7606`（触控板是 DialPad 智能旋钮）——这两类机器触控板里没有虚拟数字键盘，
-/// 认不到机型就落通用配置，运行期由布局闸门按实际模组决定动不动硬件。
+/// 因此不占表行，启动时按「不在支持列表」拒绝启动，不会套用别的机型的参数。
 ///
 /// 分组只影响「自动识别」的 DMI 白名单，运行期选哪套键表仍由实际 HID 模组名决定，
 /// 所以分组不改变保守性：模组不在 `HID_LAYOUTS` 里，照样拒绝启动。
@@ -93,7 +97,7 @@ pub const SKUS: &[Sku] = &[
         // 靠模组判据之外再按代际挡一道，免得识别成 g533 给出「这台有小键盘」的错觉。
         excludes: &["G533Q", "G513Q", "G513I"],
         modules: &["ASUE1403", "ELAN1403"],
-        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）。2022 代（枪神6 G533Z*、魔霸6 15 英寸 G513R*）才有 NumberPad；2021 代（G533Q* / G513Q* / G513I*）官方规格无此硬件，由 excludes 挡在识别之外，落通用配置。注意 2022 代也非全配：魔霸6 官方 5 个配置里 3 个是 4 区 RGB 版，无此硬件",
+        note: "模组 ASUE1403 / ELAN1403 → 键表 GH2XLNDZ（同族）。2022 代（枪神6 G533Z*、魔霸6 15 英寸 G513R*）才有 NumberPad；2021 代（G533Q* / G513Q* / G513I*）官方规格无此硬件，由 excludes 挡在识别之外，不并入本配置。注意 2022 代也非全配：魔霸6 官方 5 个配置里 3 个是 4 区 RGB 版，无此硬件",
     },
     Sku {
         id: "g614",
@@ -138,6 +142,21 @@ pub enum SkuSource {
     Dmi,
     /// 触摸板模组名命中（DMI 读不出型号时的第二判据）
     Hardware,
+}
+
+impl Sku {
+    /// 展示名：优先用 `sku.<id>.display` 的译文，该语言没翻译时回落到表里的中文原文。
+    ///
+    /// 机型说明是数据表里的常量，译文放在语言文件里；两边分开维护，避免为了
+    /// 加一种语言去改识别逻辑。
+    pub fn localized_display(&self) -> String {
+        crate::i18n::t_or(&format!("sku.{}.display", self.id), self.display)
+    }
+
+    /// 判定依据说明，回落规则同 [`Sku::localized_display`]。
+    pub fn localized_note(&self) -> String {
+        crate::i18n::t_or(&format!("sku.{}.note", self.id), self.note)
+    }
 }
 
 impl SkuSource {
@@ -309,15 +328,22 @@ fn dmi_hit(identity: &DmiIdentity) -> Option<(&'static Sku, &'static str)> {
     if pools.is_empty() {
         return None;
     }
+    // 各 DMI 字段的型号 token 只抽一次：之前抽在 matches_model 里，机型表每条 model
+    // 都要把所有字段重新切一遍，机型表长大后全是重复分配。
+    let tokens: Vec<Vec<String>> = pools.iter().map(|p| model_tokens(p)).collect();
     let mut best: Option<(&'static Sku, &'static str)> = None;
     for sku in SKUS.iter().filter(|s| !s.models.is_empty()) {
         // 代际排除优先于型号命中：同前缀的老代际机器没有这块硬件，不参与识别，
-        // 继续往下走触摸板模组判据 / 通用配置。
-        if sku.excludes.iter().any(|ex| matches_model(ex, &pools)) {
+        // 继续往下走触摸板模组判据。
+        if sku
+            .excludes
+            .iter()
+            .any(|ex| matches_model(ex, &pools, &tokens))
+        {
             continue;
         }
         for model in sku.models {
-            if !matches_model(model, &pools) {
+            if !matches_model(model, &pools, &tokens) {
                 continue;
             }
             let better = match best {
@@ -474,11 +500,6 @@ impl HardwareProbe {
         self.modules.is_empty()
     }
 
-    /// 本机硬件是否命中该机型的模组名单。
-    pub fn matches(&self, sku: &Sku) -> bool {
-        self.first_hit(sku).is_some()
-    }
-
     /// 命中的第一个模组名（用于日志输出「凭什么判定是它」）。
     pub fn first_hit(&self, sku: &Sku) -> Option<&str> {
         let hit = self.modules.iter().find(|m| {
@@ -489,18 +510,6 @@ impl HardwareProbe {
             })
         })?;
         Some(hit.as_str())
-    }
-
-    /// 本机挂着的触摸板模组里，第一个被 `HID_LAYOUTS` 收录的（即「确定的触摸板模组」）。
-    pub fn known_module(&self) -> Option<&str> {
-        self.modules
-            .iter()
-            .find(|m| {
-                crate::layout::HID_LAYOUTS
-                    .iter()
-                    .any(|(k, _)| k.eq_ignore_ascii_case(m.as_str()))
-            })
-            .map(String::as_str)
     }
 
     /// 供日志输出的一行硬件摘要。
@@ -641,20 +650,19 @@ pub fn model_tokens(text: &str) -> Vec<String> {
 ///   （`G614JY` / `G614JVR` 归 `G614`；`G6140` 不会被 `G614` 吃）；
 /// * 某个字段整串抽不出 token（纯营销名，如 `ROG STRIX SCAR 16`）→ 退回旧的
 ///   整体子串匹配，宁可宽松也不误判这种读不出代号的机器。
-fn matches_model(model: &str, pools: &[String]) -> bool {
+fn matches_model(model: &str, pools: &[String], pool_tokens: &[Vec<String>]) -> bool {
     let up = model.to_ascii_uppercase();
     if !up.is_ascii() || up.is_empty() {
         return pools.iter().any(|p| p.to_ascii_uppercase().contains(&up));
     }
-    for pool in pools {
-        let tokens = model_tokens(pool);
+    for (pool, tokens) in pools.iter().zip(pool_tokens.iter()) {
         if tokens.is_empty() {
             if pool.to_ascii_uppercase().contains(&up) {
                 return true;
             }
             continue;
         }
-        for tok in &tokens {
+        for tok in tokens {
             if tok == &up {
                 return true;
             }
@@ -694,6 +702,31 @@ fn identity_at(root: &Path) -> DmiIdentity {
 /// 读本机 DMI 身份（Linux `/sys/class/dmi/id/`，其它平台全部字段为 `None`）。
 ///
 /// 任一字段读不到都不影响其余字段——权限受限的容器里常见只有 `product_name` 可读。
+/// 本机机型能确定的唯一键表名。
+///
+/// 设备名里读不到 HID 模组 ID 时（`hid-generic` 命名、个别内核不上报前缀），键表就失去
+/// 了唯一依据。此时若 DMI 已把机型定下来，用该机型的模组表反查：**所有模组都指向同一套
+/// 键表**才返回它，指向多套说明这套参数不足以定键表，返回 `None` 让调用方回落默认。
+pub fn layout_name_for_local_machine(forced: Option<&str>) -> Option<&'static str> {
+    let resolved = resolve(&dmi_identity(), &probe_hardware(), forced).ok()?;
+    layout_name_for(resolved.sku)
+}
+
+/// 单个机型配置能否唯一确定键表（见 [`layout_name_for_local_machine`]）。
+pub fn layout_name_for(sku: &Sku) -> Option<&'static str> {
+    let mut names = sku
+        .modules
+        .iter()
+        .filter_map(|m| crate::layout::for_hid_id(m))
+        .map(|e| e.name);
+    let first = names.next()?;
+    if names.all(|n| n == first) {
+        Some(first)
+    } else {
+        None
+    }
+}
+
 pub fn dmi_identity() -> DmiIdentity {
     identity_at(Path::new("/sys"))
 }
@@ -701,16 +734,6 @@ pub fn dmi_identity() -> DmiIdentity {
 /// 从指定 sysfs 根目录读 DMI 身份（便于测试与容器内排查）。
 pub fn dmi_identity_at(root: &Path) -> DmiIdentity {
     identity_at(root)
-}
-
-/// 读本机 DMI 型号（Linux `/sys/class/dmi/id/product_name`，其它平台返回 `None`）。
-pub fn dmi_product_name() -> Option<String> {
-    dmi_identity().product_name
-}
-
-/// 从指定 sysfs 根目录读 DMI 型号（便于测试与容器内排查）。
-pub fn dmi_product_name_at(root: &Path) -> Option<String> {
-    dmi_identity_at(root).product_name
 }
 
 #[cfg(test)]
@@ -769,10 +792,35 @@ mod tests {
             // 没有 DMI 白名单的条目永远只能靠硬件判据命中，等于退化成兜底，不允许
             assert!(!s.models.is_empty(), "{} 必须有自己的 DMI 型号", s.id);
             assert!(!s.modules.is_empty(), "{} 必须绑定触摸板模组", s.id);
+            // 模组名与 layout::HID_LAYOUTS 的键同源，写错一个字母就等于该机型永远
+            // 走不到硬件判据
+            for m in s.modules {
+                assert!(
+                    crate::layout::for_hid_id(m).is_some(),
+                    "{} 的模组 {m} 不在 HID 布局表里",
+                    s.id
+                );
+            }
         }
         let known = known_ids();
         for id in ["g533", "g614", "g615", "gx550", "ux582"] {
             assert!(known.contains(&id), "{id} 应在机型表里");
+        }
+    }
+
+    /// 设备名读不到模组 ID 时的键表反查：只有模组全指向同一套键表才给结果。
+    #[test]
+    fn sku_pins_layout_only_when_modules_agree() {
+        for (id, want) in [
+            ("g614", Some("GH3XLNDZ")),
+            ("g615", Some("GH4XLNDZ")),
+            ("g533", Some("GH2XLNDZ")),
+            ("ux582", Some("NVM")),
+            // 两代冰刃双屏模组分别指向 GVM_A / GVM，反查没有唯一答案，必须回落默认
+            ("gx550", None),
+        ] {
+            let sku = by_id(id).expect("机型必须在表内");
+            assert_eq!(layout_name_for(sku), want, "{id} 的键表反查结果不对");
         }
     }
 
@@ -1052,7 +1100,7 @@ mod tests {
 
         // 读到并去掉换行
         assert_eq!(
-            dmi_product_name_at(&root).as_deref(),
+            dmi_identity_at(&root).product_name.as_deref(),
             Some("ROG Strix SCAR 16 G634JY_G634JY")
         );
         // 只有 product_name 时也能自动选中对应配置
@@ -1061,9 +1109,109 @@ mod tests {
 
         // 空文件视为未知：拒绝启动
         std::fs::write(dir.join("product_name"), "  \n").unwrap();
-        assert_eq!(dmi_product_name_at(&root), None);
+        assert_eq!(dmi_identity_at(&root).product_name, None);
         assert!(resolve(&no_identity(), &no_hw(), None).is_err());
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+    /// 机型表与布局表必须对得上：每个 `modules` 都要在官方 HID 名表里，
+    /// 且映射到的键表真实存在。两张表分别维护，任何一边改名而另一边忘了跟，
+    /// 表现就是「机型识别过了，布局却落到 fallback」。
+    #[test]
+    fn sku_modules_all_known_to_layout_table() {
+        for sku in SKUS {
+            for module in sku.modules {
+                let layout = crate::layout::HID_LAYOUTS
+                    .iter()
+                    .find(|(hid, _)| hid == module)
+                    .map(|(_, name)| *name)
+                    .unwrap_or_else(|| panic!("{}: 模组 {} 不在 HID_LAYOUTS 里", sku.id, module));
+                assert!(
+                    crate::layout::LAYOUTS.iter().any(|e| e.name == layout),
+                    "{}: 模组 {} 映射到 {}，但 LAYOUTS 里没有这套键表",
+                    sku.id,
+                    module,
+                    layout
+                );
+            }
+        }
+    }
+
+    /// 机型表的 id 唯一、识别依据不为空：id 是全表主键（配置文件与 `--sku` 都按它取值）。
+    #[test]
+    fn sku_ids_unique_and_identifiable() {
+        let mut seen = std::collections::HashSet::new();
+        for sku in SKUS {
+            assert!(!sku.id.is_empty(), "机型 id 不能为空");
+            assert!(seen.insert(sku.id), "机型 id 重复：{}", sku.id);
+            assert!(
+                !sku.models.is_empty() || !sku.modules.is_empty(),
+                "{}: 型号与模组都为空，这条配置永远不会被识别到",
+                sku.id
+            );
+            assert!(!sku.display.is_empty(), "{}: 缺少展示名", sku.id);
+            assert!(!sku.note.is_empty(), "{}: 缺少判定依据说明", sku.id);
+        }
+    }
+    /// 三语里的机型文案必须覆盖每个机型：漏一条，那个机型在对应语言下就只剩原文。
+    #[test]
+    fn sku_texts_present_in_all_languages() {
+        for (lang, embed) in [
+            ("zh_CN", crate::i18n::EMBED_ZH_CN),
+            ("zh_TW", crate::i18n::EMBED_ZH_TW),
+            ("en", crate::i18n::EMBED_EN),
+        ] {
+            let map = crate::i18n::parse_lang_text(embed);
+            for sku in SKUS {
+                for field in ["display", "note"] {
+                    let key = format!("sku.{}.{}", sku.id, field);
+                    let value = map.get(&key).unwrap_or_else(|| panic!("{lang} 缺少 {key}"));
+                    assert!(!value.trim().is_empty(), "{lang} 的 {key} 是空文案");
+                }
+            }
+        }
+    }
+
+    /// 简体中文那份必须与表里的原文一字不差：改识别结论时若只改一边，
+    /// 中文用户看到的还是旧说法，英文用户反而先更新。
+    #[test]
+    fn zh_cn_texts_match_table_verbatim() {
+        let map = crate::i18n::parse_lang_text(crate::i18n::EMBED_ZH_CN);
+        for sku in SKUS {
+            assert_eq!(
+                map.get(&format!("sku.{}.display", sku.id))
+                    .map(|s| s.as_str()),
+                Some(sku.display),
+                "{}: zh_CN 展示名与表内原文不一致",
+                sku.id
+            );
+            assert_eq!(
+                map.get(&format!("sku.{}.note", sku.id)).map(|s| s.as_str()),
+                Some(sku.note),
+                "{}: zh_CN 判定依据与表内原文不一致",
+                sku.id
+            );
+        }
+    }
+
+    /// 英文那份不能还是中文：漏翻一行，英文用户就会看到中文机型说明。
+    #[test]
+    fn english_texts_are_actually_translated() {
+        let map = crate::i18n::parse_lang_text(crate::i18n::EMBED_EN);
+        for sku in SKUS {
+            for field in ["display", "note"] {
+                let key = format!("sku.{}.{}", sku.id, field);
+                let value = map.get(&key).expect("英文缺键");
+                let han = value
+                    .chars()
+                    .filter(|c| ('\u{4e00}'..='\u{9fff}').contains(c))
+                    .count();
+                // 机型的中文产品名（枪神/魔霸新锐等）可以保留，整句都中文就不行
+                assert!(
+                    han * 10 < value.chars().count(),
+                    "{key} 中文占比过高，像是没翻译：{value}"
+                );
+            }
+        }
     }
 }
