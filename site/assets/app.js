@@ -9,6 +9,7 @@
     "nav.features": "特性",
     "nav.how": "原理",
     "nav.models": "机型",
+    "nav.usage": "命令",
     "nav.install": "安装",
     "nav.faq": "问答",
 
@@ -20,6 +21,10 @@
     "hero.cta2": "下载安装包",
     "hero.note": "一条命令识别发行版、导入公钥并安装；逐步命令见<a href=\"#install\">安装</a>。",
     "copy": "复制",
+    "theme.toggle": "切换主题",
+    "a11y.skip": "跳到正文",
+    "a11y.nav": "主导航",
+    "a11y.code": "安装命令",
 
     "strip.label": "已打包适配",
 
@@ -47,7 +52,7 @@
     "how.3.t": "注入按键",
     "how.3.d": "通过 uinput 建立虚拟键盘并发出 KP_* 事件；背光字节随后经 hidraw 或 i2c 写出。",
 
-    "models.m533": "枪神6 / 魔霸6，15 英寸（2022）：G533Z、G513R",
+    "models.m533": "枪神6 / 魔霸6，15 英寸（2022）：G533*、G513*",
     "models.m614": "枪神7 及超竞版、枪神8 及超竞版，16 英寸（2023–2024）：G614、G634",
     "models.m615": "枪神9 及超竞版、枪神10 及超竞版，16 英寸（2025–2026）：G615、G635",
     "models.mgx": "冰刃双屏、冰刃 6 双屏、冰刃 7 双屏（Duo 15 / Duo 15 SE / Duo 16，2020–2023）：GX550、GX551、GX650",
@@ -108,7 +113,7 @@
     "foot.machines": "机型说明",
     "foot.docs": "文档",
     "foot.install": "安装指南",
-    "foot.verify": "验证记录",
+    "foot.verify": "发布记录",
     "foot.right": "© 2026 asus-numpad · GPL-3.0-or-later"
   };
 
@@ -116,6 +121,7 @@
     "nav.features": "功能",
     "nav.how": "原理",
     "nav.models": "機型",
+    "nav.usage": "指令",
     "nav.install": "安裝",
     "nav.faq": "問答",
 
@@ -127,6 +133,10 @@
     "hero.cta2": "下載套件",
     "hero.note": "一行指令會辨識發行版、匯入公鑰並安裝；逐步指令見<a href=\"#install\">安裝</a>。",
     "copy": "複製",
+    "theme.toggle": "切換主題",
+    "a11y.skip": "跳至正文",
+    "a11y.nav": "主導覽",
+    "a11y.code": "安裝指令",
 
     "strip.label": "已打包適配",
 
@@ -154,7 +164,7 @@
     "how.3.t": "注入按鍵",
     "how.3.d": "透過 uinput 建立虛擬鍵盤並送出 KP_* 事件；背光位元組接著經 hidraw 或 i2c 寫出。",
 
-    "models.m533": "ROG Strix SCAR 15 / Strix G15，15 吋（2022）：G533Z、G513R",
+    "models.m533": "ROG Strix SCAR 15 / Strix G15，15 吋（2022）：G533*、G513*",
     "models.m614": "ROG Strix SCAR 16 / Strix G16，16 吋（2023–2024）：G614、G634",
     "models.m615": "ROG Strix SCAR 16 / Strix G16，16 吋（2025–2026）：G615、G635",
     "models.mgx": "ROG Zephyrus Duo 15 / Duo 15 SE / Duo 16（西風之神，2020–2023）：GX550、GX551、GX650",
@@ -214,20 +224,26 @@
     "foot.machines": "機型說明",
     "foot.docs": "文件",
     "foot.install": "安裝指南",
-    "foot.verify": "驗證記錄",
+    "foot.verify": "發佈記錄",
     "foot.right": "© 2026 asus-numpad · GPL-3.0-or-later"
   };
 
   var I18N = { en: {}, "zh-CN": ZH_CN, "zh-TW": ZH_TW };
   var zhNodes = document.querySelectorAll("[data-i18n]");
+  var ariaNodes = document.querySelectorAll("[data-i18n-aria]");
   // snapshot the English source text once
   zhNodes.forEach(function (el) { I18N.en[el.dataset.i18n] = el.innerHTML; });
+  /* keys that exist only as JS-side labels (no markup node to snapshot) */
+  I18N.en["theme.toggle"] = "Toggle theme";
+  /* 只出现在 aria-label 上的键：标签文字是符号，没有可快照的可见文本 */
+  I18N.en["a11y.nav"] = "Main";
+  I18N.en["a11y.code"] = "Install command";
 
   var LANGS = ["en", "zh-CN", "zh-TW"];
   var LANG_LABEL = { en: "中", "zh-CN": "繁", "zh-TW": "EN" };
   var LANG_TITLE = {
-    en: "切換到简体中文",
-    "zh-CN": "切換到繁體中文",
+    en: "切换到简体中文",
+    "zh-CN": "切换到繁体中文",
     "zh-TW": "Switch to English"
   };
 
@@ -252,8 +268,20 @@
       var v = dict[key] != null ? dict[key] : I18N.en[key];
       if (v != null) el.innerHTML = v;
     });
+    ariaNodes.forEach(function (el) {
+      var key = el.dataset.i18nAria;
+      var v = dict[key] != null ? dict[key] : I18N.en[key];
+      if (v != null) el.setAttribute("aria-label", v);
+    });
+    var themeBtnEl = document.getElementById("theme-toggle");
+    if (themeBtnEl) {
+      var themeLabel = dict["theme.toggle"] || I18N.en["theme.toggle"];
+      themeBtnEl.title = themeLabel;
+      themeBtnEl.setAttribute("aria-label", themeLabel);
+    }
     langBtn.textContent = LANG_LABEL[next];
     langBtn.title = LANG_TITLE[next];
+    langBtn.setAttribute("aria-label", LANG_TITLE[next]);
     try { localStorage.setItem("an-lang", next); } catch (e) {}
   }
   langBtn.addEventListener("click", function () {
@@ -262,29 +290,59 @@
   applyLang(lang);
 
   /* ---------------- theme ---------------- */
+  /* 没手动选过就跟随系统（首屏那一下由 <head> 里的内联脚本先定好，不会闪）；
+     点过开关才写 localStorage，写完之后不再跟系统走。 */
+  var THEME_KEY = "an-theme";
   var themeBtn = document.getElementById("theme-toggle");
-  var theme = null;
-  try { theme = localStorage.getItem("an-theme"); } catch (e) {}
-  document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
-  themeBtn.addEventListener("click", function () {
-    var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  var darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  function savedTheme() {
+    var v = null;
+    try { v = localStorage.getItem(THEME_KEY); } catch (e) {}
+    return v === "light" || v === "dark" ? v : null;
+  }
+  function applyTheme(next, remember) {
     document.documentElement.setAttribute("data-theme", next);
-    try { localStorage.setItem("an-theme", next); } catch (e) {}
+    if (remember) {
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    }
+  }
+  var known = savedTheme();
+  applyTheme(known || (darkQuery.matches ? "dark" : "light"), false);
+  themeBtn.addEventListener("click", function () {
+    var now = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    applyTheme(now, true);
   });
+  function onSystemTheme(e) {
+    if (savedTheme()) return;
+    applyTheme(e.matches ? "dark" : "light", false);
+  }
+  if (darkQuery.addEventListener) darkQuery.addEventListener("change", onSystemTheme);
 
   /* ---------------- numpad visual ---------------- */
-  var keys = ["NumLk", "/", "*", "-", "7", "8", "9", "+", "4", "5", "6", "+", "1", "2", "3", "Ent", "0", "00", ".", "Ent"];
+  /* 与驱动里的键表一致：5 列 4 行，右上角是 NumLock 图标区，0 横跨两列、
+     回车纵跨两行（layout.rs 的 KEY_GRID）。 */
+  var padLayout = [
+    { t: "7" }, { t: "8" }, { t: "9" }, { t: "/" }, { t: "\u25c9", icon: true },
+    { t: "4" }, { t: "5" }, { t: "6" }, { t: "*" }, { t: "\u232b" },
+    { t: "1" }, { t: "2" }, { t: "3" }, { t: "-" }, { t: "\u21b5", tall: true },
+    { t: "0", wide: true }, { t: "." }, { t: "+" }
+  ];
   var grid = document.getElementById("pad-grid");
   if (grid) {
-    keys.forEach(function (k, i) {
+    padLayout.forEach(function (c, i) {
       var d = document.createElement("div");
-      d.className = "cell" + (k.length > 1 ? " op" : "");
-      d.textContent = k;
+      d.className =
+        "cell" +
+        (c.icon ? " icon" : "") +
+        (c.wide ? " wide" : "") +
+        (c.tall ? " tall" : "") +
+        (/[0-9]/.test(c.t) ? "" : " op");
+      d.textContent = c.t;
       d.dataset.i = i;
       grid.appendChild(d);
     });
     var cells = grid.children;
-    var seq = [0, 4, 9, 13, 17, 18, 15, 11, 6, 2];
+    var seq = [0, 5, 10, 15, 16, 17, 13, 8, 3, 1];
     var step = 0;
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setInterval(function () {
@@ -345,23 +403,55 @@
   }
 
   /* ---------------- quick tabs ---------------- */
-  var qtabs = document.querySelectorAll(".qtab");
-  qtabs.forEach(function (t) {
-    t.addEventListener("click", function () {
-      qtabs.forEach(function (x) { x.classList.toggle("active", x === t); });
-      document.querySelectorAll("[data-qt-body]").forEach(function (b) {
-        b.classList.toggle("hidden", b.dataset.qtBody !== t.dataset.qt);
-      });
+  var qtabs = [].slice.call(document.querySelectorAll(".qtab"));
+  function selectQuick(t) {
+    qtabs.forEach(function (x) {
+      var on = x === t;
+      x.classList.toggle("active", on);
+      x.setAttribute("aria-pressed", on ? "true" : "false");
+      x.tabIndex = on ? 0 : -1;
     });
+    document.querySelectorAll("[data-qt-body]").forEach(function (b) {
+      b.classList.toggle("hidden", b.dataset.qtBody !== t.dataset.qt);
+    });
+  }
+  qtabs.forEach(function (t) {
+    t.addEventListener("click", function () { selectQuick(t); });
   });
 
   /* ---------------- install tabs ---------------- */
-  var tabs = document.querySelectorAll(".tab");
+  var tabs = [].slice.call(document.querySelectorAll(".tab"));
+  function selectTab(t) {
+    tabs.forEach(function (x) {
+      var on = x === t;
+      x.classList.toggle("active", on);
+      x.setAttribute("aria-selected", on ? "true" : "false");
+      x.tabIndex = on ? 0 : -1;
+    });
+    document.querySelectorAll("[data-pane]").forEach(function (p) {
+      p.classList.toggle("hidden", p.dataset.pane !== t.dataset.tab);
+    });
+  }
   tabs.forEach(function (t) {
-    t.addEventListener("click", function () {
-      tabs.forEach(function (x) { x.classList.toggle("active", x === t); });
-      document.querySelectorAll("[data-pane]").forEach(function (p) {
-        p.classList.toggle("hidden", p.dataset.pane !== t.dataset.tab);
+    t.addEventListener("click", function () { selectTab(t); });
+  });
+  /* 先按当前选中项摆正 roving tabindex，否则 Tab 会依次停在所有未选中的标签上 */
+  selectQuick(document.querySelector(".qtab.active") || qtabs[0]);
+  selectTab(document.querySelector(".tab.active") || tabs[0]);
+
+  /* 标签页按方向键在选项之间移动，Home / End 跳首尾 */
+  [qtabs, tabs].forEach(function (group) {
+    group.forEach(function (t, i) {
+      t.addEventListener("keydown", function (e) {
+        var to = -1;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") to = (i + 1) % group.length;
+        else if (e.key === "ArrowLeft" || e.key === "ArrowUp") to = (i - 1 + group.length) % group.length;
+        else if (e.key === "Home") to = 0;
+        else if (e.key === "End") to = group.length - 1;
+        if (to < 0) return;
+        e.preventDefault();
+        group[to].focus();
+        group[to].click();
       });
     });
   });

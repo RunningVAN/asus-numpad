@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,9 +10,22 @@
 <meta property="og:type" content="website">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <script>document.documentElement.classList.add('js')</script>
-<link rel="stylesheet" href="assets/style.css">
+<script>
+    /* 首帧前定主题：手动选过就用手动值，没选过跟随系统 */
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("an-theme"); } catch (e) {}
+      if (saved !== "light" && saved !== "dark") {
+        saved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      document.documentElement.setAttribute("data-theme", saved);
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
+
+<a class="skip-link" href="#top" data-i18n="a11y.skip">Skip to content</a>
 
 <header class="nav" id="nav">
   <div class="nav-inner">
@@ -21,12 +34,13 @@
         <svg viewBox="0 0 24 24" fill="none"><rect x="2.5" y="4.5" width="19" height="15" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M8 10h2M14 10h2M8 14.5h2M14 14.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
       </span>
       <span class="brand-name">asus-numpad</span>
-      <span class="brand-tag">1.0.2</span>
+      <span class="brand-tag">1.0.3</span>
     </a>
-    <nav class="nav-links" aria-label="Main">
+    <nav class="nav-links" aria-label="Main" data-i18n-aria="a11y.nav">
       <a href="#features" data-i18n="nav.features">Features</a>
       <a href="#how" data-i18n="nav.how">How it works</a>
       <a href="#models" data-i18n="nav.models">Models</a>
+      <a href="#usage" data-i18n="nav.usage">Commands</a>
       <a href="#install" data-i18n="nav.install">Install</a>
       <a href="#faq" data-i18n="nav.faq">FAQ</a>
     </nav>
@@ -65,14 +79,14 @@
           <a class="btn btn-ghost" href="https://github.com/asus-numpad/asus-numpad/releases" target="_blank" rel="noopener" data-i18n="hero.cta2">Download packages</a>
         </div>
         <div class="quick-cmd" role="group" aria-label="Quick install">
-          <div class="quick-tabs" role="tablist">
-            <button class="qtab active" role="tab" data-qt="sh">apt / dnf / zypper / pacman / apk</button>
-            <button class="qtab" role="tab" data-qt="nix">Nix</button>
+          <div class="quick-tabs">
+            <button class="qtab active" type="button" aria-pressed="true" data-qt="sh">apt / dnf / zypper / pacman / apk</button>
+            <button class="qtab" type="button" aria-pressed="false" data-qt="nix">Nix</button>
           </div>
           <div class="quick-body">
-            <pre class="qcode" data-qt-body="sh"><code>curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/install.sh | sudo sh</code></pre>
-            <pre class="qcode hidden" data-qt-body="nix"><code>nix run github:asus-numpad/asus-numpad</code></pre>
-            <button class="copy-btn" type="button" aria-label="Copy"><span data-i18n="copy">Copy</span></button>
+            <pre class="qcode" role="group" aria-label="Install command" data-i18n-aria="a11y.code" data-qt-body="sh"><code>curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/install.sh | sudo sh</code></pre>
+            <pre class="qcode hidden" role="group" aria-label="Install command" data-i18n-aria="a11y.code" data-qt-body="nix"><code>nix run github:asus-numpad/asus-numpad</code></pre>
+            <button class="copy-btn" type="button" aria-label="Copy" data-i18n-aria="copy"><span data-i18n="copy">Copy</span></button>
           </div>
           <p class="quick-note" data-i18n="hero.note">Add the repository once — see <a href="#install">Install</a> for the one-liner.</p>
         </div>
@@ -83,7 +97,7 @@
           <div class="pad-head">
             <span class="pad-led"></span>
             <span class="pad-title">NumLock</span>
-            <span class="pad-cells">5×4</span>
+            <span class="pad-cells">5 cols · 4 rows</span>
           </div>
           <div class="pad-grid" id="pad-grid"></div>
           <div class="pad-foot">
@@ -174,11 +188,10 @@
       <div class="term reveal">
         <div class="term-bar"><span></span><span></span><span></span><em>asus-numpad check</em></div>
         <pre><code><span class="t-dim">$</span> asus-numpad check
-<span class="t-ok">ok</span>   touchpad      ASUE1416 / 04F3:3275  (i2c-hid)
-<span class="t-ok">ok</span>   model         g614  (DMI product_name G634JY)
-<span class="t-ok">ok</span>   layout        hid-asue1416  verified
-<span class="t-ok">ok</span>   backlight     hidraw FEATURE 0x0d, 4 steps
-<span class="t-dim">     grab          on · numlock sync · calc gesture long press</span></code></pre>
+Device: touchpad detected, using real resolution
+Config summary: layout=GH3XLNDZ key_mode=numpad hold 62 frames=496ms idle 120s mixed=auto numlock=auto
+Backlight channel hidraw (FEATURE 0x0d, 4 steps)
+<span class="t-ok">Conclusion: config and geometry are self-consistent.</span></code></pre>
       </div>
     </div>
   </section>
@@ -194,7 +207,7 @@
         <figure>
           <img src="assets/models/g533.webp" alt="ROG Strix SCAR 15 / G15 (2022)" width="900" height="645" decoding="async">
           <figcaption>
-            <code>g533</code><span data-i18n="models.m533">ROG Strix SCAR 15 / Strix G15 (2022): G533Z, G513R</span>
+            <code>g533</code><span data-i18n="models.m533">ROG Strix SCAR 15 / Strix G15 (2022): G533*, G513*</span>
             <em data-i18n="models.n533">2021 variants ship without a NumberPad and are not matched</em>
           </figcaption>
         </figure>
@@ -255,15 +268,15 @@
 
       <div class="install reveal">
         <div class="tabs" role="tablist">
-          <button class="tab active" role="tab" data-tab="apt">apt</button>
-          <button class="tab" role="tab" data-tab="dnf">dnf</button>
-          <button class="tab" role="tab" data-tab="zypper">zypper</button>
-          <button class="tab" role="tab" data-tab="pacman">pacman</button>
-          <button class="tab" role="tab" data-tab="apk">apk</button>
-          <button class="tab" role="tab" data-tab="nix">nix</button>
+          <button class="tab active" role="tab" id="tab-apt" aria-selected="true" aria-controls="pane-apt" data-tab="apt">apt</button>
+          <button class="tab" role="tab" id="tab-dnf" aria-selected="false" aria-controls="pane-dnf" data-tab="dnf">dnf</button>
+          <button class="tab" role="tab" id="tab-zypper" aria-selected="false" aria-controls="pane-zypper" data-tab="zypper">zypper</button>
+          <button class="tab" role="tab" id="tab-pacman" aria-selected="false" aria-controls="pane-pacman" data-tab="pacman">pacman</button>
+          <button class="tab" role="tab" id="tab-apk" aria-selected="false" aria-controls="pane-apk" data-tab="apk">apk</button>
+          <button class="tab" role="tab" id="tab-nix" aria-selected="false" aria-controls="pane-nix" data-tab="nix">nix</button>
         </div>
 
-        <div class="pane" data-pane="apt">
+        <div class="pane" role="tabpanel" id="pane-apt" aria-labelledby="tab-apt" data-pane="apt">
           <p class="pane-note" data-i18n="inst.apt.n">Debian 12/13, Ubuntu 22.04–24.04, Mint 21+</p>
           <pre><code>sudo install -d -m 0755 /usr/share/keyrings
 curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.gpg \
@@ -274,7 +287,7 @@ sudo apt update
 sudo apt install asus-numpad</code></pre>
         </div>
 
-        <div class="pane hidden" data-pane="dnf">
+        <div class="pane hidden" role="tabpanel" id="pane-dnf" aria-labelledby="tab-dnf" data-pane="dnf">
           <p class="pane-note" data-i18n="inst.dnf.n">Fedora, RHEL / Rocky / Alma 9–10</p>
           <pre><code>sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
 sudo tee /etc/yum.repos.d/asus-numpad.repo &gt;/dev/null &lt;&lt;'EOF'
@@ -289,7 +302,7 @@ EOF
 sudo dnf install asus-numpad</code></pre>
         </div>
 
-        <div class="pane hidden" data-pane="zypper">
+        <div class="pane hidden" role="tabpanel" id="pane-zypper" aria-labelledby="tab-zypper" data-pane="zypper">
           <p class="pane-note" data-i18n="inst.zypper.n">openSUSE Leap 16 and Tumbleweed read the same rpm-md repo</p>
           <pre><code>sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
 sudo tee /etc/zypp/repos.d/asus-numpad.repo &gt;/dev/null &lt;&lt;'EOF'
@@ -307,7 +320,7 @@ sudo zypper refresh asus-numpad
 sudo zypper install asus-numpad</code></pre>
         </div>
 
-        <div class="pane hidden" data-pane="pacman">
+        <div class="pane hidden" role="tabpanel" id="pane-pacman" aria-labelledby="tab-pacman" data-pane="pacman">
           <p class="pane-note" data-i18n="inst.pacman.n">Arch, Manjaro, EndeavourOS — AUR source package is <code>asus-numpad-rs</code></p>
           <pre><code>curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc -o /tmp/asus-numpad.asc
 sudo pacman-key --add /tmp/asus-numpad.asc
@@ -321,7 +334,7 @@ EOF
 sudo pacman -Syu asus-numpad</code></pre>
         </div>
 
-        <div class="pane hidden" data-pane="apk">
+        <div class="pane hidden" role="tabpanel" id="pane-apk" aria-labelledby="tab-apk" data-pane="apk">
           <p class="pane-note" data-i18n="inst.apk.n">Alpine 3.19+ (musl build)</p>
           <pre><code>curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
   | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub &gt;/dev/null
@@ -330,7 +343,7 @@ sudo apk update
 sudo apk add asus-numpad</code></pre>
         </div>
 
-        <div class="pane hidden" data-pane="nix">
+        <div class="pane hidden" role="tabpanel" id="pane-nix" aria-labelledby="tab-nix" data-pane="nix">
           <p class="pane-note" data-i18n="inst.nix.n">Flake, no repo needed</p>
           <pre><code>nix run github:asus-numpad/asus-numpad
 
@@ -462,14 +475,14 @@ asus-numpad --lang en check</code></pre>
         <h4 data-i18n="foot.docs">Docs</h4>
         <a href="https://github.com/asus-numpad/asus-numpad#readme" target="_blank" rel="noopener">README</a>
         <a href="https://github.com/asus-numpad/asus-numpad/blob/main/docs/install.md" target="_blank" rel="noopener" data-i18n="foot.install">Install guide</a>
-        <a href="https://github.com/asus-numpad/asus-numpad/blob/main/docs/verification.md" target="_blank" rel="noopener" data-i18n="foot.verify">Verification log</a>
+        <a href="https://github.com/asus-numpad/asus-numpad/blob/main/docs/release-notes/1.0.3.md" target="_blank" rel="noopener" data-i18n="foot.verify">Release notes</a>
         <a href="https://github.com/asus-numpad/asus-numpad/blob/main/README.zh-CN.md" target="_blank" rel="noopener" hreflang="zh-Hans">README · 简体</a>
         <a href="https://github.com/asus-numpad/asus-numpad/blob/main/README.zh-TW.md" target="_blank" rel="noopener" hreflang="zh-Hant">README · 繁體</a>
       </div>
     </div>
     <div class="wrap foot-bottom">
       <span data-i18n="foot.right">© 2026 asus-numpad · GPL-3.0-or-later</span>
-      <span class="foot-src">site/index.html · 1.0.2</span>
+      <span class="foot-src">site/index.html · 1.0.3</span>
     </div>
   </footer>
 

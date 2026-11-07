@@ -5,6 +5,10 @@
 :root {
   --accent: #ff2d55;
   --accent-2: #ff6b3d;
+  /* 按钮底色与强调色分开：强调色要亮，按钮要能压住白字（≥5:1） */
+  --btn-a: #d81b45;
+  --btn-b: #b3123a;
+  --ok: #34d399;
   --radius: 14px;
   --maxw: 1120px;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Noto Sans SC",
@@ -22,10 +26,13 @@ html[data-theme="dark"] {
   --line-strong: rgba(255, 255, 255, .16);
   --text: #eceef4;
   --text-2: #a9adba;
-  --text-3: #6f7484;
+  /* 次要文字要压住 4.5:1：最深底 #23252b 上 #6f7484 只有 3.3:1 */
+  --text-3: #8f95a4;
   --code-bg: rgba(0, 0, 0, .42);
   --shadow: 0 24px 60px -30px rgba(0, 0, 0, .9);
   --glow: radial-gradient(60% 60% at 50% 0%, rgba(255, 45, 85, .22), transparent 70%);
+  /* 焦点环要在 #0a0b0f 上可见：品牌红在此底色只有 2.8:1 */
+  --focus: #ff8fa3;
   color-scheme: dark;
 }
 
@@ -38,10 +45,18 @@ html[data-theme="light"] {
   --line-strong: rgba(16, 18, 27, .2);
   --text: #14161f;
   --text-2: #4d5262;
-  --text-3: #7d8290;
+  /* 亮色下深一档：正文灰在 #fff 上要达到 4.5:1 */
+  --text-3: #5f6470;
   --code-bg: rgba(16, 18, 27, .05);
   --shadow: 0 20px 50px -30px rgba(20, 22, 31, .35);
-  --glow: radial-gradient(60% 60% at 50% 0%, rgba(255, 45, 85, .12), transparent 70%);
+  --glow: radial-gradient(60% 60% at 50% 0%, rgba(216, 27, 69, .12), transparent 70%);
+  /* 品牌红在浅底上压到 4.6:1，绿色成功态同理 */
+  --accent: #b8163c;
+  --accent-2: #a1300b;
+  --btn-a: #c0143c;
+  --btn-b: #9c0f30;
+  --ok: #047857;
+  --focus: #b8163c;
   color-scheme: light;
 }
 
@@ -61,6 +76,31 @@ body {
 }
 
 a { color: inherit; text-decoration: none; }
+
+/* 键盘操作时焦点必须可见：站点的可交互元素此前只有鼠标悬停反馈 */
+:where(a, button, [role="tab"], summary, pre):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 跳转链接：只在键盘聚焦时出现，跳过顶部导航直达正文 */
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  z-index: 100;
+  transform: translate(-50%, -200%);
+  padding: 10px 18px;
+  border-radius: 9px;
+  background: var(--bg-alt);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  transition: transform .18s var(--ease);
+}
+.skip-link:focus-visible { transform: translate(-50%, 0); }
 
 code {
   font-family: var(--mono);
@@ -112,7 +152,7 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -.022em; margin: 0; font-weig
 .brand-name { font-size: 15.5px; }
 .brand-tag {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-3);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -164,7 +204,7 @@ html[data-theme="light"] .ic-moon { display: none; }
 .btn svg { width: 15px; height: 15px; }
 .btn-sm { padding: 7px 13px; font-size: 13px; }
 .btn-primary {
-  background: linear-gradient(180deg, var(--accent), #e11d43);
+  background: linear-gradient(180deg, var(--btn-a), var(--btn-b));
   color: #fff;
   box-shadow: 0 8px 24px -12px rgba(255, 45, 85, .9);
 }
@@ -241,12 +281,13 @@ h1 .grad {
 .qtab:hover { color: var(--text-2); }
 .qtab.active { color: var(--text); border-bottom-color: var(--accent); }
 
-.quick-body { position: relative; }
-.qcode { margin: 0; padding: 15px 88px 15px 16px; background: var(--code-bg); font-family: var(--mono); font-size: 13px; overflow-x: auto; }
+.quick-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.qcode { grid-column: 1; margin: 0; padding: 15px 16px; background: var(--code-bg); font-family: var(--mono); font-size: 13px; overflow-x: auto; }
 .qcode code { background: none; padding: 0; color: var(--text); white-space: pre; }
 
 .copy-btn {
-  position: absolute; top: 9px; right: 9px;
+  grid-column: 2; margin: 0 12px;
+  position: static;
   font: 600 11.5px/1 var(--font);
   color: var(--text-2);
   background: var(--surface-2);
@@ -257,7 +298,7 @@ h1 .grad {
   transition: color .18s, border-color .18s, background .18s;
 }
 .copy-btn:hover { color: var(--text); border-color: var(--line-strong); }
-.copy-btn.done { color: #34d399; border-color: rgba(52, 211, 153, .45); }
+.copy-btn.done { color: var(--ok); border-color: var(--ok); }
 
 .quick-note { margin: 0; padding: 9px 16px 12px; font-size: 12.5px; color: var(--text-3); }
 .quick-note a { color: var(--accent); border-bottom: 1px solid rgba(255, 45, 85, .35); }
@@ -288,7 +329,7 @@ h1 .grad {
 
 .pad-head, .pad-foot {
   display: flex; align-items: center; gap: 8px;
-  font-family: var(--mono); font-size: 10.5px; color: var(--text-3);
+  font-family: var(--mono); font-size: 12px; color: var(--text-3);
 }
 .pad-head { padding: 2px 4px 11px; }
 .pad-led { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px 1px rgba(255, 45, 85, .8); animation: pulse 2.6s infinite; }
@@ -297,7 +338,7 @@ h1 .grad {
 
 .pad-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 7px;
 }
 .cell {
@@ -318,12 +359,26 @@ h1 .grad {
   box-shadow: 0 0 18px -4px rgba(255, 45, 85, .7);
   transform: translateY(-1px);
 }
-.cell.op { color: var(--text-3); font-size: 13px; }
+html[data-theme="light"] .cell.lit {
+  color: #fff;
+  border-color: var(--btn-a);
+  background: linear-gradient(180deg, var(--btn-a), var(--btn-b));
+  box-shadow: 0 6px 16px -8px rgba(184, 22, 60, .55);
+}
+/* 运算符键平时弱化；点亮时仍用 .cell.lit 的白字。
+   两条规则特异性相同，所以这里必须排除 .lit —— 否则此规则写在后面会赢，
+   暗色主题下变成 #8f95a4 on #641729，只有 4.12:1。 */
+.cell.op:not(.lit) { color: var(--text-3); }
+.cell.op { font-size: 13px; }
+/* 0 横跨两列、回车纵跨两行：与驱动键表里合并的格位一致 */
+.cell.wide { grid-column: span 2; aspect-ratio: auto; }
+.cell.tall { grid-row: span 2; aspect-ratio: auto; }
+.cell.icon { color: var(--accent); border-style: dashed; background: transparent; font-size: 12px; }
 
 .pad-foot { padding: 11px 4px 2px; justify-content: space-between; }
 .pad-proto { color: var(--text-3); opacity: .8; }
 
-.chain { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+.chain { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--text-3); }
 .chain .chip { border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; background: var(--surface); }
 .chain i { width: 16px; height: 1px; background: var(--line-strong); }
 
@@ -378,7 +433,7 @@ h1 .grad {
 /* steps */
 .steps { list-style: none; margin: 0 0 34px; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: s; }
 .steps li { position: relative; padding: 24px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-.step-n { font-family: var(--mono); font-size: 11.5px; color: var(--accent); letter-spacing: .1em; }
+.step-n { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: .1em; }
 .steps h3 { font-size: 15.5px; margin: 8px 0 8px; }
 .steps p { margin: 0; font-size: 14px; color: var(--text-2); }
 
@@ -393,13 +448,16 @@ h1 .grad {
 .term pre { margin: 0; padding: 18px 20px; overflow-x: auto; font-family: var(--mono); font-size: 12.8px; line-height: 1.75; }
 .term code { background: none; padding: 0; white-space: pre; color: var(--text-2); }
 .t-dim { color: var(--text-3); }
-.t-ok { color: #34d399; }
+.t-ok { color: var(--ok); }
 
 .fine { color: var(--text-3); font-size: 13px; margin: 18px 0 0; max-width: 76ch; }
 
 /* install tabs */
 .install { position: relative; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
-.tabs { display: flex; gap: 2px; padding: 8px 8px 0; border-bottom: 1px solid var(--line); background: var(--surface-2); overflow-x: auto; }
+.tabs {
+  display: flex; flex-wrap: wrap; gap: 2px; padding: 8px 8px 0;
+  border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
 .tab {
   border: 0; background: transparent; cursor: pointer;
   font: 500 13px/1 var(--mono);
@@ -415,7 +473,7 @@ h1 .grad {
 
 .pane { padding: 20px 22px 22px; }
 .pane-note { margin: 0 0 12px; font-size: 12.5px; color: var(--text-3); }
-.pane pre { margin: 0; padding: 16px 18px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+.pane pre { margin: 0; padding: 16px 92px 16px 18px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
 .pane pre code { background: none; padding: 0; white-space: pre; font-size: 12.6px; line-height: 1.8; color: var(--text-2); }
 .copy-pane { top: auto; bottom: 30px; right: 30px; }
 
@@ -482,7 +540,7 @@ details p { margin: 0; padding: 0 0 16px; color: var(--text-2); font-size: 14px;
   border-top: 1px solid var(--line);
   font-size: 12.5px; color: var(--text-3);
 }
-.foot-src { font-family: var(--mono); font-size: 11.5px; opacity: .75; }
+.foot-src { font-family: var(--mono); font-size: 12px; opacity: .75; }
 
 /* reveal */
 /* Progressive enhancement: without JS the content stays visible. */
@@ -570,6 +628,17 @@ html.js .reveal.in { opacity: 1; transform: none; }
   html { scroll-padding-top: 116px; }
 }
 
+/* 窄屏把导航压成 5 等分：靠横滑才能看到 FAQ 的宽度不如直接排满 */
+@media (max-width: 430px) {
+  .nav-links {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0;
+    overflow: visible;
+  }
+  .nav-links a { padding: 11px 2px; text-align: center; font-size: 12.5px; }
+}
+
 @media (max-width: 720px) {
   .model-shots { grid-template-columns: minmax(0, 1fr); }
   .wrap, .nav-inner { padding: 0 18px; }
@@ -586,8 +655,8 @@ html.js .reveal.in { opacity: 1; transform: none; }
   .cards, .steps, .use-grid, .other-ways, .foot-grid { grid-template-columns: minmax(0, 1fr); }
   .sec-head { margin-bottom: 32px; }
   .quick-cmd { max-width: 100%; }
-  .qcode { padding-right: 16px; padding-bottom: 40px; }
-  .copy-btn { top: auto; bottom: 8px; right: 8px; }
+  .qcode { padding-right: 16px; }
+  .copy-btn { margin: 0 10px; }
   .copy-pane { bottom: 12px; right: 12px; }
   .pane { padding: 16px; }
   .distro-strip { margin-top: 44px; gap: 14px; }
@@ -609,13 +678,13 @@ html.js .reveal.in { opacity: 1; transform: none; }
   .hero code, .section code, .section figcaption code { font-size: 12px; }
 
   /* 小字号下限提到 11.5px 以上，可读性优先 */
-  .brand-tag { font-size: 11.5px; }
+  .brand-tag { font-size: 12px; }
   .chain .chip { font-size: 12px; }
-  .pad-head, .pad-foot { font-size: 11.5px; }
-  .term-bar em, .step-n, .strip-label { font-size: 11.5px; }
+  .pad-head, .pad-foot { font-size: 12px; }
+  .term-bar em, .step-n, .strip-label { font-size: 12px; }
   .use-card code, .pane pre code, .term pre, pre.mini code { font-size: 12px; }
 
-  .tabs { scrollbar-width: none; mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  .tabs { scrollbar-width: none; }
   .tabs::-webkit-scrollbar { display: none; }
 }
 
