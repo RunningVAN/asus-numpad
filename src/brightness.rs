@@ -99,7 +99,7 @@ pub fn linear_levels_from_off(levels: &[u8], n: usize) -> Vec<u8> {
     }
     // 只有一档时没有「两端」可言，取最亮——「1 档」总比「1 档就是黑的」符合直觉
     if n == 1 {
-        return vec![*levels.last().expect("levels 非空")];
+        return vec![levels[levels.len() - 1]];
     }
     // 自定义表里可能已经手写了 0x00，避免轴上出现两个零点
     let mut axis: Vec<u8> = Vec::with_capacity(levels.len() + 1);
@@ -242,9 +242,8 @@ impl BrightnessFollower {
         let kbd = match self.read_kbd() {
             Some(v) => v,
             None => {
-                if !self.warned {
-                    self.warned = true;
-                }
+                // 提示由 `on_value` 负责，这里只记下状态供日志使用
+                self.warned = true;
                 return None;
             }
         };
@@ -258,11 +257,6 @@ impl BrightnessFollower {
         }
         self.current = Some(level);
         Some(level)
-    }
-
-    /// 是否曾经读不到键盘背光（用于日志）。
-    pub fn sysfs_missing(&self) -> bool {
-        self.warned
     }
 
     pub fn levels(&self) -> &[u8] {

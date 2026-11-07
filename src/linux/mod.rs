@@ -18,7 +18,7 @@ use crate::engine::{Clock, Deps, Engine, Event, GrabSink, KeySink, NumLockSource
 use crate::keycodes as kc;
 use crate::layout::Geometry;
 
-use dev::{AbsInfo, InputDevice, VirtualDevice};
+use dev::{AbsInfo, InputDevice, RawInputEvent, VirtualDevice, MAX_EVENTS_PER_READ};
 
 // --------------------------------------------------------------------------- //
 // 时钟
@@ -190,11 +190,33 @@ pub fn resolve_layout(cfg: &Config, device_name: &str) -> ResolvedLayout {
             source: "unknown-hid",
         };
     }
+    // 设备名里没有模组 ID：若 DMI 已把机型定下来，用该机型的模组表反查唯一键表，
+    // 比直接套默认键表（那是本机验证过的 G634 布局）更贴近实际硬件。
+    if let Some(name) = crate::sku::layout_name_for_local_machine(cfg.sku.as_deref()) {
+        if let Some(entry) = layout::by_name(name) {
+            return ResolvedLayout {
+                entry,
+                hid,
+                source: "sku",
+            };
+        }
+    }
     let entry = layout::by_name(layout::DEFAULT_LAYOUT_NAME).expect("内置布局表必须包含默认布局");
     ResolvedLayout {
         entry,
         hid,
         source: "fallback",
+    }
+}
+
+/// 布局来源 → 文案键（`auto` / `fixed` 这类内部标识不直接展示给用户）。
+fn layout_source_key(source: &str) -> &'static str {
+    match source {
+        "auto" => "layout.source.auto",
+        "fixed" => "layout.source.fixed",
+        "sku" => "layout.source.sku",
+        "unknown-hid" => "layout.source.unknown_hid",
+        _ => "layout.source.fallback",
     }
 }
 
@@ -269,17 +291,14 @@ pub fn find_keyboard(cfg: &Config) -> Option<InputDevice> {
     None
 }
 
-/// 从设备 ABS 范围推出 Geometry。
-pub fn geometry_from(dev: &InputDevice) -> Result<Geometry> {
-    let xi = dev
-        .abs_info(kc::ABS_MT_POSITION_X)
-        .context(crate::i18n::t("dev.read_abs_x_failed"))?;
-    let yi = dev
-        .abs_info(kc::ABS_MT_POSITION_Y)
-        .context(crate::i18n::t("dev.read_abs_y_failed"))?;
-    let cfg = Config::default();
-    let name = cfg.layout_entry().name;
-    Ok(geometry_from_abs(&xi, &yi, &cfg, name))
+/// ABS 轴 → 每微米 units 数。
+fn abs_units_per_um(axis: &AbsInfo, nominal_mm: f64) -> f64 {
+    if axis.resolution > 0 {
+        return axis.resolution as f64 / 1000.0;
+    }
+    let span = (axis.maximum - axis.minimum).max(1) as f64;
+    let span_um = (nominal_mm * 1000.0).max(1.0);
+    span / span_um
 }
 
 fn geometry_from_abs(
@@ -288,21 +307,10 @@ fn geometry_from_abs(
     cfg: &Config,
     layout_name: &'static str,
 ) -> Geometry {
-    // 内核 resolution 单位是 units/mm；换成 units/µm
-    let ux = if xi.resolution > 0 {
-        xi.resolution as f64 / 1000.0
-    } else {
-        let width_um = (xi.maximum - xi.minimum) as f64 * cfg.touchpad_width_mm * 1000.0
-            / (xi.maximum - xi.minimum).max(1) as f64;
-        (xi.maximum - xi.minimum) as f64 / width_um
-    };
-    let uy = if yi.resolution > 0 {
-        yi.resolution as f64 / 1000.0
-    } else {
-        let height_um = (yi.maximum - yi.minimum) as f64 * cfg.touchpad_height_mm * 1000.0
-            / (yi.maximum - yi.minimum).max(1) as f64;
-        (yi.maximum - yi.minimum) as f64 / height_um
-    };
+    // 内核 resolution 单位是 units/mm，换成 units/µm；没报 resolution 的模组按标称尺寸折算。
+    // 分母一律 max(1)，避免 ABS 范围退化成单点时除零。
+    let ux = abs_units_per_um(&xi, cfg.touchpad_width_mm);
+    let uy = abs_units_per_um(&yi, cfg.touchpad_height_mm);
     Geometry::new(
         xi.minimum,
         xi.maximum,
@@ -315,17 +323,14 @@ fn geometry_from_abs(
     .with_layout_name(layout_name)
 }
 
-/// 自检用：探测结果字符串。
-pub fn probe_geometry(cfg: &Config) -> Result<Vec<String>> {
-    Ok(probe_report(cfg)?.1)
-}
-
 /// 自检用：同时给出几何对象与探测结果字符串。
 pub fn probe_report(cfg: &Config) -> Result<(Geometry, Vec<String>)> {
     let dev = find_touchpad(cfg)?;
     let mut cfg = cfg.clone();
     let rl = resolve_layout(&cfg, &dev.name);
-    if rl.source == "auto" {
+    // 凡是自动判定的结果（auto / sku / fallback / unknown-hid）都要写回：后续几何与
+    // 键表都从 cfg.layout() 取，不回写就会静默用上默认布局。
+    if rl.source != "fixed" {
         cfg.layout_name = rl.entry.name.to_string();
     }
     let xi = dev
@@ -394,7 +399,7 @@ pub fn probe_report(cfg: &Config) -> Result<(Geometry, Vec<String>)> {
         &[
             ("layout", rl.entry.name),
             ("support", rl.entry.support.as_str()),
-            ("source", rl.source),
+            ("source", crate::i18n::t(layout_source_key(rl.source))),
             ("hid", rl.hid.as_deref().unwrap_or("-")),
         ],
     ));
@@ -403,6 +408,18 @@ pub fn probe_report(cfg: &Config) -> Result<(Geometry, Vec<String>)> {
     }
     out.push(geo.describe());
     Ok((geo, out))
+}
+
+/// 读失败到第几次才认定设备已经不在：偶发的 `EINTR` / `EAGAIN` 会被内核自己吸收，
+/// 真到 `ENODEV`（拔掉、驱动卸载）时没必要再等——继续空转只会刷日志。
+fn device_gone(err: &std::io::Error, failures: u32) -> bool {
+    use std::io::ErrorKind;
+    matches!(
+        err.kind(),
+        ErrorKind::NotFound | ErrorKind::BrokenPipe | ErrorKind::UnexpectedEof
+    ) || err.raw_os_error() == Some(libc::ENODEV)
+        || err.raw_os_error() == Some(libc::ENXIO)
+        || failures >= 8
 }
 
 /// 打印原始事件（排查用）。
@@ -462,7 +479,7 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
     if let Some(msg) = layout_gate(&cfg, &rl) {
         return Err(anyhow!(msg));
     }
-    if rl.source == "auto" {
+    if rl.source != "fixed" {
         cfg.layout_name = rl.entry.name.to_string();
     }
     let layout_name = rl.entry.name;
@@ -549,27 +566,62 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
         );
     }
 
-    let frame_ms = cfg.poll_interval_ms.max(1) as i32;
+    let frame_ms = cfg.frame_ms.max(1) as i32;
     let mut last_state = String::new();
+    // 事件缓冲跨帧复用：主循环每秒跑 125 次，不必每帧重新分配
+    let mut tpad_events: Vec<RawInputEvent> = Vec::with_capacity(MAX_EVENTS_PER_READ);
+    let mut kb_events: Vec<RawInputEvent> = Vec::with_capacity(8);
+    // 连续读失败次数：偶发 EINTR/EIO 不该退出，设备真没了才收工
+    let mut read_failures = 0u32;
 
     while engine.is_running() && !STOP.load(Ordering::Relaxed) {
         // 1) 触摸板事件
-        let readable = tpad.borrow().wait_readable(frame_ms).unwrap_or(false);
-        if readable {
-            let events = tpad.borrow().read_events().unwrap_or_default();
-            for raw in events {
-                engine.handle_event(&raw.to_event());
+        let ready = match tpad.borrow().wait_readable(frame_ms) {
+            Ok(ready) => ready,
+            Err(err) => {
+                read_failures += 1;
+                if device_gone(&err, read_failures) {
+                    println!(
+                        "{}",
+                        crate::i18n::tf("run.device_lost", &[("err", &err.to_string())])
+                    );
+                    break;
+                }
+                false
+            }
+        };
+        if ready {
+            match tpad.borrow().read_events_into(&mut tpad_events) {
+                Ok(()) => {
+                    read_failures = 0;
+                    for raw in &tpad_events {
+                        engine.handle_event(&raw.to_event());
+                    }
+                }
+                Err(err) => {
+                    read_failures += 1;
+                    if device_gone(&err, read_failures) {
+                        println!(
+                            "{}",
+                            crate::i18n::tf("run.device_lost", &[("err", &err.to_string())])
+                        );
+                        break;
+                    }
+                }
             }
         }
 
         // 2) 物理键盘 LED 变化（NumLock 按下）
         if let Some(kb_dev) = &kb {
-            let events = kb_dev.borrow().read_events().unwrap_or_default();
-            for raw in events {
-                let ev = raw.to_event();
-                if ev.etype == kc::EV_LED || (ev.etype == kc::EV_KEY && ev.code == kc::KEY_NUMLOCK)
-                {
-                    engine.handle_kb_event(&ev);
+            // 键盘只用来读 NumLock 灯，读失败（例如键盘被热插拔换掉）不影响数字区
+            if kb_dev.borrow().read_events_into(&mut kb_events).is_ok() {
+                for raw in &kb_events {
+                    let ev = raw.to_event();
+                    if ev.etype == kc::EV_LED
+                        || (ev.etype == kc::EV_KEY && ev.code == kc::KEY_NUMLOCK)
+                    {
+                        engine.handle_kb_event(&ev);
+                    }
                 }
             }
         }

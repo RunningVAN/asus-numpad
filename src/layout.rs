@@ -324,7 +324,8 @@ impl Geometry {
         if !(xf >= self.grid_x0 && xf <= self.grid_x1 && yf >= self.grid_y0 && yf <= self.grid_y1) {
             return None;
         }
-        let col = (((xf - self.grid_x0) / self.col_w).floor() as isize).clamp(0, COLS as isize - 1);
+        let cols = self.layout.columns.max(1) as isize;
+        let col = (((xf - self.grid_x0) / self.col_w).floor() as isize).clamp(0, cols - 1);
         let row = (((yf - self.grid_y0) / self.row_h).floor() as isize).clamp(0, ROWS as isize - 1);
         Some((row as usize, col as usize))
     }
@@ -381,11 +382,14 @@ impl Geometry {
             self.cell_of(x, y)?
         };
         let (row, col) = cell;
-        if row == 0 && col == COLS - 1 {
+        // 第 0 行最后一格是 NumLock 图标（几何上同为整格，见 [`Geometry::new`]）
+        if row == 0 && col + 1 == self.layout.columns as usize {
             return None;
         }
-        let content = KEY_GRID[row][col]?;
-        key_for_cell(content, mode)
+        // 格位号来自配置里的 `columns`，键表却是固定的 5 列：列数更大的布局在这里
+        // 判为「无键」，不做越界下标。
+        let content = *KEY_GRID.get(row)?.get(col)?;
+        key_for_cell(content?, mode)
     }
 
     /// 计算器图标区（左上 1 列 x 1 行）。官方只给联动开关、未给触发区参数。
@@ -1094,11 +1098,6 @@ pub fn for_device_name(device_name: &str) -> Option<&'static LayoutEntry> {
     for_hid_id(&hid)
 }
 
-/// 表内所有布局名（`layout` 子命令展示用）。
-pub fn names() -> Vec<&'static str> {
-    LAYOUTS.iter().map(|e| e.name).collect()
-}
-
 /// 全部受支持 HID 硬件 ID（`layout` 子命令展示对应机型布局用）。
 pub fn hid_list() -> &'static [(&'static str, &'static str)] {
     HID_LAYOUTS
@@ -1184,6 +1183,70 @@ mod tests {
                 "{hid} -> {name} 未在 LAYOUTS 中定义"
             );
         }
+    }
+
+    /// 每套布局都要能换算出一张站得住的网格：列宽行高为正、不越出有效区、
+    /// NumLock 区落在网格内、格子在物理上不至于小到点不中。
+    ///
+    /// 机型参数按官方 INF 逐机型照录，改一个数就可能让网格翻出触摸板；
+    /// 这条断言把「照录」的结果关住，避免某套布局悄悄变成空白键位。
+    #[test]
+    fn every_layout_keeps_a_sane_grid() {
+        // 典型轴参数（ASUE1416：4752 x 3008 units，约 45 / 42 units per mm）
+        let ux = 45.0 / 1000.0;
+        let uy = 42.0 / 1000.0;
+        for entry in LAYOUTS {
+            let g =
+                Geometry::new(0, 4752, 0, 3008, ux, uy, entry.layout).with_layout_name(entry.name);
+            let name = entry.name;
+            assert_eq!(g.layout_name, name, "布局名未写入几何");
+            assert_eq!(
+                entry.layout.columns as usize, COLS,
+                "{name} 列数与键表常量 COLS 不一致"
+            );
+            assert!(g.col_w > 0.0, "{name} 列宽非正：{}", g.col_w);
+            assert!(g.row_h > 0.0, "{name} 行高非正：{}", g.row_h);
+            assert!(
+                g.grid_x0 >= g.usable_x0 && g.grid_x1 <= g.usable_x1,
+                "{name} 网格横向越出有效区"
+            );
+            assert!(
+                g.grid_y0 >= g.usable_y0 && g.grid_y1 <= g.usable_y1,
+                "{name} 网格纵向越出有效区"
+            );
+            assert!(
+                g.nl_x0 >= g.grid_x0 && g.nl_x1 <= g.grid_x1,
+                "{name} NumLock 区不在网格内"
+            );
+            // units → µm → mm
+            let col_mm = g.col_w / ux / 1000.0;
+            let row_mm = g.row_h / uy / 1000.0;
+            assert!(
+                (5.0..=30.0).contains(&col_mm),
+                "{name} 列宽 {col_mm:.1} mm 不像一格按键"
+            );
+            assert!(
+                (5.0..=30.0).contains(&row_mm),
+                "{name} 行高 {row_mm:.1} mm 不像一格按键"
+            );
+        }
+    }
+
+    /// 键表固定 5 列：列数更多的布局在多出来的一列上不出键，也不越界。
+    #[test]
+    fn wider_layout_than_key_grid_yields_no_key() {
+        let ux = 45.0 / 1000.0;
+        let uy = 42.0 / 1000.0;
+        let mut l = by_name("GH3XLNDZ").unwrap().layout;
+        l.columns = COLS as i32 + 1;
+        let g = Geometry::new(0, 4752, 0, 3008, ux, uy, l);
+        // 第 2 行最后一列（键表里不存在）
+        let (row, col) = (2usize, COLS);
+        let (cx, cy) = g.cell_center(row, col);
+        assert_eq!(
+            g.key_at(cx as i32, cy as i32, KeyMode::Keypad, 0.0, 0.0, 0.0),
+            None
+        );
     }
 
     /// 15 参数的 GH2/GH3/GH4 三套布局必须结构一致（都是 5 列 5x4 键表）。

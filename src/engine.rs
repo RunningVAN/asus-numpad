@@ -19,7 +19,7 @@
 //!
 //! 硬件读写全部通过 trait 注入，因此本模块可在任意平台跑单元测试。
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 
 use crate::brightness::BrightnessFollower;
 use crate::config::{
@@ -184,7 +184,6 @@ pub struct Engine {
     idle_blanked: bool,
     grabbed: bool,
     running: bool,
-    reload_requested: bool,
 
     slot: i32,
     primary: Option<i32>,
@@ -225,10 +224,34 @@ pub struct Engine {
     armed_delay_frames: u32,
     pending_events: Vec<Event>,
     forwarding: bool,
+    /// 两段式点灯里「第二段亮度档」的待下发值与最早可下发时刻。
+    ///
+    /// 早期实现直接在主循环里 `thread::sleep(15ms)`，等于每个事件都可能卡掉一帧半，
+    /// 触摸响应肉眼可见地拖后。改成记下时刻、由 `tick` 在到期后的第一帧补发，
+    /// 既保住 EC 需要的间隔，又不再阻塞事件读取。
+    pending_level: Option<u8>,
+    pending_level_at: f64,
 
     echo: bool,
-    logs: Vec<String>,
+    logs: VecDeque<String>,
 }
+
+/// 判定前的暂存上限：一次触点最多几十个事件，超过这个量只能是事件风暴或判定卡住。
+const MAX_PENDING_EVENTS: usize = 4096;
+
+/// 日志缓冲上限：够看清一次触摸到按键的完整判定链，又不会随运行时长增长。
+const MAX_LOG_LINES: usize = 256;
+
+/// 参与指距计算的触点数上限。
+///
+/// 触摸板最多同时上报 5 个槽位，留一点余量；超过的部分不参与 GESTURE_08 判定，
+/// 也不影响单指/双指的主流程。
+const MAX_TOUCH_SLOTS: usize = 8;
+
+/// 两段式点灯中，点亮命令与亮度档之间的最小间隔（毫秒）。
+///
+/// 取值来自真机调试：低于 15 ms 时部分机型的 EC 会丢掉紧跟其后的档位写入。
+const STAGED_LEVEL_GAP_MS: f64 = 15.0;
 
 impl Engine {
     pub fn new(
@@ -263,7 +286,6 @@ impl Engine {
             idle_blanked: false,
             grabbed: false,
             running: true,
-            reload_requested: false,
             slot: 0,
             primary: None,
             has_mt_tracking,
@@ -299,25 +321,18 @@ impl Engine {
             armed_delay_frames: 0,
             pending_events: Vec::new(),
             forwarding: false,
+            pending_level: None,
+            pending_level_at: 0.0,
             echo: true,
-            logs: Vec::new(),
+            logs: VecDeque::new(),
         }
     }
 
-    pub fn silence(&mut self) {
-        self.echo = false;
-    }
-
-    pub fn led_channel(&self) -> String {
-        self.led.channel()
-    }
-
-    pub fn led_history(&self) -> Vec<u8> {
-        self.led.history()
-    }
-
-    pub fn logs(&self) -> &[String] {
-        &self.logs
+    /// 最近若干条日志（最新的在最后）。
+    ///
+    /// 用 `VecDeque` 而非 `Vec`：封顶淘汰走 `pop_front`，不再每次搬动整个数组。
+    pub fn logs(&self) -> impl Iterator<Item = &String> {
+        self.logs.iter()
     }
 
     fn log(&mut self, msg: impl Into<String>) {
@@ -325,7 +340,7 @@ impl Engine {
         if self.echo {
             println!("{m}");
         }
-        self.logs.push(m);
+        self.remember(m);
     }
 
     fn warn(&mut self, msg: impl Into<String>) {
@@ -333,7 +348,18 @@ impl Engine {
         if self.echo {
             eprintln!("{m}");
         }
-        self.logs.push(m);
+        self.remember(m);
+    }
+
+    /// 记一行日志，只留最近 [`MAX_LOG_LINES`] 条。
+    ///
+    /// 服务模式下 digit 区一整天不退出，日志必须封顶：早期版本无上限 push，
+    /// 一块常亮几周的机器会慢慢把内存吃光。
+    fn remember(&mut self, line: String) {
+        if self.logs.len() >= MAX_LOG_LINES {
+            self.logs.pop_front();
+        }
+        self.logs.push_back(line);
     }
 
     fn now(&self) -> f64 {
@@ -430,11 +456,13 @@ impl Engine {
     /// 判为手势：把推迟的这段事件补发给桌面，光标不会丢掉起步位移。
     fn flush_pending(&mut self) {
         if let Some(ptr) = self.pointer.as_mut() {
-            let events = std::mem::take(&mut self.pending_events);
+            let mut events = std::mem::take(&mut self.pending_events);
             for ev in &events {
                 ptr.feed(ev);
             }
-            self.pending_events = Vec::new();
+            // 缓冲留着复用：手势判定的次数远高于按键确认，反复重新分配没有意义
+            events.clear();
+            self.pending_events = events;
         } else {
             self.pending_events.clear();
         }
@@ -456,21 +484,26 @@ impl Engine {
 
     /// 多指间距（GESTURE_08 = 40 mm 只约束滚动，不约束单指手势）。
     fn slot_distance_um(&self) -> Option<f64> {
-        // 真机 SLOT→TRACKING_ID→X→Y 逐条到达，X 有值时 Y 可能还没来，不能拿去算
-        let pts: Vec<(i32, i32)> = self
-            .slot_pos
-            .values()
-            .filter_map(|p| match p {
-                (Some(x), Some(y)) => Some((*x, *y)),
-                _ => None,
-            })
-            .collect();
-        if pts.len() < 2 {
+        // 真机 SLOT→TRACKING_ID→X→Y 逐条到达，X 有值时 Y 可能还没来，不能拿去算。
+        // 这个函数每个 X/Y 事件都会被调用一次，旧实现先 collect 成 Vec 再两两比，
+        // 每帧几十次小分配；这里用固定大小栈数组，零分配。
+        let mut pts = [(0i32, 0i32); MAX_TOUCH_SLOTS];
+        let mut n = 0usize;
+        for p in self.slot_pos.values() {
+            if n >= MAX_TOUCH_SLOTS {
+                break;
+            }
+            if let (Some(x), Some(y)) = p {
+                pts[n] = (*x, *y);
+                n += 1;
+            }
+        }
+        if n < 2 {
             return None;
         }
         let mut best = 0.0_f64;
-        for i in 0..pts.len() {
-            for j in (i + 1)..pts.len() {
+        for i in 0..n {
+            for j in (i + 1)..n {
                 let d = self.dist_um(pts[i].0, pts[i].1, pts[j].0, pts[j].1);
                 if d > best {
                     best = d;
@@ -594,11 +627,16 @@ impl Engine {
         if staged && !self.led.send(VAL_ON) {
             return false;
         }
-        if staged {
-            // EC 处理 FEATURE 是异步的，紧接着写档位有概率被丢掉；15 ms 足够跨过。
-            std::thread::sleep(std::time::Duration::from_millis(15));
-        }
-        let sent = self.led.send(value);
+        let sent = if staged {
+            // EC 处理 FEATURE 是异步的，紧接着写档位有概率被丢掉，需要隔开一小段。
+            // 这里不睡眠：只记下待下发档位与最早可下发时刻，由 tick 在到期后的
+            // 第一帧补发——主循环不必为一次点灯停摆 15 ms。
+            self.pending_level = Some(value);
+            self.pending_level_at = self.now() + STAGED_LEVEL_GAP_MS;
+            true
+        } else {
+            self.led.send(value)
+        };
         if !sent && !staged {
             // 通道不通时不置位：否则 lit=true 会让后续唤醒/联动全都跳过重试，
             // 表现为「灯永远不亮」。保持 lit=false，下次触摸或 NumLock 变化会再试。
@@ -615,6 +653,8 @@ impl Engine {
     }
 
     fn led_off(&mut self, reason: &str) -> bool {
+        // 待下发的亮度档必须先撤掉：熄灭后再补发档位会把灯重新点亮
+        self.pending_level = None;
         if !self.lit {
             return false;
         }
@@ -917,7 +957,10 @@ impl Engine {
                     if let Some(k) = self.pressed_key.take() {
                         self.release(k);
                     }
-                    self.mode = Mode::Gesture;
+                    // 必须走 promote_gesture：它同时把 forwarding 置成当前模式下的
+                    // 正确值并补发起步位移。过去这里只改 mode，混合模式下滑动取消
+                    // 按键后光标不动，起步那段事件也被丢掉。
+                    self.promote_gesture();
                 }
             _ => {}
         }
@@ -926,6 +969,15 @@ impl Engine {
     /// 周期性推进（与事件无关的时间相关状态）。
     pub fn tick(&mut self) {
         let now = self.now();
+
+        // 两段式点灯的第二段：到期后补发亮度档。
+        // 放在最前面，保证点灯只比按下晚一帧，而不是被 sleep 拖住整个事件循环。
+        if let Some(level) = self.pending_level {
+            if now >= self.pending_level_at {
+                self.pending_level = None;
+                self.led.send(level);
+            }
+        }
 
         // 跟随键盘背光：只读 sysfs，按 brightness_poll_ms 节流。
         // 数字区未点亮时不写 —— 否则会把已经熄灭的灯又点起来。
@@ -946,6 +998,8 @@ impl Engine {
                         &[("kbd", &kbd), ("level", &format!("{level:02x}"))]
                     )
                 );
+                // 键盘背光变化优先：作废尚未下发的档位，避免旧值覆盖新值
+                self.pending_level = None;
                 self.led.send(level);
             }
         }
@@ -1118,6 +1172,11 @@ impl Engine {
             // 未定：先存着，判键则丢、判手势则补发。
             // ABS_MT_SLOT 也一起存——它总在 TRACKING_ID 之前到达，按原序补发仍是合法的
             // 触点序列；提前放行会让「判为按键」的那次轻点在桌面上留下半个空槽位。
+            if self.pending_events.len() >= MAX_PENDING_EVENTS {
+                // 事件风暴或迟迟不判定时，缓存不能无限长；先按手势补发，触点序列仍保序
+                self.promote_gesture();
+                return;
+            }
             self.pending_events.push(*ev);
             return;
         }
@@ -1129,14 +1188,16 @@ impl Engine {
         }
     }
 
+    /// 当前事件是否来自非首个触点（第二个手指的坐标/压力不该改动首触点的判键状态）。
+    fn slot_is_primary(&self) -> bool {
+        matches!(self.primary, Some(p) if self.slot == p)
+    }
+
     fn handle_event_inner(&mut self, ev: &Event) {
         match ev.etype {
             kc::EV_ABS => {
                 if ev.code == kc::ABS_PRESSURE || ev.code == kc::ABS_MT_PRESSURE {
-                    if self.has_mt_tracking
-                        && self.primary.is_some()
-                        && self.slot != self.primary.unwrap()
-                    {
+                    if self.has_mt_tracking && !self.slot_is_primary() {
                         return;
                     }
                     self.pressure = Some(ev.value);
@@ -1186,10 +1247,7 @@ impl Engine {
                     return;
                 }
                 if ev.code == kc::ABS_MT_POSITION_X || ev.code == kc::ABS_X {
-                    if self.has_mt_tracking
-                        && self.primary.is_some()
-                        && self.slot != self.primary.unwrap()
-                    {
+                    if self.has_mt_tracking && !self.slot_is_primary() {
                         return;
                     }
                     self.cur_x = ev.value;
@@ -1200,10 +1258,7 @@ impl Engine {
                         self.moved();
                     }
                 } else if ev.code == kc::ABS_MT_POSITION_Y || ev.code == kc::ABS_Y {
-                    if self.has_mt_tracking
-                        && self.primary.is_some()
-                        && self.slot != self.primary.unwrap()
-                    {
+                    if self.has_mt_tracking && !self.slot_is_primary() {
                         return;
                     }
                     self.cur_y = ev.value;
@@ -1267,39 +1322,13 @@ impl Engine {
     // 生命周期
     // ------------------------------------------------------------------ //
 
-    pub fn stop(&mut self) {
-        self.running = false;
-    }
-
     pub fn is_running(&self) -> bool {
         self.running
-    }
-
-    pub fn request_reload(&mut self) {
-        self.reload_requested = true;
-    }
-
-    pub fn take_reload_request(&mut self) -> bool {
-        let r = self.reload_requested;
-        self.reload_requested = false;
-        r
     }
 
     /// 运行结束时收尾：熄灯 + 释放触摸板。
     pub fn shutdown(&mut self) {
         self.disable();
-    }
-
-    pub fn apply_config(&mut self, cfg: Config) {
-        self.cfg = cfg;
-        self.tol_ux = self.cfg.tap_threshold_mm * 1000.0 * self.geometry.ux;
-        self.tol_uy = self.cfg.tap_threshold_mm * 1000.0 * self.geometry.uy;
-        // grab 可能被改：启用中要立刻对齐，避免触摸板要么被占住要么穿透
-        if self.enabled && self.cfg.grab {
-            self.grab();
-        } else if !self.cfg.grab {
-            self.ungrab();
-        }
     }
 
     /// `--dump` 用的一行状态。
@@ -1398,11 +1427,6 @@ impl Engine {
         self.armed_delay_frames
     }
 
-    /// 供测试读取：暂存等待判定的透传事件数。
-    pub fn pending_event_count(&self) -> usize {
-        self.pending_events.len()
-    }
-
     pub fn key_mode(&self) -> KeyMode {
         self.cfg.key_mode
     }
@@ -1418,23 +1442,6 @@ mod tests {
     use crate::layout::GH3XLNDZ;
     use std::cell::RefCell;
     use std::rc::Rc;
-
-    struct FakeClock;
-    impl Clock for FakeClock {
-        fn now_ms(&self) -> f64 {
-            0.0
-        }
-    }
-
-    struct FakeLed;
-    impl LedSink for FakeLed {
-        fn send(&mut self, _v: u8) -> bool {
-            true
-        }
-        fn channel(&self) -> String {
-            "fake".to_string()
-        }
-    }
 
     #[derive(Default)]
     struct FakeKeys {
@@ -1470,27 +1477,71 @@ mod tests {
         fn ungrab(&mut self) {}
     }
 
-    /// 造一台「有虚拟触摸板 + 小键盘模组」的引擎。
-    fn engine(mixed: MixedMode) -> (Engine, Rc<RefCell<Vec<Event>>>) {
-        let cfg = Config {
-            mixed_mode: mixed,
-            ..Config::default()
-        };
+    /// 记录每次下发的 LED 字节，用于检查点灯时序。
+    struct SpyLed {
+        log: Rc<RefCell<Vec<u8>>>,
+    }
+    impl LedSink for SpyLed {
+        fn send(&mut self, v: u8) -> bool {
+            self.log.borrow_mut().push(v);
+            true
+        }
+        fn channel(&self) -> String {
+            "spy".to_string()
+        }
+    }
+
+    /// 可手动拨动的时钟：验证「推迟到 tick 补发」这类时序行为必须能控制时间。
+    struct ManualClock {
+        now: Rc<std::cell::Cell<f64>>,
+    }
+    impl Clock for ManualClock {
+        fn now_ms(&self) -> f64 {
+            self.now.get()
+        }
+    }
+
+    /// 造一台「有虚拟触摸板 + 小键盘模组」的引擎，时钟、LED 与配置调用方可控。
+    /// 不调用 `enable()`，便于从「未点亮」状态验证点灯时序。
+    fn engine_raw(
+        cfg: Config,
+        now: Rc<std::cell::Cell<f64>>,
+        led_log: Rc<RefCell<Vec<u8>>>,
+    ) -> (Engine, Rc<RefCell<Vec<Event>>>) {
         let geom = Geometry::new(0, 3000, 0, 2000, 10.0, 10.0, GH3XLNDZ);
         let pointer: Rc<RefCell<Vec<Event>>> = Rc::new(RefCell::new(Vec::new()));
         let keys: Rc<RefCell<FakeKeys>> = Rc::new(RefCell::new(FakeKeys::default()));
         let deps = Deps {
-            led: Box::new(FakeLed),
+            led: Box::new(SpyLed { log: led_log }),
             keys: Box::new(keys),
             pointer: Some(Box::new(pointer.clone())),
             numlock: Some(Box::new(NumLockOn)),
             grabber: Some(Box::new(FakeGrab)),
-            clock: Box::new(FakeClock),
+            clock: Box::new(ManualClock { now }),
         };
-        let mut e = Engine::new(cfg, geom, deps, true, false);
+        (Engine::new(cfg, geom, deps, true, false), pointer)
+    }
+
+    /// 造一台已进入小键盘态的引擎（时钟与 LED 调用方可控）。
+    fn engine_with(
+        mixed: MixedMode,
+        now: Rc<std::cell::Cell<f64>>,
+        led_log: Rc<RefCell<Vec<u8>>>,
+    ) -> (Engine, Rc<RefCell<Vec<Event>>>) {
+        let cfg = Config {
+            mixed_mode: mixed,
+            ..Config::default()
+        };
+        let (mut e, pointer) = engine_raw(cfg, now, led_log);
         e.enable();
         assert!(e.lit, "小键盘态应已点亮");
         (e, pointer)
+    }
+
+    /// 造一台「有虚拟触摸板 + 小键盘模组」的引擎。
+    fn engine(mixed: MixedMode) -> (Engine, Rc<RefCell<Vec<Event>>>) {
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        engine_with(mixed, now, Rc::new(RefCell::new(Vec::new())))
     }
 
     /// 数字键盘点亮时，从触摸板边缘起步的单指滑动不该把光标拖走。
@@ -1533,5 +1584,51 @@ mod tests {
         let (e, pointer) = engine(MixedMode::Off);
         assert!(!e.mixed_active());
         assert!(pointer.borrow().is_empty());
+    }
+
+    /// 两段式点灯：亮度档推迟到 tick 补发，主循环不再被 sleep 卡住；
+    /// 期间若熄灭，未下发的档位必须作废，否则灯会被重新点亮。
+    #[test]
+    fn staged_level_deferred_to_tick_and_cancelled_on_off() {
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let log: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        // 不跟随键盘背光 + 手动第 2 档 = 0x45，点灯才会走两段式
+        let cfg = Config {
+            follow_keyboard_brightness: false,
+            manual_brightness_levels: Some(vec![0x43, 0x45, 0x48]),
+            manual_brightness_step: 2,
+            ..Config::default()
+        };
+        let (mut e, _p) = engine_raw(cfg, now.clone(), log.clone());
+
+        assert!(e.led_on("test"), "点亮请求本身要立即成功");
+        assert_eq!(*log.borrow().last().unwrap(), 0x01, "先只发点亮命令");
+        assert!(!log.borrow().contains(&0x45), "档位此刻还不该下发");
+
+        // 间隔未满：tick 不发
+        now.set(STAGED_LEVEL_GAP_MS - 1.0);
+        e.tick();
+        assert!(!log.borrow().contains(&0x45), "间隔未到不该补发");
+
+        // 到期：tick 补发档位
+        now.set(STAGED_LEVEL_GAP_MS);
+        e.tick();
+        assert_eq!(
+            log.borrow().last().copied(),
+            Some(0x45),
+            "到期后应补发亮度档"
+        );
+
+        // 待下发期间熄灭：档位作废
+        e.led_off("test");
+        log.borrow_mut().clear();
+        assert!(e.led_on("test"));
+        e.led_off("test");
+        now.set(STAGED_LEVEL_GAP_MS * 10.0);
+        e.tick();
+        assert!(
+            !log.borrow().contains(&0x45),
+            "熄灭后不该再把暂存的亮度档补发出去"
+        );
     }
 }

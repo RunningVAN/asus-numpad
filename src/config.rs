@@ -248,6 +248,10 @@ impl<'de> Deserialize<'de> for KeyMode {
 #[serde(default)]
 pub struct Config {
     // ---- 官方参数覆盖 ----
+    /// 一帧的长度（ms）：状态机的所有「帧数」阈值与主循环的等待超时都用它。
+    ///
+    /// 唯一真源。旧配置里同义的 `poll_interval_ms` 由 [`Config::from_json`] 折到本字段，
+    /// 不再单独保存——两个名字各存一份时，改一个另一个不动，帧数与实际节拍会对不上。
     pub frame_ms: u32,
     pub numlock_trigger_frames: u32,
     pub cont_sendkey_trigger_frames: u32,
@@ -286,8 +290,6 @@ pub struct Config {
     /// `asus-numpad sku auto` 可清空本字段、回到自动识别。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sku: Option<String>,
-    /// 仅支持 cell；icon 子区语义未闭合已移除（读入后强制回落）
-    pub numlock_zone: String,
     // ---- 按压力度（FORCE_07 = 1 / FORCE_08 = 2 档位） ----
     /// 官方只给档位号，未在 INF 暴露原始压力值；0 = 不做压力过滤
     pub pressure_numpad_min: i32,
@@ -346,7 +348,6 @@ pub struct Config {
     pub i2c_bus: Option<i32>,
     pub i2c_addr: Option<u8>,
     pub hidraw: Option<String>,
-    pub poll_interval_ms: u32,
     // ---- 运行时（一般由命令行 / systemd 单元给出，不在默认配置文件里） ----
     /// 触摸板事件设备覆盖，如 /dev/input/event7
     pub device_override: Option<String>,
@@ -354,9 +355,6 @@ pub struct Config {
     pub keyboard_override: Option<String>,
     /// 背光通道：hidraw / i2c / none
     pub led_kind: String,
-    /// 历史字段：hidraw 曾用 `write()` 自发拼报告前缀，现已改为
-    /// FEATURE 报告 `0x0d` 定长报文，本字段不再生效，仅为兼容旧配置文件保留。
-    pub hidraw_prefix: Vec<u8>,
     /// i2c 载荷首字节（与 LED 命令字构成 w2 写入）
     pub i2c_payload: String,
 }
@@ -383,7 +381,6 @@ impl Default for Config {
             layout_name: "auto".to_string(),
             allow_unverified_layout: false,
             sku: None,
-            numlock_zone: "cell".to_string(),
             pressure_numpad_min: 0,
             key_mode: KeyMode::Keypad,
             numlock: NumLockMode::Sync,
@@ -404,11 +401,9 @@ impl Default for Config {
             i2c_bus: None,
             i2c_addr: None,
             hidraw: None,
-            poll_interval_ms: FRAME_MS,
             device_override: None,
             keyboard_override: None,
             led_kind: "auto".to_string(),
-            hidraw_prefix: vec![0x00, 0x03, 0x01],
             i2c_payload: "0x00".to_string(),
         }
     }
@@ -628,7 +623,6 @@ impl Config {
         }
         self.frame_ms = self.frame_ms.max(1);
         self.numlock_trigger_frames = self.numlock_trigger_frames.max(1);
-        self.poll_interval_ms = self.poll_interval_ms.max(2);
         self.brightness_poll_ms = self.brightness_poll_ms.max(50);
         if self.keyboard_brightness_dir.is_empty() {
             self.keyboard_brightness_dir = crate::brightness::DEFAULT_DIR.to_string();
@@ -706,11 +700,6 @@ impl Config {
             ));
             self.manual_brightness_step = steps;
         }
-        if self.numlock_zone != "cell" {
-            let value = self.numlock_zone.clone();
-            notes.push(crate::i18n::tf("note.numlock_zone", &[("v", &value)]));
-            self.numlock_zone = "cell".to_string();
-        }
         if self.pressure_numpad_min < 0 {
             self.pressure_numpad_min = 0;
         }
@@ -735,11 +724,30 @@ impl Config {
         notes
     }
 
+    /// 解析一份配置文本，并把已删除的历史字段折到现行字段上。
+    ///
+    /// 历史字段处理（都在这里做，读路径只有这一条）：
+    ///
+    /// * `poll_interval_ms` → `frame_ms`：只是同一个量换过名字。旧版把两个都写进
+    ///   配置文件，直接当未知字段丢掉会让「用户把帧长调成 20 ms」静默失效；
+    /// * `numlock_zone`、`hidraw_prefix`：语义已从实现里移除，读到就忽略，不报错。
+    pub fn from_json(text: &str) -> Result<Self, String> {
+        let mut value: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+        if let Some(map) = value.as_object_mut() {
+            if let Some(legacy) = map.remove("poll_interval_ms") {
+                map.entry("frame_ms").or_insert(legacy);
+            }
+            map.remove("numlock_zone");
+            map.remove("hidraw_prefix");
+        }
+        serde_json::from_value(value).map_err(|e| e.to_string())
+    }
+
     /// 读取配置；文件不存在或解析失败时用官方默认值（与上游行为一致）。
     pub fn load(path: &Path) -> (Self, Vec<String>) {
         let mut notes = Vec::new();
         let mut cfg = match std::fs::read_to_string(path) {
-            Ok(text) => match serde_json::from_str::<Config>(&text) {
+            Ok(text) => match Config::from_json(&text) {
                 Ok(c) => c,
                 Err(err) => {
                     notes.push(crate::i18n::tf(
@@ -862,7 +870,7 @@ impl Config {
         }
         let text = std::fs::read_to_string(source).ok()?;
         // 只搬合法配置，避免把半截文件带进用户目录
-        serde_json::from_str::<Config>(&text).ok()?;
+        Config::from_json(&text).ok()?;
         std::fs::create_dir_all(target.parent()?).ok()?;
         std::fs::write(&target, text.as_bytes()).ok()?;
         #[cfg(unix)]
@@ -898,7 +906,6 @@ impl Config {
             "repeat_interval_ms": self.repeat_interval_ms,
             "layout_name": self.layout_name,
             "allow_unverified_layout": self.allow_unverified_layout,
-            "numlock_zone": self.numlock_zone,
             "pressure_numpad_min": self.pressure_numpad_min,
             "key_mode": self.key_mode.as_str(),
             "numlock": self.numlock.as_str(),
@@ -915,7 +922,6 @@ impl Config {
             "i2c_bus": self.i2c_bus,
             "i2c_addr": self.i2c_addr,
             "hidraw": self.hidraw,
-            "poll_interval_ms": self.poll_interval_ms,
             "language": self.language,
             "follow_keyboard_brightness": self.follow_keyboard_brightness,
             "keyboard_brightness_dir": self.keyboard_brightness_dir,
@@ -970,7 +976,7 @@ impl Config {
     }
 }
 
-/// 官方参数一览（`--check` 输出用）；键名与说明随界面语言变化。
+/// 官方参数一览（`check` 输出用）；键名与说明随界面语言变化。
 pub fn official_parameters() -> Vec<(String, String)> {
     let frames = |n: u32, ms_key: &str| {
         crate::i18n::tf(
@@ -1097,7 +1103,6 @@ mod tests {
         assert_eq!(c.max_work_time_ms, 120_000);
         assert_eq!(c.cont_sendkey_trigger_frames, 25);
         assert_eq!(c.numadv_trigger_frames, 40);
-        assert_eq!(c.numlock_zone, "cell");
         assert_eq!(c.pressure_numpad_min, 0);
         assert!(c.calc_gesture);
         assert!(c.grab);
@@ -1440,11 +1445,27 @@ mod tests {
     }
 
     #[test]
-    fn icon_numlock_zone_is_rejected() {
-        let mut c: Config = serde_json::from_str(r#"{"numlock_zone":"icon"}"#).unwrap();
+    fn legacy_fields_are_ignored_not_fatal() {
+        // `numlock_zone` / `hidraw_prefix` 已从实现里移除，读到就当没写：
+        // 不能因为一份老配置让整份设置退回默认值。
+        let mut c =
+            Config::from_json(r#"{"numlock_zone":"icon","hidraw_prefix":[0,3,1],"frame_ms":8}"#)
+                .unwrap();
         let notes = c.sanitize();
-        assert_eq!(c.numlock_zone, "cell");
-        assert!(notes.iter().any(|n| n.contains("icon")));
+        assert_eq!(c.frame_ms, 8);
+        assert!(notes.is_empty(), "unexpected notes: {notes:?}");
+    }
+
+    #[test]
+    fn poll_interval_ms_folds_into_frame_ms() {
+        // 旧版两个字段都写进配置文件；读到就折成一个，别让用户的帧长设置静默失效。
+        let c = Config::from_json(r#"{"poll_interval_ms":12}"#).unwrap();
+        assert_eq!(c.frame_ms, 12);
+        // 两份都在时以 frame_ms 为准
+        let c = Config::from_json(r#"{"frame_ms":6,"poll_interval_ms":12}"#).unwrap();
+        assert_eq!(c.frame_ms, 6);
+        // 写回只剩一个名字
+        assert!(!c.to_json().contains("poll_interval_ms"));
     }
 
     #[test]

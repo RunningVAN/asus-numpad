@@ -11,6 +11,16 @@ use std::os::unix::io::RawFd;
 use crate::engine::Event;
 use crate::keycodes as kc;
 
+/// 一次 `read()` 最多取多少个事件：24 字节 × 64 = 1536 字节，够装一次手势里
+/// 所有手指的 MT 报文，又不至于让栈缓冲过大。
+pub(crate) const MAX_EVENTS_PER_READ: usize = 64;
+
+/// 一次 `read()` 的目标缓冲字节数。
+const EVENT_BUF_BYTES: usize = std::mem::size_of::<RawInputEvent>() * MAX_EVENTS_PER_READ;
+
+/// 单次 `read_events_into` 最多连续读几块事件，避免持续有数据时主循环饿死。
+const MAX_BURST_READS: usize = 16;
+
 /// `struct input_event`（64 位 Linux：timeval 16 字节 + 8 字节载荷 = 24）。
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
@@ -247,38 +257,57 @@ impl InputDevice {
         Ok(byte & 1 != 0) // LED_NUML == bit 0
     }
 
-    /// 非阻塞读取一批事件。
-    pub fn read_events(&self) -> io::Result<Vec<RawInputEvent>> {
+    /// 非阻塞读取一批事件，写入调用方给的缓冲（先清空）。
+    ///
+    /// 主循环每秒要读上百次，这里不留任何堆分配：缓冲在栈上，事件直接按位拷进
+    /// `out`。`out` 的容量由调用方决定，跨帧复用。
+    pub fn read_events_into(&self, out: &mut Vec<RawInputEvent>) -> io::Result<()> {
+        out.clear();
         let sizes = std::mem::size_of::<RawInputEvent>();
-        let mut buf = vec![0u8; sizes * 64];
-        loop {
-            let n =
-                unsafe { libc::read(self.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+        // 缓冲马上被 read() 整块覆盖，不需要先清零
+        let mut buf = std::mem::MaybeUninit::<[u8; EVENT_BUF_BYTES]>::uninit();
+        let buf = buf.as_mut_ptr() as *mut u8;
+        // 一次唤醒内排着的不止一块事件：多点触摸加快速滑动时，一帧 64 条很容易读满。
+        // 只读一块会把剩下的事件压到下一帧（8 ms 之后），坐标与压力被拆到两帧，
+        // 判键、判手势都会错位。这里持续读到 EAGAIN 为止；上限防止某设备持续灌
+        // 数据把主循环饿死（剩下的下一帧继续读）。
+        for _ in 0..MAX_BURST_READS {
+            let n = unsafe { libc::read(self.fd, buf as *mut libc::c_void, EVENT_BUF_BYTES) };
             if n < 0 {
                 let err = io::Error::last_os_error();
                 match err.kind() {
-                    io::ErrorKind::WouldBlock => return Ok(Vec::new()),
+                    io::ErrorKind::WouldBlock => return Ok(()),
                     io::ErrorKind::Interrupted => continue,
                     _ => return Err(err),
                 }
             }
+            if n == 0 {
+                return Ok(());
+            }
+            // read() 最多回填 EVENT_BUF_BYTES，天然不会多于 MAX_EVENTS_PER_READ，
+            // 这里只需按整块向下取整，丢掉尾部不足一个事件的残片。
             let count = n as usize / sizes;
-            let mut out = Vec::with_capacity(count);
+            out.reserve(count);
             for i in 0..count {
-                let mut ev = RawInputEvent::default();
-                let src = &buf[i * sizes..(i + 1) * sizes];
-                // SAFETY: RawInputEvent 是 repr(C) 的 POD，长度一致
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        src.as_ptr(),
-                        &mut ev as *mut RawInputEvent as *mut u8,
-                        sizes,
-                    );
-                }
+                // SAFETY: RawInputEvent 是 repr(C) 的 POD（全整数），缓冲按同样大小切块，
+                // 尾部可能有不足一个事件的残片，count 已按整块向下取整。
+                let ev =
+                    unsafe { std::ptr::read_unaligned(buf.add(i * sizes) as *const RawInputEvent) };
                 out.push(ev);
             }
-            return Ok(out);
+            if count < MAX_EVENTS_PER_READ {
+                // 没读满说明内核缓冲已空，不必再猜着多读一次
+                return Ok(());
+            }
         }
+        Ok(())
+    }
+
+    /// 非阻塞读取一批事件（自建缓冲的便捷版，热路径请用 [`Self::read_events_into`]）。
+    pub fn read_events(&self) -> io::Result<Vec<RawInputEvent>> {
+        let mut out = Vec::new();
+        self.read_events_into(&mut out)?;
+        Ok(out)
     }
 
     /// poll 等待可读，超时毫秒。
@@ -296,7 +325,18 @@ impl InputDevice {
             }
             return Err(err);
         }
-        Ok(r > 0)
+        if r == 0 {
+            return Ok(false);
+        }
+        // 设备被拔掉 / 驱动卸载时 poll 也会返回 >0，但置的是 ERR/HUP 而不是 POLLIN。
+        // 把它当成「有事件可读」会让主循环空转，所以这里转成错误交给调用方处理。
+        if pfd.revents & libc::POLLIN != 0 {
+            return Ok(true);
+        }
+        if pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
+            return Err(io::Error::from_raw_os_error(libc::ENODEV));
+        }
+        Ok(false)
     }
 }
 

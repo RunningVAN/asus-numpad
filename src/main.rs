@@ -135,6 +135,7 @@ fn build_cli() -> Command {
             Arg::new("i2c_bus")
                 .long("i2c-bus")
                 .global(true)
+                .value_name("NUM")
                 .value_parser(clap::value_parser!(i32))
                 .help(t("cli.i2c_bus.help")),
         )
@@ -191,6 +192,7 @@ fn build_cli() -> Command {
             Arg::new("pressure_min")
                 .long("pressure-min")
                 .global(true)
+                .value_name("PRESSURE")
                 .value_parser(clap::value_parser!(i32))
                 .help(t("cli.pressure_min.help")),
         )
@@ -605,7 +607,7 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     );
     println!("  {}", geometry.describe());
     println!(
-        "{}",
+        "  {}",
         i18n::tf(
             "check.geometry_usable",
             &[
@@ -647,7 +649,7 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
                 .map(|k| kc::name_of(k).to_string())
                 .unwrap_or_else(|| "None".into());
             println!(
-                "{}",
+                "  {}",
                 i18n::tf(
                     "check.cell_line",
                     &[
@@ -665,7 +667,7 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     println!();
     println!("{}", i18n::t("check.behavior_title"));
     println!(
-        "{}",
+        "  {}",
         i18n::tf(
             "check.b_numlock",
             &[
@@ -676,11 +678,11 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
         )
     );
     println!(
-        "{}",
+        "  {}",
         i18n::tf("check.b_mixed", &[("mode", cfg.mixed_mode.as_str())])
     );
     println!(
-        "{}",
+        "  {}",
         i18n::tf(
             "check.b_calc",
             &[
@@ -703,7 +705,7 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
         )
     );
     println!(
-        "{}",
+        "  {}",
         i18n::tf(
             "check.b_grab",
             &[(
@@ -717,7 +719,7 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
         )
     );
     println!(
-        "{}",
+        "  {}",
         i18n::tf(
             "check.b_idle",
             &[("sec", &(cfg.max_work_time_ms / 1000).to_string())]
@@ -733,7 +735,7 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
         }
     };
     println!(
-        "{}",
+        "  {}",
         i18n::tf(
             "check.b_led",
             &[("kind", &cfg.led_kind), ("where", &led_where)]
@@ -761,7 +763,7 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
                     asus_numpad::linux::FeatureProbe::Unknown => i18n::t("check.led_probe_unknown"),
                 };
                 println!(
-                    "{}",
+                    "  {}",
                     i18n::tf(
                         "check.led_probe_line",
                         &[
@@ -795,11 +797,11 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     }
 
     println!(
-        "{}",
+        "  {}",
         i18n::tf("check.b_bright", &[("text", &brightness_report(cfg))])
     );
     println!(
-        "{}",
+        "  {}",
         i18n::tf(
             "check.b_bright_cmd",
             &[("steps", &cfg.manual_steps().to_string())]
@@ -807,22 +809,22 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     );
     let cur = i18n::current();
     println!(
-        "{}",
+        "  {}",
         i18n::tf(
             "check.lang_line",
             &[("name", cur.native_name()), ("code", cur.code())]
         )
     );
     println!(
-        "{}",
+        "  {}",
         i18n::tf("check.lang_source", &[("source", &lang_source_text())])
     );
     match i18n::current_source() {
         Some(p) => println!(
-            "{}",
+            "  {}",
             i18n::tf("check.lang_file", &[("path", &p.display().to_string())])
         ),
-        None => println!("{}", i18n::t("lang.file_builtin")),
+        None => println!("  {}", i18n::t("lang.file_builtin")),
     }
     println!();
     println!("{}", i18n::t("check.tests"));
@@ -1439,7 +1441,7 @@ fn cmd_lang(cfg_path: &Path, code: Option<&str>) -> Result<i32> {
             "{}",
             i18n::tf("lang.file", &[("path", &p.display().to_string())])
         ),
-        None => println!("{}", i18n::t("lang.file_builtin")),
+        None => println!("  {}", i18n::t("lang.file_builtin")),
     }
 
     let Some(raw) = code else {
@@ -1640,6 +1642,7 @@ fn cmd_dump(cfg: &Config) -> Result<i32> {
 /// 本包只跑机型表里的机器：DMI 型号与触摸板模组都认不出时不再兜底，直接拦下。
 /// 返回 `Some(退出码)` 表示已拦下，`None` 表示放行（`2` = `--sku` 给的 id 无效，
 /// `3` = 本机不在支持列表）。
+#[cfg(target_os = "linux")]
 fn sku_gate(cfg: &Config) -> Option<i32> {
     let identity = sku::dmi_identity();
     let hw = sku::probe_hardware();
@@ -1654,7 +1657,10 @@ fn sku_gate(cfg: &Config) -> Option<i32> {
         Err(sku::ResolveError::Unsupported(u)) => {
             println!("{}", banner());
             println!("{}", unsupported_text(&u, &ids));
-            println!("{}", i18n::tf("err.unsupported_hint", &[("ids", &ids)]));
+            // 「已拒绝启动」只在真去启动时才说：unsupported_text 也被 check 复用，
+            // 那里没有可拒绝的启动过程。
+            println!("{}", i18n::t("err.unsupported_stop"));
+            println!("{}", i18n::t("err.unsupported_hint"));
             Some(3)
         }
     }
@@ -1694,6 +1700,11 @@ fn unsupported_text(u: &sku::Unsupported, ids: &str) -> String {
 
 /// 输出「本机用哪套机型配置 + 凭什么判定」。
 fn sku_block(cfg: &Config) -> String {
+    // DMI 与 hidraw 只有 Linux 上有：在别的系统上跑自检时如实说「判定不了」，
+    // 不能拿「认不出」当「不支持」，那会把开发机误导成硬件不兼容。
+    if !cfg!(target_os = "linux") {
+        return i18n::t("sku.nonlinux");
+    }
     let identity = sku::dmi_identity();
     let hw = sku::probe_hardware();
     let ids = sku::known_ids().join(", ");
@@ -1702,7 +1713,7 @@ fn sku_block(cfg: &Config) -> String {
             let mut s = i18n::tf(
                 "sku.model",
                 &[
-                    ("sku", r.sku.display),
+                    ("sku", &r.sku.localized_display()),
                     ("source", &i18n::t(r.source.i18n_key())),
                 ],
             );
@@ -1711,7 +1722,7 @@ fn sku_block(cfg: &Config) -> String {
                 s.push_str(&i18n::tf("sku.detail", &[("detail", detail)]));
                 s.push('\n');
             }
-            s.push_str(&i18n::tf("sku.note", &[("note", r.sku.note)]));
+            s.push_str(&i18n::tf("sku.note", &[("note", &r.sku.localized_note())]));
             s
         }
         Err(sku::ResolveError::UnknownId(e)) => {
@@ -1785,28 +1796,32 @@ fn cmd_sku(cfg: &Config, cfg_path: &Path, arg: Option<&str>) -> Result<i32> {
 }
 
 fn cmd_run(cfg: Config, verbose: bool) -> Result<i32> {
-    if let Some(code) = sku_gate(&cfg) {
-        return Ok(code);
-    }
-    #[cfg(target_os = "linux")]
-    if let Some(code) = numpad_gate() {
-        return Ok(code);
-    }
-    println!("{}", banner());
-    println!("{}", cfg.summary());
-    println!(
-        "{}",
-        i18n::tf("run.brightness", &[("text", &brightness_report(&cfg))])
-    );
-
+    // 两道闸门只对 Linux 有意义：非 Linux 上读不到 DMI 与 hidraw，跑闸门只会
+    // 得到「不在支持列表」，把「这个平台跑不了」误报成「这台机器不支持」。
     #[cfg(target_os = "linux")]
     {
+        if let Some(code) = sku_gate(&cfg) {
+            return Ok(code);
+        }
+        if let Some(code) = numpad_gate() {
+            return Ok(code);
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        println!("{}", banner());
+        println!("{}", cfg.summary());
+        println!(
+            "{}",
+            i18n::tf("run.brightness", &[("text", &brightness_report(&cfg))])
+        );
         asus_numpad::linux::run_service(cfg, verbose)?;
         Ok(0)
     }
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (cfg, verbose);
+        println!("{}", banner());
         println!("{}", i18n::t("run.nonlinux"));
         println!("{}", i18n::t("run.nonlinux_hint"));
         Ok(1)
