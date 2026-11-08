@@ -186,6 +186,34 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -.022em; margin: 0; font-weig
 }
 .icon-btn:hover { color: var(--text); border-color: var(--line-strong); background: var(--surface-2); }
 .icon-btn svg { width: 16px; height: 16px; }
+
+/* 语言选择：点开是列表，可直接选目标语言，不再是点一下轮换一个 */
+.lang-picker { position: relative; display: inline-flex; align-items: center; }
+.lang-select {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 32px;
+  min-width: 108px;
+  max-width: 148px;
+  padding: 0 20px 0 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: 600 12.5px/1 var(--font);
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: color .18s, border-color .18s, background .18s;
+}
+.lang-select:hover { color: var(--text); border-color: var(--line-strong); background: var(--surface-2); }
+.lang-select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.lang-select option { background: var(--bg-alt); color: var(--text); }
+.lang-picker .lang-ic,
+.lang-picker .lang-caret { position: absolute; pointer-events: none; color: var(--text-3); }
+.lang-picker .lang-ic { left: 8px; width: 14px; height: 14px; }
+.lang-picker .lang-caret { right: 6px; width: 11px; height: 11px; }
+.lang-picker:focus-within .lang-ic,
+.lang-picker:focus-within .lang-caret { color: var(--text); }
 html[data-theme="dark"] .ic-sun { display: none; }
 html[data-theme="light"] .ic-moon { display: none; }
 
@@ -257,12 +285,35 @@ h1 .grad {
   color: transparent;
 }
 
-.lede { color: var(--text-2); font-size: 16.5px; max-width: 34em; margin: 20px 0 30px; }
+.lede { max-width: 34em; margin: 20px 0 26px; }
+/* 首屏结论句：整页最重要的一句话，字号与颜色都压过正文 */
+.lede-lead {
+  display: block;
+  color: var(--text);
+  font-size: clamp(17px, 2.2vw, 18.5px);
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -.01em;
+}
+.lede-sub { display: block; margin-top: 9px; color: var(--text-2); font-size: 15.5px; }
+
+/* 三条硬事实：短、可扫读，比段落更容易被记住 */
+.hero-facts { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 24px 0 0; padding: 0; list-style: none; }
+.hero-facts li {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px; font-weight: 500; line-height: 1.3;
+}
+.hero-facts svg { width: 13px; height: 13px; flex: none; color: var(--ok); }
 
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
 .quick-cmd {
-  margin-top: 30px;
+  margin-top: 34px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -412,6 +463,18 @@ html[data-theme="light"] .cell.lit {
 .section.alt { background: var(--bg-alt); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 
 .sec-head { max-width: 620px; margin-bottom: 44px; }
+/* 章节编号：给每个板块一个视觉锚点，扫读时能快速定位 */
+.sec-kicker {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding-bottom: 3px;
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .16em;
+}
 .sec-head h2 { font-size: clamp(1.6rem, 2.6vw, 2.15rem); }
 .sec-head p { color: var(--text-2); margin: 13px 0 0; font-size: 15.5px; }
 
@@ -651,6 +714,10 @@ html.js .reveal.in { opacity: 1; transform: none; }
   h1 { font-size: 2.1rem; }
   .lede { font-size: 15.5px; margin: 16px 0 22px; }
   .hero-actions .btn { flex: 1 1 0; justify-content: center; }
+  /* 手机屏幕窄，结论句保持醒目、机制说明收一档，避免首屏文字过密 */
+  .lede-sub { font-size: 14.8px; line-height: 1.62; }
+  .hero-facts { margin-top: 18px; gap: 7px 8px; }
+  .hero-facts li { font-size: 12.5px; padding: 5px 11px 5px 9px; }
   .section { padding: 66px 0; }
   .cards, .steps, .use-grid, .other-ways, .foot-grid { grid-template-columns: minmax(0, 1fr); }
   .sec-head { margin-bottom: 32px; }

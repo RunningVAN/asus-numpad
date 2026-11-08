@@ -45,7 +45,15 @@
       <a href="#faq" data-i18n="nav.faq">FAQ</a>
     </nav>
     <div class="nav-actions">
-      <button class="icon-btn" id="lang-toggle" type="button" aria-label="Switch language" title="Switch language">中</button>
+      <div class="lang-picker">
+        <svg class="lang-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M3.2 9.3h17.6M3.2 14.7h17.6M12 3.1a18.5 18.5 0 0 1 0 17.8M12 3.1a18.5 18.5 0 0 0 0 17.8" stroke="currentColor" stroke-width="1.2"/></svg>
+        <select id="lang-select" class="lang-select" aria-label="Page language" data-i18n-aria="lang.label">
+          <option value="en" lang="en">English</option>
+          <option value="zh-CN" lang="zh-CN">简体中文</option>
+          <option value="zh-TW" lang="zh-TW">繁體中文</option>
+        </select>
+        <svg class="lang-caret" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="m2.6 4.6 3.4 3.4 3.4-3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
       <button class="icon-btn" id="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
         <svg class="ic-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.6"/><path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M5.6 5.6 4 4M20 20l-1.6-1.6M18.4 5.6 20 4M4 20l1.6-1.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         <svg class="ic-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 14.2A8.2 8.2 0 1 1 9.8 4a6.6 6.6 0 0 0 10.2 10.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
@@ -70,14 +78,19 @@
           <span data-i18n="hero.title1">NumberPad,</span><br>
           <span class="grad" data-i18n="hero.title2">on Linux. No kernel patch.</span>
         </h1>
-        <p class="lede" data-i18n="hero.lede">
-          The touchpad is grabbed through evdev, contacts are mapped to numpad cells, key events go out
-          through uinput. Stock kernel, stock ACPI; uninstalling restores the previous behaviour.
+        <p class="lede">
+          <strong class="lede-lead" data-i18n="hero.ledeLead">Stock kernel, stock ACPI. The NumberPad is driven entirely from userspace.</strong>
+          <span class="lede-sub" data-i18n="hero.lede">The touchpad is grabbed through evdev, contacts are mapped to numpad cells, key events go out through uinput. Uninstalling restores the previous behaviour.</span>
         </p>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#install" data-i18n="hero.cta1">Install</a>
           <a class="btn btn-ghost" href="https://github.com/asus-numpad/asus-numpad/releases" target="_blank" rel="noopener" data-i18n="hero.cta2">Download packages</a>
         </div>
+        <ul class="hero-facts">
+          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact1">Stock kernel, no modules</span></li>
+          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact2">One command to install</span></li>
+          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact3">Packages signed with GPG</span></li>
+        </ul>
         <div class="quick-cmd" role="group" aria-label="Quick install">
           <div class="quick-tabs">
             <button class="qtab active" type="button" aria-pressed="true" data-qt="sh">apt / dnf / zypper / pacman / apk</button>
@@ -123,6 +136,7 @@
   <section class="section" id="features">
     <div class="wrap">
       <header class="sec-head reveal">
+        <span class="sec-kicker" aria-hidden="true">01</span>
         <h2 data-i18n="feat.title">No kernel or firmware changes</h2>
         <p data-i18n="feat.sub">No kernel module, no dkms rebuild after every update, no patched firmware table.</p>
       </header>
@@ -165,6 +179,7 @@
   <section class="section alt" id="how">
     <div class="wrap">
       <header class="sec-head reveal">
+        <span class="sec-kicker" aria-hidden="true">02</span>
         <h2 data-i18n="how.title">How it works</h2>
         <p data-i18n="how.sub">Three stages in one userspace process; no kernel code is involved.</p>
       </header>
@@ -200,6 +215,7 @@ Backlight channel hidraw (FEATURE 0x0d, 4 steps)
   <section class="section" id="models">
     <div class="wrap">
       <header class="sec-head reveal">
+        <span class="sec-kicker" aria-hidden="true">03</span>
         <h2 data-i18n="models.title">Supported models</h2>
         <p data-i18n="models.sub">The list below is the support range. A model id switches parameters manually; machines outside the list are refused at startup, as are listed models whose touchpad carries no NumberPad hardware.</p>
       </header>
@@ -257,6 +273,7 @@ Backlight channel hidraw (FEATURE 0x0d, 4 steps)
   <section class="section alt" id="install">
     <div class="wrap">
       <header class="sec-head reveal">
+        <span class="sec-kicker" aria-hidden="true">04</span>
         <h2 data-i18n="inst.title">Install</h2>
         <p data-i18n="inst.sub">Add the repository once; upgrades follow your package manager. The index is GPG signed and the key ships with it.</p>
       </header>
@@ -379,6 +396,7 @@ services.asus-numpad.enable = true;</code></pre>
   <section class="section" id="usage">
     <div class="wrap">
       <header class="sec-head reveal">
+        <span class="sec-kicker" aria-hidden="true">05</span>
         <h2 data-i18n="use.title">Everyday commands</h2>
         <p data-i18n="use.sub">The daemon runs as a systemd unit; the CLI is for checking and tuning.</p>
       </header>
@@ -417,6 +435,7 @@ asus-numpad --lang en check</code></pre>
   <section class="section alt" id="faq">
     <div class="wrap narrow">
       <header class="sec-head reveal">
+        <span class="sec-kicker" aria-hidden="true">06</span>
         <h2 data-i18n="faq.title">Questions</h2>
       </header>
       <div class="faq">

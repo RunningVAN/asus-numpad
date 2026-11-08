@@ -6,6 +6,11 @@
 
   /* ---------------- i18n ---------------- */
   var ZH_CN = {
+    "lang.label": "页面语言",
+    "hero.ledeLead": "原生内核、原生 ACPI：数字小键盘完全由用户空间驱动。",
+    "hero.fact1": "原生内核，不装模块",
+    "hero.fact2": "一条命令装好",
+    "hero.fact3": "软件包全部 GPG 签名",
     "nav.features": "特性",
     "nav.how": "原理",
     "nav.models": "机型",
@@ -118,6 +123,11 @@
   };
 
   var ZH_TW = {
+    "lang.label": "頁面語言",
+    "hero.ledeLead": "原生核心、原生 ACPI：數字小鍵盤完全由使用者空間驅動。",
+    "hero.fact1": "原生核心，不裝模組",
+    "hero.fact2": "一條指令裝好",
+    "hero.fact3": "軟體包全部 GPG 簽章",
     "nav.features": "功能",
     "nav.how": "原理",
     "nav.models": "機型",
@@ -240,14 +250,8 @@
   I18N.en["a11y.code"] = "Install command";
 
   var LANGS = ["en", "zh-CN", "zh-TW"];
-  var LANG_LABEL = { en: "中", "zh-CN": "繁", "zh-TW": "EN" };
-  var LANG_TITLE = {
-    en: "切换到简体中文",
-    "zh-CN": "切换到繁体中文",
-    "zh-TW": "Switch to English"
-  };
 
-  var langBtn = document.getElementById("lang-toggle");
+  var langSelect = document.getElementById("lang-select");
   var stored = null;
   try { stored = localStorage.getItem("an-lang"); } catch (e) {}
   if (stored === "zh") stored = "zh-CN";
@@ -279,14 +283,39 @@
       themeBtnEl.title = themeLabel;
       themeBtnEl.setAttribute("aria-label", themeLabel);
     }
-    langBtn.textContent = LANG_LABEL[next];
-    langBtn.title = LANG_TITLE[next];
-    langBtn.setAttribute("aria-label", LANG_TITLE[next]);
+    if (langSelect) {
+      langSelect.value = next;
+      // 窄屏放不下全称时退成短标签，靠 title 补全语义
+      var full = langSelect.options[langSelect.selectedIndex]
+        ? langSelect.options[langSelect.selectedIndex].text
+        : next;
+      langSelect.title = full;
+    }
     try { localStorage.setItem("an-lang", next); } catch (e) {}
   }
-  langBtn.addEventListener("click", function () {
-    applyLang(LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length]);
-  });
+  if (langSelect) {
+    langSelect.addEventListener("change", function () {
+      applyLang(langSelect.value);
+    });
+    /* 原生 select 在收起态下方向键不一定改值（各浏览器不一致），
+       这里兜一层：未展开时上下键直接换语言，焦点始终留在控件上。 */
+    langSelect.addEventListener("keydown", function (ev) {
+      if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+      var k = ev.key;
+      if (k !== "ArrowDown" && k !== "ArrowUp" && k !== "Home" && k !== "End") return;
+      var open = false;
+      try { open = langSelect.matches(":open"); } catch (e) {}
+      if (open) return;                       // 弹层已展开：交给浏览器原生处理
+      var i = LANGS.indexOf(langSelect.value);
+      if (i < 0) i = 0;
+      if (k === "ArrowDown") i = (i + 1) % LANGS.length;
+      else if (k === "ArrowUp") i = (i - 1 + LANGS.length) % LANGS.length;
+      else if (k === "Home") i = 0;
+      else i = LANGS.length - 1;
+      ev.preventDefault();
+      applyLang(LANGS[i]);
+    });
+  }
   applyLang(lang);
 
   /* ---------------- theme ---------------- */
