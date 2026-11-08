@@ -75,21 +75,21 @@
       <div class="hero-copy">
         <p class="eyebrow"><span class="dot"></span><span data-i18n="hero.eyebrow">Userspace driver · GPL-3.0</span></p>
         <h1>
-          <span data-i18n="hero.title1">NumberPad,</span><br>
-          <span class="grad" data-i18n="hero.title2">on Linux. No kernel patch.</span>
+          <span data-i18n="hero.title1">The NumberPad,</span><br>
+          <span class="grad" data-i18n="hero.title2">on stock Linux</span>
         </h1>
         <p class="lede">
-          <strong class="lede-lead" data-i18n="hero.ledeLead">Stock kernel, stock ACPI. The NumberPad is driven entirely from userspace.</strong>
-          <span class="lede-sub" data-i18n="hero.lede">The touchpad is grabbed through evdev, contacts are mapped to numpad cells, key events go out through uinput. Uninstalling restores the previous behaviour.</span>
+          <strong class="lede-lead" data-i18n="hero.ledeLead">Stock kernel, stock ACPI. The NumberPad runs entirely in userspace.</strong>
+          <span class="lede-sub" data-i18n="hero.lede">It reads contacts from the touchpad through evdev, maps them to numpad cells, and emits keys through uinput. Remove the package and the touchpad behaves as before.</span>
         </p>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#install" data-i18n="hero.cta1">Install</a>
           <a class="btn btn-ghost" href="https://github.com/asus-numpad/asus-numpad/releases" target="_blank" rel="noopener" data-i18n="hero.cta2">Download packages</a>
         </div>
         <ul class="hero-facts">
-          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact1">Stock kernel, no modules</span></li>
-          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact2">One command to install</span></li>
-          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact3">Packages signed with GPG</span></li>
+          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact1">No kernel modules</span></li>
+          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact2">Installs with one command</span></li>
+          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact3">Packages GPG-signed</span></li>
         </ul>
         <div class="quick-cmd" role="group" aria-label="Quick install">
           <div class="quick-tabs">
@@ -101,7 +101,7 @@
             <pre class="qcode hidden" role="group" aria-label="Install command" data-i18n-aria="a11y.code" data-qt-body="nix"><code>nix run github:asus-numpad/asus-numpad</code></pre>
             <button class="copy-btn" type="button" aria-label="Copy" data-i18n-aria="copy"><span data-i18n="copy">Copy</span></button>
           </div>
-          <p class="quick-note" data-i18n="hero.note">Add the repository once — see <a href="#install">Install</a> for the one-liner.</p>
+          <p class="quick-note" data-i18n="hero.note">One script adds the repository and installs the package. Step-by-step commands are under <a href="#install">Install</a>.</p>
         </div>
       </div>
 
@@ -138,7 +138,7 @@
       <header class="sec-head reveal">
         <span class="sec-kicker" aria-hidden="true">01</span>
         <h2 data-i18n="feat.title">No kernel or firmware changes</h2>
-        <p data-i18n="feat.sub">No kernel module, no dkms rebuild after every update, no patched firmware table.</p>
+        <p data-i18n="feat.sub">No kernel module, nothing to rebuild after a kernel update, no patched firmware tables.</p>
       </header>
       <div class="cards">
         <article class="card reveal">
@@ -148,8 +148,8 @@
         </article>
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5 12 4l8.5 4.5v7L12 20l-8.5-4.5v-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3.5 8.5 12 13l8.5-4.5M12 13v7" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
-          <h3 data-i18n="feat.2.t">Built per package format</h3>
-          <p data-i18n="feat.2.d">The deb is built on glibc 2.35 and covers Ubuntu 22.04–24.04 with Debian 12/13; the rpm is built on el9 and covers RHEL 9–10, Fedora and openSUSE. The release workflow installs the same file in every target before publishing. Repositories and release assets are x86_64 only.</p>
+          <h3 data-i18n="feat.2.t">Each format is built separately</h3>
+          <p data-i18n="feat.2.d">The deb is built on glibc 2.35 and covers Ubuntu 22.04–24.04 with Debian 12/13; the rpm is built on el9 and covers RHEL 9–10, Fedora and openSUSE. Before publishing, CI installs the same package on every target system. Repositories and release assets are x86_64 only.</p>
         </article>
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
@@ -187,7 +187,7 @@
         <li class="reveal">
           <span class="step-n">01</span>
           <h3 data-i18n="how.1.t">Grab the panel</h3>
-          <p data-i18n="how.1.d">The multitouch evdev node of the touchpad is opened and grabbed, so contacts are read without the desktop pointer reacting to them.</p>
+          <p data-i18n="how.1.d">The driver opens and grabs the multitouch evdev node, so contacts go to the driver and the desktop pointer stays still.</p>
         </li>
         <li class="reveal">
           <span class="step-n">02</span>
@@ -445,7 +445,7 @@ asus-numpad --lang en check</code></pre>
         </details>
         <details class="reveal">
           <summary data-i18n="faq.2.q">Will my touchpad stop working as a pointer?</summary>
-          <p data-i18n="faq.2.d">Only while numpad mode is on. With <code>grab</code> off, clicks still reach the desktop; with <code>mixed_mode</code> on, keys and pointer work together once <code>/dev/uinput</code> is available.</p>
+          <p data-i18n="faq.2.d">Only while numpad mode is on. Turn <code>grab</code> off and clicks still reach the desktop; with <code>mixed_mode</code> on, keys and pointer work together once <code>/dev/uinput</code> is available.</p>
         </details>
         <details class="reveal">
           <summary data-i18n="faq.3.q">My model is not in the table, or it has no NumberPad — will it work?</summary>

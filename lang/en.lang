@@ -3,10 +3,10 @@
 # Missing keys fall back to the built-in English text; copy this file to ~/.config/asus-numpad/lang/ to override (no root needed).
 
 # ---- 启动横幅 ----
-app.banner = ASUS touchpad numpad v{version} (Linux userspace, aligned with official AlgoParameters)
+app.banner = ASUS touchpad numpad v{version} (Linux userspace, parameters taken from the official AlgoParameters)
 
 # ---- 命令行总览 ----
-cli.about = ASUS touchpad numpad driver (Linux, aligned with official AlgoParameters)
+cli.about = ASUS touchpad numpad driver (Linux, parameters taken from the official AlgoParameters)
 cli.config.help = Path to the config file
 cli.device.help = Touchpad event device; auto-detected by default (ELAN 04F3 / PixArt 093A, layout picked from the HID module)
 cli.keyboard.help = Keyboard event device (reads the NumLock LED)
@@ -105,7 +105,7 @@ check.lang_line = UI language       {name} ({code})
 check.lang_source = Language source   {source}
 check.lang_file = Language file     {path}
 check.tests = Offline cases: see `cargo test` (runs on Windows / Linux, no hardware needed)
-check.conclusion = Conclusion: config and geometry are self-consistent.
+check.conclusion = Conclusion: config and geometry agree.
 common.enabled = enabled
 common.disabled = disabled
 common.auto_detect = auto-detect

@@ -3,7 +3,7 @@
 # 缺键会回落到英文内置文案；可复制整份文件到 ~/.config/asus-numpad/lang/ 做本地化覆盖（免 root）。
 
 # ---- 启动横幅 ----
-app.banner = ASUS 触摸板小键盘 v{version}（Linux 用户态，官方 AlgoParameters 对齐版）
+app.banner = ASUS 触摸板小键盘 v{version}（Linux 用户态，参数取自官方 AlgoParameters）
 
 # ---- 命令行总览 ----
 cli.about = ASUS 触摸板数字小键盘驱动（Linux，官方 AlgoParameters 对齐版）
@@ -105,7 +105,7 @@ check.lang_line = 界面语言          {name}（{code}）
 check.lang_source = 语言来源          {source}
 check.lang_file = 语言文件          {path}
 check.tests = 离线用例：见 `cargo test`（Windows / Linux 均可运行，不依赖硬件）
-check.conclusion = 自检结论：配置与几何自洽。
+check.conclusion = 自检结论：配置与几何换算一致。
 common.enabled = 启用
 common.disabled = 关闭
 common.auto_detect = 自动探测
