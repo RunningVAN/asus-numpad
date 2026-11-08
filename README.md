@@ -72,10 +72,10 @@ x86_64 only; other architectures need a local build.
 additionally installs each package in a clean container of every target distribution and runs
 `asus-numpad --version`; a package that does not install blocks the release.
 
-Runtime model detection means a package is never tied to one model: the same binary reads the DMI
+Runtime model detection means a package is not tied to a single model: the same binary reads the DMI
 fields and the touchpad module, then picks the matching parameter set and keymap. A machine that
-matches no row of the table is not started: the gate exits with code 3 and prints the supported
-models, rather than running parameters meant for other hardware. If the hardware cannot be read
+matches no row of the table is not started: the startup check exits with code 3 and prints the supported
+models, instead of applying parameters intended for other hardware. If the hardware cannot be read
 reliably (virtual machines, whitebox chassis, BIOS placeholder strings), pin the model by hand, see
 [Model detection](#model-detection). Runtime dependency: glibc, or musl on Alpine.
 
@@ -148,7 +148,7 @@ The `GVM_A` / `GVM` / `NVM` parameters are copied verbatim from the official fil
 entries than a full 15-cell table holds: `GVM` ends at `_06`, `NVM` at `_12`. The gaps are written as
 `0`, the default the Windows driver reads when an entry is absent; no value is inferred. `GVM_A` shares
 the `GVM` values — `NUMPADLAYOUT_GVM_05` / `_06` are annotated "for GVMA" in the filter. Both rows
-carry `LayoutSupport::Family`: 5 columns, same grid, never checked key by key on real hardware, so they
+carry `LayoutSupport::Family`: 5 columns, same grid, not checked key by key on real hardware, so they
 are refused at startup unless `--allow-unverified` is given.
 
 This table is the support list: a model id switches parameters by hand (`asus-numpad sku <id>`) and
@@ -163,7 +163,7 @@ than validated machine by machine; per-model compatibility lives on the
 A model id is not proof that the machine carries the hardware. Some retail configurations of the
 same model ship a 4-zone RGB touchpad with no NumberPad while keeping an identical DMI prefix
 (`G614JV…-0EAGX…` has it, `G614JV…-0EACX…` does not; counts per generation in the table above). The
-keymap therefore still follows the touchpad module, never the model code; the per-configuration check
+keymap therefore still follows the touchpad module rather than the model code; the per-configuration check
 is in [docs/machines.md](docs/machines.md#同一型号不是都有-numpad按配置核验).
 
 The Zephyrus M16 / G16 / Flow X16 line (幻16 in China; `GU603` through `GV601`) is absent by design,
@@ -207,7 +207,7 @@ icon-area long press therefore does not apply to a side-mounted pad:
 - Contact mapping and backlight are unchanged: cell centres shift with the keymap of that module, and
   the backlight still uses FEATURE `0x0d`.
 - The mode switch belongs to the keyboard key. The keyboard is its own HID device and the driver grabs
-  the touchpad only, so it never competes for that key.
+  the touchpad only, so it does not compete for that key.
 - To pin number mode, use the `numlock` option (`sync` / `toggle` / `off`) rather than the long press.
 
 ### Model detection
@@ -218,7 +218,7 @@ ASUS blocks startup.
 
 Touchpad module name (such as `ASUE1416`, read from i2c-hid and HID) is the second signal, used
 when DMI names no model. When neither signal names a row, the machine is outside the support list and
-the gate refuses to start with exit code 3; `--sku` stays the way in. Module and keymap per model:
+the startup check refuses to start with exit code 3; `--sku` skips the check. Module and keymap per model:
 [docs/machines.md](docs/machines.md).
 
 When the hardware cannot be read reliably, pin the model:
@@ -232,7 +232,7 @@ asus-numpad sku auto       # back to auto-detection
 
 `sku` in the config wins over detection; `--sku g614` applies to one invocation only.
 
-### Layout gate
+### Layout validation
 
 Keymaps are keyed by module name: `HID_LAYOUTS` in `src/layout.rs` maps 44 module names to keymap
 names from the vendor INF. Each keymap carries a support level.
@@ -240,12 +240,12 @@ names from the vendor INF. Each keymap carries a support level.
 | Level | Behaviour |
 | --- | --- |
 | `verified` | starts as is |
-| `family` | same 5x4 grid, official parameters copied in full (entries the INF omits default to `0`), not verified key by key on hardware: refused until allowed |
-| `unsupported` | parameters recorded but no key-position reference and never checked on hardware: refused, `check` output requested |
+| `family` | same 5x4 grid, official parameters copied in full (entries the INF omits default to `0`), not verified key by key on hardware: refused unless explicitly allowed |
+| `unsupported` | parameters recorded but no key-position reference and not checked on hardware: refused; `check` output is requested |
 
 A module the table does not know resolves to `UNKNOWN` and is refused the same way, so an unfamiliar
-panel never gets mapped onto a keymap that would emit the wrong keys. The gate applies to the keymap
-only, never to the model id.
+panel is not mapped onto a keymap that would emit the wrong keys. The check applies to the keymap
+only, not to the model id.
 
 ```bash
 asus-numpad --allow-unverified run    # or set allow_unverified_layout in the config
@@ -265,18 +265,18 @@ generally do not:
 
 - **Addressable backlight.** Cell position and number-mode state are indicated by an LED pattern
   driven through HID FEATURE report `0x0d` (`[0d 14 03 <v> ad]`, `0x41`..`0x48` select the brightness
-  step). Without it, keys are still emitted, but nothing indicates which cell a finger is on or
+  step). Without it, keys are still emitted, but there is no indication of which cell the finger is on or
   whether number mode is active.
 - **A factory calibration table.** `AlgoParameters` in `AsusNUMPADFilter.inf` fixes frame length
   (8 ms), geometry unit (0.1 mm), tap window (350 ms), NumLock long press (62 frames), swipe
   threshold (4838 um) and two-finger gap (40 mm). Without it those values have to be fitted on a
-  panel that was never tuned for numpad use, and tap and swipe recognition will not match the
+  panel not tuned for numpad use, and tap and swipe recognition will not match the
   Windows driver.
 
 Support therefore stops at panels that provide both. The model table in `src/sku.rs` is the support
 list and gates startup; keymaps and their support level live in `HID_LAYOUTS` (`src/layout.rs`) and are
 picked separately by the touchpad module, so an uncovered module stops at the
-[layout gate](#layout-gate). Adding a panel that has both takes one model row and one set of layout
+[layout validation](#layout-validation). Adding a panel that has both takes one model row and one set of layout
 constants.
 
 ### Why a userspace driver instead of a kernel module?
@@ -326,7 +326,7 @@ touchpad --evdev(/dev/input/eventN)--> frame buffer (8 ms) --> state machine --u
 Keymaps are selected by touchpad module and HID name, not by laptop model. `HID_LAYOUTS` holds 44
 HID-name-to-keymap entries and covers every module in the vendor `SupportList`; module prefixes
 such as `ASUE1416` and `ASCF1400` appear in `/sys/class/input/*/name`. Each entry carries a support
-level, see the [layout gate](#layout-gate).
+level, see the [layout validation](#layout-validation).
 
 The numpad sits in the top-right corner of the touchpad, 5 rows by 4 columns. Cell centres are
 the coordinates of `NUMPADLAYOUT_GH3XLNDZ_00..14` in 0.1 mm units. Coordinate to cell to keycode

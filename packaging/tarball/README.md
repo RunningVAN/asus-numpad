@@ -1,6 +1,6 @@
 # asus-numpad 通用 tarball 包
 
-这个包不为某个包管理器设计，给的是**一条不依赖发行版的路**：解包、跑 install.sh、结束。
+这个包不为某个包管理器设计，给的是**一条不依赖发行版的路**：解包、执行 install.sh。
 适合 Debian/Fedora/Arch 之外的发行版，或不想让包管理器托管这个驱动的机器。
 
 目标发行版举例：NixOS（另一种方式见 `packaging/nix`）、Void、Slackware、openSUSE、openEuler、Alpine（有原生 .apk，优先用 `packaging/alpine`）、各种原子更新/不可变系统。
@@ -46,7 +46,7 @@ BUILD-MODE                              记录链接方式（static-musl / dynam
 
 `BUILD-MODE` 是 `dynamic-glibc` 时，二进制要求目标机的 glibc 不低于构建机。
 跨年代发行版部署请用 `make-tarball.sh --static` 出的 musl 静态版——那种二进制
-在任意 x86_64 Linux 上都能跑，连 Alpine 也行。
+可运行于任意 x86_64 Linux，包括 Alpine。
 
 ## 卸载
 

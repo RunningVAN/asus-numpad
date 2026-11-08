@@ -29,7 +29,7 @@ cli.lang.help = UI language: zh-CN / zh-TW / en / auto (default auto = follow sy
 
 # ---- 子命令说明 ----
 cli.cmd.run = Take over the touchpad (default action)
-cli.cmd.check = Self-check: print official parameters, geometry conversion, key map, and run offline cases
+cli.cmd.check = Self-check: print official parameters, geometry conversion, key map, and run the offline tests
 cli.cmd.dump = Print raw touchpad events (troubleshooting, no key output)
 cli.cmd.bright = Brightness: four manual steps (0..max, linear or custom) / follow keyboard backlight
 cli.cmd.bright.long = e.g. `bright 0|1|2|3|4` (0 = off, 1 = darkest, 4 = brightest, linearly spaced by default), `bright up|down|cycle`, `bright follow on|off`, `bright status`; define your own steps with the `manual_brightness_levels` config key
@@ -232,7 +232,7 @@ engine.geo.range = touchpad coordinate range x[{x0},{x1}] y[{y0},{y1}]
 engine.geo.unit = 1 unit = {ux} µm (X) / {uy} µm (Y)
 engine.geo.official = Official GH3XLNDZ conversion: {text}
 engine.geo.pressure = pressure axis: {state} | pressure_numpad_min={min}
-engine.warn.grab = [warn] cannot grab the touchpad; digits still work, but the pointer moves with them
+engine.warn.grab = [warn] cannot grab the touchpad; digits are still emitted, but the pointer moves as well
 engine.geo.pressure_yes = supported
 engine.geo.pressure_no = unsupported (pressure steps bypassed)
 cfg.err.mixed_mode = invalid mixed_mode: {v}
@@ -301,8 +301,8 @@ err.not_asus = This machine's vendor is {vendor}, not ASUS.
 err.unsupported_model = This machine is not in the supported model list ({ids}).
 err.unsupported_stop = asus-numpad was not started.
 err.unsupported_hint = If the hardware info is wrong or unreadable (virtual machine, placeholder DMI), force the model by hand: asus-numpad sku <id>
-err.no_numpad = This touchpad has no NumberPad hardware: its HID report descriptor carries no FEATURE report 0x0d, so neither the numpad backlight nor the icon area exists. Not starting.
-err.no_numpad.hint = Only configurations with a NumberPad expose FEATURE 0x0d. The 4-zone RGB configurations of the same model share the touchpad module but have no icon area, and no software can add one. If the hardware really does have a NumberPad, report the output of `asus-numpad check`.
+err.no_numpad = This touchpad has no NumberPad hardware: its HID report descriptor carries no FEATURE report 0x0d, so neither the numpad backlight nor the icon area exists. Refusing to start.
+err.no_numpad.hint = Only configurations with a NumberPad expose FEATURE 0x0d. The 4-zone RGB configurations of the same model share the touchpad module but have no icon area, and no software can create one. If the hardware really does have a NumberPad, report the output of `asus-numpad check`.
 err.numpad_no_access = Cannot read the touchpad report descriptor (permission denied), so NumberPad presence is unknown. Continuing; if the numpad does not respond, check the udev uaccess rule first.
 layout.source.auto = auto-detected from the touchpad module
 layout.source.fixed = pinned in the config / on the command line

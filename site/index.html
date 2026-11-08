@@ -79,7 +79,7 @@
           <span class="grad" data-i18n="hero.title2">on stock Linux</span>
         </h1>
         <p class="lede">
-          <strong class="lede-lead" data-i18n="hero.ledeLead">Stock kernel, stock ACPI. The NumberPad runs entirely in userspace.</strong>
+          <strong class="lede-lead" data-i18n="hero.ledeLead">Stock kernel, stock ACPI. The NumberPad is driven entirely from userspace.</strong>
           <span class="lede-sub" data-i18n="hero.lede">It reads contacts from the touchpad through evdev, maps them to numpad cells, and emits keys through uinput. Remove the package and the touchpad behaves as before.</span>
         </p>
         <div class="hero-actions">
@@ -88,7 +88,7 @@
         </div>
         <ul class="hero-facts">
           <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact1">No kernel modules</span></li>
-          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact2">Installs with one command</span></li>
+          <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact2">Single command install</span></li>
           <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact3">Packages GPG-signed</span></li>
         </ul>
         <div class="quick-cmd" role="group" aria-label="Quick install">
@@ -138,13 +138,13 @@
       <header class="sec-head reveal">
         <span class="sec-kicker" aria-hidden="true">01</span>
         <h2 data-i18n="feat.title">No kernel or firmware changes</h2>
-        <p data-i18n="feat.sub">No kernel module, nothing to rebuild after a kernel update, no patched firmware tables.</p>
+        <p data-i18n="feat.sub">No kernel module, no rebuild after a kernel update, no patched firmware tables.</p>
       </header>
       <div class="cards">
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 4 7v6c0 4.4 3.4 7.3 8 8 4.6-.7 8-3.6 8-8V7l-8-4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m9 12 2.2 2.2L15.5 10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           <h3 data-i18n="feat.1.t">Nothing patched</h3>
-          <p data-i18n="feat.1.d">evdev in, uinput out. No vendor module is replaced and no ACPI object is overridden, so kernel upgrades are not affected; <code>dnf remove</code> restores the default behaviour.</p>
+          <p data-i18n="feat.1.d">Input comes from evdev, output goes through uinput. No vendor module is replaced and no ACPI object is overridden, so kernel upgrades are unaffected; <code>dnf remove</code> restores the default behaviour.</p>
         </article>
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5 12 4l8.5 4.5v7L12 20l-8.5-4.5v-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3.5 8.5 12 13l8.5-4.5M12 13v7" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
@@ -163,7 +163,7 @@
         </article>
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><rect x="4.5" y="10.5" width="15" height="9" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
-          <h3 data-i18n="feat.5.t">Layout gate</h3>
+          <h3 data-i18n="feat.5.t">Layout validation</h3>
           <p data-i18n="feat.5.d">44 touchpad modules map to keymaps from the vendor INF, each tagged verified, family or unsupported. Unknown panels are refused at startup; no key events are emitted.</p>
         </article>
         <article class="card reveal">
@@ -187,7 +187,7 @@
         <li class="reveal">
           <span class="step-n">01</span>
           <h3 data-i18n="how.1.t">Grab the panel</h3>
-          <p data-i18n="how.1.d">The driver opens and grabs the multitouch evdev node, so contacts go to the driver and the desktop pointer stays still.</p>
+          <p data-i18n="how.1.d">The driver opens and grabs the multitouch evdev node, so contacts reach the driver and the desktop pointer is unaffected.</p>
         </li>
         <li class="reveal">
           <span class="step-n">02</span>
@@ -258,9 +258,9 @@ Backlight channel hidraw (FEATURE 0x0d, 4 steps)
       </div>
       <p class="fine reveal" data-i18n="models.shots">Product images from the ASUS product pages, one for each model above.</p>
       <p class="fine reveal" data-i18n="models.gate">
-        The pad itself has the last word. After the model code matches, the driver looks for HID FEATURE
+        The touchpad hardware is the final check. After the model code matches, the driver looks for HID FEATURE
         report <code>0x0d</code> and refuses to start without it: a 4-zone RGB configuration of a listed
-        model shares the touchpad module but has no icon area, so there is nothing to draw on.
+        model shares the touchpad module but has no icon area, so the LED pattern has no target cell.
       </p>
       <p class="fine reveal" data-i18n="models.fine">
         The DMI model code is authoritative; marketing names are for orientation only. Pin a model with
@@ -441,15 +441,15 @@ asus-numpad --lang en check</code></pre>
       <div class="faq">
         <details class="reveal">
           <summary data-i18n="faq.1.q">Does this replace asusctl or the kernel's hid-asus?</summary>
-          <p data-i18n="faq.1.d">No. It sits beside them: it grabs the touchpad evdev node and adds a virtual keyboard. Keyboard backlight control from asusctl keeps working, and remove the package to drop the numpad layer.</p>
+          <p data-i18n="faq.1.d">No. The two run in parallel: it grabs the touchpad evdev node and adds a virtual keyboard. Keyboard backlight control from asusctl keeps working, and uninstalling the package removes only the numpad function.</p>
         </details>
         <details class="reveal">
           <summary data-i18n="faq.2.q">Will my touchpad stop working as a pointer?</summary>
-          <p data-i18n="faq.2.d">Only while numpad mode is on. Turn <code>grab</code> off and clicks still reach the desktop; with <code>mixed_mode</code> on, keys and pointer work together once <code>/dev/uinput</code> is available.</p>
+          <p data-i18n="faq.2.d">Only while numpad mode is on. With <code>grab</code> off, clicks still reach the desktop; with <code>mixed_mode</code> on, keys and pointer work together once <code>/dev/uinput</code> is available.</p>
         </details>
         <details class="reveal">
           <summary data-i18n="faq.3.q">My model is not in the table, or it has no NumberPad — will it work?</summary>
-          <p data-i18n="faq.3.d">A machine that matches no row is refused at startup: the gate exits with code 3 and prints the supported models, it does not fall back to another machine's parameters. <code>--sku</code> or <code>asus-numpad sku &lt;id&gt;</code> overrides the detection, and <code>asus-numpad check</code> prints what to send along. A listed model without NumberPad hardware stops at the same exit code 3: the driver requires HID FEATURE report <code>0x0d</code>, which a 4-zone RGB configuration does not provide.</p>
+          <p data-i18n="faq.3.d">A machine that matches no row is refused at startup: the check exits with code 3 and prints the supported models, it does not fall back to another machine's parameters. <code>--sku</code> or <code>asus-numpad sku &lt;id&gt;</code> overrides the detection, and <code>asus-numpad check</code> prints what to send along. A listed model without NumberPad hardware stops at the same exit code 3: the driver requires HID FEATURE report <code>0x0d</code>, which a 4-zone RGB configuration does not provide.</p>
         </details>
         <details class="reveal">
           <summary data-i18n="faq.4.q">Where is the signing key, and how do I check it?</summary>
@@ -465,7 +465,7 @@ asus-numpad --lang en check</code></pre>
         </details>
         <details class="reveal">
           <summary data-i18n="faq.7.q">Does Wayland or X11 make a difference?</summary>
-          <p data-i18n="faq.7.d">No. The daemon only talks to evdev and uinput, so it behaves the same under Wayland, X11 and a bare TTY. What matters is the session: without access to <code>/dev/uinput</code> there is nowhere for the keys to go.</p>
+          <p data-i18n="faq.7.d">No. The daemon only talks to evdev and uinput, so it behaves the same under Wayland, X11 and a bare TTY. The actual constraint is the session: without access to <code>/dev/uinput</code>, key events are discarded.</p>
         </details>
       </div>
     </div>

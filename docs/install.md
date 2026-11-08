@@ -6,7 +6,7 @@ Alpine 的 apk，以及 Gentoo、Nix/NixOS 和任意发行版都能用的静态 
 两种取用方式，任选其一：
 
 - **走软件源**（推荐）：加一条仓库配置，之后 `apt upgrade` / `dnf upgrade` /
-  `zypper update` / `pacman -Syu` 跟着升级。
+  `zypper update` / `pacman -Syu` 一同升级。
 - **直接装包**：从 [Releases](https://github.com/asus-numpad/asus-numpad/releases) 下载本机格式安装一次，升级要自己重复。
 
 只有一个包，机型配置由程序在运行期自动识别，装之前不必查机型表，也不会装错包。表里对不上的
@@ -58,7 +58,7 @@ Arch 与 Alpine 不存在「跨版本通用」这回事——Arch 是滚动版�
 
 「一份包真能通用」由 CI 兜底，不靠嘴说：每次发版会把**同一份** deb 装进
 Debian 12 / 13 与 Ubuntu 22.04 / 24.04，把**同一份** rpm 装进 AlmaLinux 9 /
-Fedora / openSUSE Leap 16 / Tumbleweed，逐个跑 `--version`，有一处装不上就不发版。
+Fedora / openSUSE Leap 16 / Tumbleweed，逐个执行 `--version`，有一处装不上就不发版。
 
 ### Debian / Ubuntu / Mint
 
@@ -113,7 +113,7 @@ sudo zypper install asus-numpad
 
 装之前不必自己验一遍：每次发版 CI 都会在 10 个干净容器（Debian 12/13、
 Ubuntu 22.04/24.04、AlmaLinux 9、Fedora、openSUSE Leap 16、openSUSE Tumbleweed、
-Arch、Alpine）里真装一次、跑一遍 `--version`，有一个装不上就不发版。
+Arch、Alpine）里实际安装并执行 `--version`，有一个装不上就不发版。
 
 ### Arch / Manjaro
 
@@ -136,7 +136,7 @@ sudo pacman -Syu asus-numpad
 
 ### Arch / Manjaro：AUR
 
-不想加第三方 pacman 源、或者想跟着自己系统的滚动版走，用源码包 `asus-numpad-rs`：
+不想加第三方 pacman 源、或者想随系统滚动版更新，用源码包 `asus-numpad-rs`：
 
 ```bash
 # 立刻可用：从 Release 下 PKGBUILD 与 asus-numpad-rs.install 到空目录
@@ -151,7 +151,7 @@ makepkg -si
 
 AUR 包是**源码包**：`makepkg` 直接拉 GitHub 的 tag tarball 现编，所以装出来的
 是针对你本机工具链的原生二进制。每次发版 CI 都会在 Arch 容器里用同一个
-PKGBUILD 真编真装、跑 `--version` 并校验 systemd 单元与 udev 规则落地后才发版。
+PKGBUILD 实际构建安装并执行 `--version` 并校验 systemd 单元与 udev 规则落地后才发版。
 
 ### Alpine
 
@@ -195,7 +195,7 @@ sha256sum -c asus-numpad-1.2.4-SHA256SUMS --ignore-missing
 
 ## tarball（任意发行版）
 
-静态链接（musl）的 tarball 不依赖 glibc 版本，理论上任何 x86_64 Linux 都能跑；
+静态链接（musl）的 tarball 不依赖 glibc 版本，可运行于任意 x86_64 Linux；
 包里带安装脚本，不经过包管理器：
 
 ```bash
@@ -233,7 +233,7 @@ sudo emerge -av sys-apps/asus-numpad
 ## Nix / NixOS
 
 ```bash
-# 临时跑
+# 临时运行
 nix run github:asus-numpad/asus-numpad
 
 # 装进 profile
@@ -284,6 +284,6 @@ getfacl /dev/hidraw* | grep -E 'user|group'   # 应看到 uaccess 授权
 | dnf / zypper | `sudo dnf upgrade` | `sudo dnf remove asus-numpad` |
 | pacman | `sudo pacman -Syu` | `sudo pacman -R asus-numpad` |
 | apk | `sudo apk upgrade` | `sudo apk del asus-numpad` |
-| tarball | 下新 tarball 重跑 `install.sh` | `sudo ./uninstall.sh` |
+| tarball | 换用新 tarball 重新执行 `install.sh` | `sudo ./uninstall.sh` |
 
 配置文件 `~/.config/asus-numpad/asus-numpad.json` 不会随卸载删除，需要重置就手动删掉。

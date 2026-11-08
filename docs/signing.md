@@ -51,7 +51,7 @@ CI 里 `repo-add` 与 `abuild-sign` 是从 Arch / Alpine 容器借来的工具�
 
 ## 用户端校验强度
 
-`publish` job 在发 Release 之前会按官网给用户的命令原样跑一遍 apt / dnf / pacman / apk 四个容器，
+`publish` job 在发 Release 之前会按官网给用户的命令原样执行一遍 apt / dnf / pacman / apk 四个容器，
 全程开着严格校验：任何一处密钥没配、公钥没随索引发出、索引签名顺序错了，这一步都会红掉，版本
 不会发出去。
 
@@ -61,7 +61,7 @@ CI 里 `repo-add` 与 `abuild-sign` 是从 Arch / Alpine 容器借来的工具�
 
 1. 生成新钥（GPG：`gpg --quick-generate-key "asus-numpad repository signing key <repo@asus-numpad.github.io>" rsa4096 sign never`；apk：`openssl genrsa -out asus-numpad-apk.rsa 4096` 再 `openssl rsa -in ... -pubout -out asus-numpad-apk.rsa.pub`）。
 2. 覆盖 `tools/keys/` 下的公钥，更新上面的 Secrets。
-3. 发一个补丁版本。索引会用新钥重签，用户端需重新导入一次公钥——安装命令里这一步本来就有，
+3. 发一个补丁版本。索引会用新钥重签，用户端需重新导入一次公钥——安装命令已包含该步骤，
    所以用户重抄一次命令即可，`trusted=yes` 之类的回退不需要。
 4. 旧公钥同时保留一个版本（`keys/` 里加 `-old` 后缀的文件不参与签名，仅供用户过渡时手工导入）。
 

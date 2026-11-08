@@ -40,7 +40,7 @@ cli.cmd.levels.long = 例：`levels`（列印目前段表）、`levels 2 0x46`�
 cli.cmd.levels.step = 段號 1..N（N = 目前段數，最多 8），或 reset / default
 cli.cmd.levels.value = 該段下發的亮度：0x00 或 0x41~0x48（十進位、十六進位均可）
 cli.cmd.led = 直發背光命令字（排障用，繞過所有狀態機）
-cli.cmd.led.long = 例：led on | led off | led 0x41..0x48（1..8 段）。用來區分「驅動沒發」與「硬體不認這個值」。
+cli.cmd.led.long = 例：led on | led off | led 0x41..0x48（1..8 段）。用於區分「驅動未送出」與「硬體不接受該值」。
 cli.cmd.led.value = on / off / 任意十六進位段位（如 0x41）
 led.cmd.usage = 用法：asus-numpad led on|off|0x41（0x01 亮 / 0x00 滅 / 0x41..0x48 為 1..8 段）
 led.cmd.bad_value = 無法辨識的取值：{v}（可用 on / off / 0x41 / 65）
@@ -56,7 +56,7 @@ note.invalid_i2c_addr = --i2c-addr={v} 無法解析，已忽略
 note.invalid_language = language={v} 無法辨識，改以 auto 處理
 note.manual_step_clamped = manual_brightness_step={step} 超出 0..={max}，已收斂至 {max}
 note.levels_dropped = brightness_levels 中有 {n} 項超出 0x{lo}..=0x{hi}，已剔除
-note.manual_levels_dropped = manual_brightness_levels 中有 {n} 項既不是 0（熄滅）也不在 0x{lo}..=0x{hi} 內，已剔除
+note.manual_levels_dropped = manual_brightness_levels 中有 {n} 項不是 0（熄滅）且不在 0x{lo}..=0x{hi} 範圍內，已剔除
 note.manual_levels_not_increasing = manual_brightness_levels 必須由暗到亮（允許相鄰兩段相等），已放棄自訂、回落到預設四段 [0,0x43,0x45,0x48]
 note.manual_levels_truncated = manual_brightness_levels 有 {n} 段，超過硬體上限 {max} 段，已截斷
 note.manual_levels_reset = manual_brightness_levels 剔除越界值後為空，已放棄自訂、回落到線性等分
@@ -206,7 +206,7 @@ led.warn.exec = [警告] 無法執行 {tool}: {err}
 led.warn.no_feature = [警告] {dev} 是 {vid}:{pid} 但沒有 FEATURE 報告 0x{rid}，仍按它嘗試
 led.warn.fallback_asus = [警告] 未找到 {vid}:{pid} 背光節點，回退到 ASUS 節點，可能點不亮
 led.warn.bad_kind = [警告] --led {v} 無效，改以 auto 處理
-led.warn.no_access = [warn] 讀不到 {dev} 的 FEATURE 報告 0x{rid}（權限不足）；用 `asus-numpad check` 查 udev 提示，不要當成硬體缺失
+led.warn.no_access = [warn] 讀不到 {dev} 的 FEATURE 報告 0x{rid}（權限不足）；用 `asus-numpad check` 查 udev 提示，不要據此判定硬體缺失
 led.none.explicit = 明確關閉
 led.none.no_hidraw = 未找到 ASUS hidraw 節點
 led.none.no_i2c = 未找到 i2c 從裝置 0x38
@@ -214,7 +214,7 @@ led.none.any = 既無 hidraw 也無 i2c，背光不可用
 bright.warn.no_kbd_dir = [警告] 讀不到 {dir}，數字區亮度退回 0x{level}（如需明確關閉跟隨請用 --no-follow-brightness）
 
 # ---- 引擎状态日志 ----
-[警告] 抓取觸控板失敗，數字區點擊會穿透到桌面。若已有實例在跑（使用者級服務開機自啟就會抓走裝置），先 `systemctl --user stop asus-numpad` 再前景偵錯，否則兩個程序必然爭搶（EBUSY）。
+[警告] 抓取觸控板失敗，數字區點擊會穿透到桌面。若已有實例在執行（使用者級服務開機自啟即會佔用裝置），先 `systemctl --user stop asus-numpad` 再前景偵錯，否則兩個程序必然爭搶（EBUSY）。
 engine.state.lit = [狀態] 背光點亮（{reason}）
 engine.state.dark = [狀態] 背光熄滅（{reason}）
 engine.state.enter = [狀態] 數字鍵盤 開啟
@@ -232,7 +232,7 @@ engine.geo.range = 觸控板座標範圍 x[{x0},{x1}] y[{y0},{y1}]
 engine.geo.unit = 1 unit = {ux} µm(X) / {uy} µm(Y)
 engine.geo.official = 官方 GH3XLNDZ 換算結果：{text}
 engine.geo.pressure = 壓力軸：{state} | pressure_numpad_min={min}
-engine.warn.grab = [warn] 無法獨占觸控板：數字鍵照常輸出，但游標會跟著移動
+engine.warn.grab = [warn] 無法獨占觸控板：數字鍵照常輸出，但游標仍會移動
 engine.geo.pressure_yes = 支援
 engine.geo.pressure_no = 不支援（壓力段位自動旁路）
 cfg.err.mixed_mode = 無效 mixed_mode：{v}
@@ -240,7 +240,7 @@ cfg.err.brightness_levels = brightness_levels[{idx}] 無法解析為 0..255：{i
 common.list_sep = 、
 
 # ---- 佈局（v8：跨機型通用） ----
-cli.allow_unverified.help = 允許使用尚未實機驗證的佈局出鍵（預設攔下，避免按錯鍵）
+cli.allow_unverified.help = 允許使用尚未實機驗證的佈局出鍵（預設拒絕，避免誤按鍵）
 cli.cmd.layout = 佈局：檢視官方佈局表 / 依 HID 硬體 ID 自動辨識 / 固定佈局
 cli.cmd.layout.long = 不帶參數列出全部官方佈局與支援等級；`layout auto` 恢復自動辨識；`layout GH3XLNDZ` 固定佈局；`layout --ids` 列出 HID 硬體 ID 對照表
 cli.cmd.layout.name = 佈局名（GH3XLNDZ / GH2XLNDZ / GH4XLNDZ / auto）
@@ -258,13 +258,13 @@ layout.usage = 用法：asus-numpad layout                 檢視目前佈局與
       asus-numpad layout auto            依觸控板 HID 硬體 ID 自動辨識（建議）
       asus-numpad layout GH3XLNDZ        固定佈局
 layout.wrote = 已寫入 {path}：layout_name = {value}（備份 {backup}）
-layout.effect_auto = 下次啟動依觸控板 HID 硬體 ID 自動選佈局，辨識不到則回退 GH3XLNDZ
+layout.effect_auto = 下次啟動依觸控板 HID 硬體 ID 自動選佈局，無法辨識時回退 GH3XLNDZ
 layout.unverified_warn = 注意：佈局 {layout} 為 {support} 等級，鍵位表未經實機驗證
 layout.bad_name = 未知佈局名：{v}
 note.layout_unknown = layout_name={v} 不在官方佈局表內，按 auto 處理
 err.layout_unverified = 佈局 {layout}（{support}）尚未實機驗證，已停止啟動以免按錯鍵。確認可用後加 --allow-unverified。
-err.layout_unverified.hint = 放行方式：asus-numpad --allow-unverified run，或在 ~/.config/asus-numpad/asus-numpad.json 裡設 "allow_unverified_layout": true
-err.layout_unsupported.hint = 這套鍵表從未在實機上核對過，也沒有鍵位排布依據，直接套用可能按錯鍵；請把 `asus-numpad check` 的輸出回報給維護者以補充核對
+err.layout_unverified.hint = 允許使用的方式：asus-numpad --allow-unverified run，或在 ~/.config/asus-numpad/asus-numpad.json 裡設 "allow_unverified_layout": true
+err.layout_unsupported.hint = 該鍵表未經實機核對，且無鍵位排布依據，直接使用可能誤按鍵；請把 `asus-numpad check` 的輸出回報給維護者以補充核對
 dev.report.layout = 佈局：{layout}（{support}，來源 {source}，HID {hid}）
 
 # 跨机型背光自检 / cross-model backlight self-check
@@ -301,8 +301,8 @@ err.not_asus = 本機廠商是 {vendor}，不是 ASUS 機器。
 err.unsupported_stop = 已拒絕啟動。
 err.unsupported_model = 本機不在支援的機型清單裡（{ids}）。
 err.unsupported_hint = 硬體資訊讀不準時（虛擬機、白牌機箱、BIOS 佔位串）可手動指定機型：asus-numpad sku <id>
-err.no_numpad = 本機觸控板沒有 NumberPad 硬體：HID 報告描述符裡沒有 FEATURE 報告 0x0d，數字區背光與圖示區都不存在，已停止啟動。
-err.no_numpad.hint = 只有帶 NumberPad 的配置才匯出 FEATURE 0x0d。4 區 RGB 鍵盤的配置（同型號的減配檔，中國市場「魔霸新銳」即此類）觸控板與帶硬體的機型同款，但上面沒有圖示區，軟體補不出來。硬體確實帶 NumberPad 卻報此錯時，把 `asus-numpad check` 的輸出回饋給維護者。
+err.no_numpad = 本機觸控板沒有 NumberPad 硬體：HID 報告描述符裡沒有 FEATURE 報告 0x0d，數字區背光與圖示區都不存在，拒絕啟動。
+err.no_numpad.hint = 只有帶 NumberPad 的配置才匯出 FEATURE 0x0d。4 區 RGB 鍵盤的配置（同型號的減配檔，中國市場「魔霸新銳」即此類）觸控板與帶硬體的機型同款，但不存在圖示區，無法透過軟體補足。硬體確實帶 NumberPad 卻報此錯時，把 `asus-numpad check` 的輸出回饋給維護者。
 err.numpad_no_access = 讀不到觸控板的報告描述符（權限不足），無法確認 NumberPad 是否存在，繼續啟動；數字區若沒有反應，先檢查 udev 的 uaccess 規則。
 layout.source.auto = 依觸控板模組自動辨識
 layout.source.fixed = 由設定或命令列指定
@@ -313,7 +313,7 @@ sku.nonlinux = 機型判定：略過，DMI 與 hidraw 只在 Linux 上可讀（�
 
 # 機型展示名與判定依據（譯文；未翻譯時回落到內建中文原文）
 sku.g533.display = ASUS 槍神6 / 魔霸6，15 吋，2022（G533Z* / G513R*）
-sku.g533.note = 模組 ASUE1403 / ELAN1403 → 鍵表 GH2XLNDZ（同族）。2022 代（槍神6 G533Z*、魔霸6 15 吋 G513R*）才有 NumberPad；2021 代（G533Q* / G513Q* / G513I*）官方規格無此硬體，由 excludes 擋在識別之外，不併入本配置。注意 2022 代也非全配：魔霸6 官方 5 個配置裡 3 個是 4 區 RGB 版，無此硬體
+sku.g533.note = 模組 ASUE1403 / ELAN1403 → 鍵表 GH2XLNDZ（同族）。2022 代（槍神6 G533Z*、魔霸6 15 吋 G513R*）才有 NumberPad；2021 代（G533Q* / G513Q* / G513I*）官方規格無此硬體，由 excludes 排除在識別範圍之外，不併入本配置。注意 2022 代亦非全系配置：魔霸6 官方 5 個配置裡 3 個是 4 區 RGB 版，無此硬體
 sku.g614.display = ASUS 槍神7 / 槍神8 及超競版，16 吋，2023–2024（G614 / G634）
 sku.g614.note = G614 與 G634 同一塊觸控板（ASUE1416 / ASUF1416 → GH3XLNDZ）；型號前綴不保證有硬體：2023 代官方 10 個配置裡 2 個是 4 區 RGB 版（尾綴 EACX）無 NumberPad，國行「魔霸新銳」全系即此類，啟動時偵測不到 FEATURE 0x0d 即按不相容拒絕啟動
 sku.g615.display = ASUS 槍神9 / 槍神10 及超競版，16 吋，2025–2026（G615 / G635）
