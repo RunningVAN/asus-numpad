@@ -27,7 +27,7 @@ impl App {
         self.draw_cfg_header(ui, action);
         self.draw_identity(ui);
         self.draw_behavior(ui);
-        self.draw_channel(ui);
+        self.draw_channel(ui, action);
         self.draw_gestures(ui);
         self.draw_timing(ui);
         self.draw_language(ui);
@@ -44,17 +44,10 @@ impl App {
         ui.horizontal(|ui| {
             ui.heading("驱动配置");
             if self.driver.dirty {
-                ui.label(
-                    egui::RichText::new("有改动未保存")
-                        .small()
-                        .color(WARN),
-                );
+                ui.label(egui::RichText::new("有改动未保存").small().color(WARN));
             }
         });
-        ui.label(small(format!(
-            "写入：{}",
-            self.driver.write_path.display()
-        )));
+        ui.label(small(format!("写入：{}", self.driver.write_path.display())));
         if self.driver.path != self.driver.write_path {
             ui.label(small(format!("读取自：{}", self.driver.path.display())));
         }
@@ -333,7 +326,7 @@ impl App {
     }
 
     /// 背光通道：灯不亮时第一个要看的地方。
-    fn draw_channel(&mut self, ui: &mut egui::Ui) {
+    fn draw_channel(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
         egui::CollapsingHeader::new("背光通道与跟灯")
             .default_open(true)
             .show(ui, |ui| {
@@ -422,12 +415,12 @@ impl App {
 
                 ui.add_space(6.0);
                 ui.label("手动档位表");
-                self.draw_manual_levels(ui);
+                self.draw_manual_levels(ui, action);
             });
     }
 
     /// `manual_brightness_levels` 的编辑器：每档一个命令字，增删档都直接改表长。
-    fn draw_manual_levels(&mut self, ui: &mut egui::Ui) {
+    fn draw_manual_levels(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
         let mut levels = self.driver.cfg.manual_brightness_levels.clone();
         let explicit = levels.is_some();
         let mut use_explicit = explicit;
@@ -468,6 +461,16 @@ impl App {
             ui.label(small(
                 "取值只有 0x00（灭）与 0x41..=0x48 是硬件真实档位，写别的数不会更亮。表长即档数（1..=8）。",
             ));
+            ui.horizontal_wrapped(|ui| {
+                // 日常按键盘四档调亮度在灯光页做，这里只负责和驱动配置对齐，避免两处各改一套。
+                ui.label(small("要按键盘四档调就走灯光页，两边对齐用："));
+                if ui.button("用灯光页四档填充").clicked() {
+                    *action = Some(Action::SyncLevelsToDriver);
+                }
+                if ui.button("从驱动读回灯光页").clicked() {
+                    *action = Some(Action::LoadLevelsFromDriver);
+                }
+            });
         }
 
         if levels != self.driver.cfg.manual_brightness_levels {
@@ -476,10 +479,7 @@ impl App {
 
         ui.horizontal(|ui| {
             ui.label("固定档位序号");
-            ui.add(
-                egui::DragValue::new(&mut self.driver.cfg.manual_brightness_step)
-                    .range(1..=8),
-            );
+            ui.add(egui::DragValue::new(&mut self.driver.cfg.manual_brightness_step).range(1..=8));
             ui.label(small("不跟灯时亮到第几档"));
         });
     }
@@ -518,7 +518,9 @@ impl App {
                     ui.label("触摸板尺寸");
                     ui.add(egui::DragValue::new(&mut self.driver.cfg.touchpad_width_mm));
                     ui.label("×");
-                    ui.add(egui::DragValue::new(&mut self.driver.cfg.touchpad_height_mm));
+                    ui.add(egui::DragValue::new(
+                        &mut self.driver.cfg.touchpad_height_mm,
+                    ));
                     ui.label("mm");
                 });
             });
@@ -530,15 +532,15 @@ impl App {
             .show(ui, |ui| {
                 let rows: [(&str, &mut u32); 6] = [
                     ("帧间隔", &mut self.driver.cfg.frame_ms),
-                    ("NumLock 触发帧", &mut self.driver.cfg.numlock_trigger_frames),
+                    (
+                        "NumLock 触发帧",
+                        &mut self.driver.cfg.numlock_trigger_frames,
+                    ),
                     (
                         "SENDKEY 连续触发帧",
                         &mut self.driver.cfg.cont_sendkey_trigger_frames,
                     ),
-                    (
-                        "图标区长按帧",
-                        &mut self.driver.cfg.numadv_trigger_frames,
-                    ),
+                    ("图标区长按帧", &mut self.driver.cfg.numadv_trigger_frames),
                     ("按键保持帧", &mut self.driver.cfg.touch_sendkey_frames),
                     ("最长工作时间", &mut self.driver.cfg.max_work_time_ms),
                 ];
@@ -550,7 +552,9 @@ impl App {
                 }
                 ui.horizontal(|ui| {
                     ui.label("SENDKEY 判定比例");
-                    ui.add(egui::DragValue::new(&mut self.driver.cfg.touch_sendkey_ratio));
+                    ui.add(egui::DragValue::new(
+                        &mut self.driver.cfg.touch_sendkey_ratio,
+                    ));
                 });
             });
     }
@@ -574,7 +578,9 @@ impl App {
                             }
                         });
                 });
-                ui.label(small("驱动与 CLI 的输出文案跟着这一项走，界面自身语言不受影响。"));
+                ui.label(small(
+                    "驱动与 CLI 的输出文案跟着这一项走，界面自身语言不受影响。",
+                ));
             });
     }
 

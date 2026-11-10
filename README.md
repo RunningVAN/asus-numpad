@@ -366,7 +366,7 @@ On Linux it is the whole thing, split into five tabs:
 
 | Tab | Contents |
 | --- | --- |
-| Lighting | interface list, steps, on / off, NumLock follow, report log |
+| Lighting | interface list, keyboard 4 steps → touchpad brightness map (editable per step), on / off, NumLock follow, keyboard-brightness follow, report log |
 | Driver config | every field of `/etc/asus-numpad.json` as a control: model, layout, keypad style, NumLock policy, gesture thresholds, backlight channel and follow poll, manual step table, timing constants, driver language |
 | System | config path, detected model, layout, hidraw channel, unit state, start / stop / restart |
 | Command line | one form per `asus-numpad` subcommand, spawning the real binary |

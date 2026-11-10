@@ -26,6 +26,7 @@ use asus_numpad::led_proto;
 use crate::backend::Backend;
 use crate::cli_bridge::{self, Completion};
 use crate::cmdform::{BrightAction, CommandForm, LedAction, LevelsAction, SubCmd};
+use crate::kbdmap;
 use crate::settings::{self, Settings};
 use crate::sysinfo::{self, ServiceVerb, Snapshot};
 use crate::{autostart, backend, ui_font};
@@ -47,6 +48,12 @@ enum Action {
     Rescan,
     SendOff,
     SendCurrent,
+    /// 按指定 level 下发（键盘四档映射表里逐档试亮用）
+    SendLevel(u8, String),
+    /// 把键盘四档映射整表写进驱动配置（`manual_brightness_levels`）
+    SyncLevelsToDriver,
+    /// 从驱动配置读回档位表，覆盖界面上的四档映射
+    LoadLevelsFromDriver,
     SaveSettings,
     ResetSettings,
     SetAutostart(bool),
@@ -328,12 +335,21 @@ impl App {
         }
     }
 
-    /// 当前档位组：`0x00`/`0x41..=0x48` 上等分取 `steps` 个点，与 Linux 侧同一函数。
+    /// 当前档位组对应的原始命令字表。
+    ///
+    /// 4 档（对齐键盘背光）用界面上的映射表，逐档可自定义；8 档是纯亮度控制，
+    /// 仍按 `0x00`/`0x41..=0x48` 线性等分，与 Linux 侧同一函数。
     fn level_table(&self) -> Vec<u8> {
+        if self.settings.steps as usize == kbdmap::KBD_STEPS {
+            return self.settings.kbd_map.clone();
+        }
         backend::level_table(self.settings.steps)
     }
 
     fn level_for_step(&self, step: u8) -> Option<u8> {
+        if self.settings.steps as usize == kbdmap::KBD_STEPS {
+            return kbdmap::level_for(step, &self.settings.kbd_map);
+        }
         backend::level_for_step(self.settings.steps, step)
     }
 
@@ -389,6 +405,63 @@ impl App {
                 self.send(level, &note)
             }
             None => self.set_status("档位越界，未下发".to_string(), true),
+        }
+    }
+
+    /// 把灯光页的四档映射整表写进驱动配置。
+    ///
+    /// 界面设置与驱动配置本来是两份东西，但档位表是两边共用的语义：界面上调好的
+    /// 四档若不落到 `manual_brightness_levels`，拔插或重启后服务仍按旧表点灯。
+    /// 这里直接写驱动那份文件，写完再把结果读回界面，保证看到的就是磁盘上的值。
+    fn sync_levels_to_driver(&mut self) {
+        let map = self.settings.kbd_map.clone();
+        if !kbdmap::monotonic(&map) {
+            self.set_status(
+                format!(
+                    "未写入：{} 不是从暗到亮递增，驱动不接受这样的档位表",
+                    hex_table(&map)
+                ),
+                true,
+            );
+            return;
+        }
+        self.driver.cfg.manual_brightness_levels = Some(map);
+        self.driver.dirty = true;
+        match self.driver.save() {
+            Ok(msg) => {
+                if let Some(table) = self.driver.cfg.manual_brightness_levels.clone() {
+                    if table.len() == kbdmap::KBD_STEPS {
+                        self.settings.kbd_map = table;
+                    }
+                }
+                let now = hex_table(&self.settings.kbd_map);
+                self.set_status(format!("{msg}；四档映射已同步为 {now}"), false);
+            }
+            Err(err) => self.set_status(format!("写入驱动配置失败：{err:#}"), true),
+        }
+    }
+
+    /// 反过来：把驱动配置里的档位表读进灯光页，按服务当前实际在用的表点灯。
+    fn load_levels_from_driver(&mut self) {
+        match self.driver.cfg.manual_brightness_levels.clone() {
+            Some(table) if table.len() == kbdmap::KBD_STEPS => {
+                let mut table = table;
+                kbdmap::sanitize(&mut table);
+                self.settings.kbd_map = table;
+                let now = hex_table(&self.settings.kbd_map);
+                self.set_status(format!("已读入驱动配置的四档映射：{now}"), false);
+            }
+            Some(table) => self.set_status(
+                format!(
+                    "驱动配置的档位表是 {} 档，套不进键盘四档（先在驱动配置页改成 4 档）",
+                    table.len()
+                ),
+                true,
+            ),
+            None => self.set_status(
+                "驱动配置没有显式档位表（驱动自己线性等分），界面保持当前映射".to_string(),
+                true,
+            ),
         }
     }
 
@@ -548,6 +621,28 @@ impl App {
             }
         });
 
+        // 档位组决定下面「第 N 档」的语义，所以放在档位控件之前
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label("档位组");
+            for n in [4u8, 8u8] {
+                let label = if n == 4 {
+                    "4 档（对齐键盘背光）"
+                } else {
+                    "8 档（纯亮度）"
+                };
+                if ui
+                    .selectable_label(self.settings.steps == n, label)
+                    .clicked()
+                {
+                    self.settings.steps = n;
+                    if self.settings.step > n {
+                        self.settings.step = n;
+                    }
+                }
+            }
+        });
+
         let steps = self.settings.steps;
         let table = self.level_table();
         let current = self.settings.step;
@@ -582,36 +677,121 @@ impl App {
             *action = Some(Action::SendCurrent);
         }
 
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            ui.label("档位组");
-            for n in [4u8, 8u8] {
-                let label = if n == 4 {
-                    "4 档（含熄灭）"
-                } else {
-                    "8 档（纯亮度）"
-                };
-                if ui
-                    .selectable_label(self.settings.steps == n, label)
-                    .clicked()
-                {
-                    self.settings.steps = n;
-                    if self.settings.step > n {
-                        self.settings.step = n;
+        if steps as usize == kbdmap::KBD_STEPS {
+            self.draw_kbd_map(ui, action);
+        } else {
+            let mapped = table
+                .iter()
+                .map(|v| format!("0x{v:02x}"))
+                .collect::<Vec<_>>()
+                .join("  ");
+            ui.add_space(4.0);
+            ui.label(small(format!("8 档映射（线性等分）：{mapped}")));
+            ui.label(small(
+                "8 档是纯亮度控制；切到 4 档即可逐档对齐键盘背光的四个亮度档。",
+            ));
+        }
+    }
+
+    /// 键盘 4 档 → 触摸板亮度的逐档编辑器。
+    ///
+    /// 键盘背光只有 BIOS 给的 4 档，触摸板侧能写的是 FEATURE `0x0d` 的 level 字节
+    /// （`0x00` 灭 / `0x41..=0x48` 八档，没有中间灰度）。这里把两条轴对齐：每一档
+    /// 单独选触摸板档位、单独试亮，还可以整表写进驱动配置，让后台服务用同一份表。
+    fn draw_kbd_map(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
+        ui.separator();
+        ui.heading("键盘 4 档 → 触摸板亮度");
+        ui.label(small(
+            "键盘第 N 档对应哪个触摸板档位逐档可选；第 1 档选「熄灭」即与官方四档观感一致。",
+        ));
+
+        let mut retouch_current = false;
+        egui::Grid::new("kbd_map")
+            .num_columns(4)
+            .striped(true)
+            .spacing([14.0, 6.0])
+            .show(ui, |ui| {
+                ui.label(small("键盘档"));
+                ui.label(small("触摸板档位"));
+                ui.label(small("报文"));
+                ui.label(small("试亮"));
+                ui.end_row();
+
+                for step in 1..=kbdmap::KBD_STEPS as u8 {
+                    let index = (step - 1) as usize;
+                    let mut level = self.settings.kbd_map[index];
+                    ui.label(format!("第 {step} 档"));
+                    egui::ComboBox::from_id_salt(("kbd_map", step))
+                        .width(150.0)
+                        .selected_text(kbdmap::level_label(level))
+                        .show_ui(ui, |ui| {
+                            for (value, text) in kbdmap::level_choices() {
+                                ui.selectable_value(&mut level, value, text);
+                            }
+                        });
+                    ui.monospace(kbdmap::frame_preview(level));
+                    if ui.button("下发").clicked() {
+                        *action = Some(Action::SendLevel(
+                            level,
+                            format!("键盘第 {step} 档 → {}", kbdmap::level_label(level)),
+                        ));
+                    }
+                    ui.end_row();
+
+                    if level != self.settings.kbd_map[index] {
+                        self.settings.kbd_map[index] = level;
+                        // 改的正好是当前档：顺手把新亮度刷上去，省一次点击
+                        if self.settings.on && self.settings.step == step {
+                            retouch_current = true;
+                        }
                     }
                 }
+            });
+        if retouch_current {
+            *action = Some(Action::SendCurrent);
+        }
+
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            if ui.button("恢复默认四档").clicked() {
+                self.settings.kbd_map = kbdmap::default_map();
+                *action = Some(Action::SendCurrent);
+            }
+            if ui.button("写入驱动配置").clicked() {
+                *action = Some(Action::SyncLevelsToDriver);
+            }
+            if ui.button("从驱动配置读取").clicked() {
+                *action = Some(Action::LoadLevelsFromDriver);
             }
         });
-        let mapped = self
-            .level_table()
-            .iter()
-            .map(|v| format!("0x{v:02x}"))
-            .collect::<Vec<_>>()
-            .join("  ");
-        ui.label(small(format!("当前档位组映射：{mapped}")));
-        ui.label(small(
-            "4 档组的第 1 档即熄灭，与官方四档键盘一致；映射与 Linux 侧共用 linear_levels_from_off。",
-        ));
+
+        if kbdmap::monotonic(&self.settings.kbd_map) {
+            ui.label(small("整表从暗到亮递增，可直接写入驱动配置。"));
+        } else {
+            ui.label(
+                egui::RichText::new(
+                    "当前不是从暗到亮递增：驱动要求相邻档不得变暗，写入驱动配置会被拒绝。",
+                )
+                .small()
+                .color(WARN),
+            );
+        }
+        match self.driver.cfg.manual_brightness_levels.as_ref() {
+            Some(table) => {
+                ui.label(small(format!(
+                    "驱动配置当前档位表：{}（{} 档）",
+                    hex_table(table),
+                    table.len()
+                )));
+            }
+            None => {
+                ui.label(small("驱动配置当前未指定档位表（由驱动自己线性等分）。"));
+            }
+        }
+        ui.label(small(format!(
+            "四档报文：{}",
+            kbdmap::frames_text(&self.settings.kbd_map)
+        )));
     }
 
     fn draw_follow(&mut self, ui: &mut egui::Ui) {
@@ -654,7 +834,7 @@ impl App {
             return;
         }
         egui::ScrollArea::vertical()
-            .max_height(200.0)
+            .max_height(150.0)
             .auto_shrink([false, true])
             .show(ui, |ui| {
                 egui::Grid::new("log")
@@ -820,7 +1000,10 @@ impl App {
                 ));
             }
         }
-        for (label, level) in [("熄灭", led_proto::LED_OFF), ("普通点亮", led_proto::LED_ON)] {
+        for (label, level) in [
+            ("熄灭", led_proto::LED_OFF),
+            ("普通点亮", led_proto::LED_ON),
+        ] {
             if let Some(frame) = led_proto::encode(level) {
                 out.push_str(&format!("{label}报文：{}\n", led_proto::hex(&frame)));
             }
@@ -1256,10 +1439,21 @@ impl App {
                 };
                 ui.label(egui::RichText::new(self.status.clone()).color(color));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(small(format!(
-                        "档位 {}/{}",
-                        self.settings.step, self.settings.steps
-                    )));
+                    // 状态栏常显「键盘第几档 → 哪个亮度值」，看一眼就知道当前映射对不对。
+                    // 左侧状态文字可能很长（报文 + 说明），这里只放最短形式，避免被挤出窗口。
+                    let level = self.level_for_step(self.settings.step);
+                    let text = match (self.settings.steps as usize == kbdmap::KBD_STEPS, level) {
+                        (true, Some(value)) => format!(
+                            "键盘 {}/{} → 0x{value:02x}",
+                            self.settings.step,
+                            kbdmap::KBD_STEPS
+                        ),
+                        (false, Some(value)) => {
+                            format!("{}/8 → 0x{value:02x}", self.settings.step)
+                        }
+                        (_, None) => format!("档位 {}/{}", self.settings.step, self.settings.steps),
+                    };
+                    ui.label(small(text));
                 });
             });
         });
@@ -1276,6 +1470,12 @@ impl App {
                 self.settings.on = true;
                 self.apply_current();
             }
+            Action::SendLevel(level, note) => {
+                self.settings.on = level != led_proto::LED_OFF;
+                self.send(level, &note);
+            }
+            Action::SyncLevelsToDriver => self.sync_levels_to_driver(),
+            Action::LoadLevelsFromDriver => self.load_levels_from_driver(),
             Action::SaveSettings => {
                 self.settings.sanitize();
                 match settings::save(&self.settings) {
@@ -1331,10 +1531,9 @@ impl App {
                 match self.driver.save() {
                     Ok(msg) => match sysinfo::service_run(ServiceVerb::Restart) {
                         Ok(done) => self.set_status(format!("{msg}；{done}"), false),
-                        Err(err) => self.set_status(
-                            format!("{msg}，但后台服务重启失败：{err:#}"),
-                            true,
-                        ),
+                        Err(err) => {
+                            self.set_status(format!("{msg}，但后台服务重启失败：{err:#}"), true)
+                        }
                     },
                     Err(err) => self.set_status(format!("保存驱动配置失败：{err:#}"), true),
                 }
@@ -1490,6 +1689,15 @@ pub fn window_title() -> &'static str {
 
 fn small(text: impl Into<String>) -> egui::RichText {
     egui::RichText::new(text.into()).small().weak()
+}
+
+/// 档位表展开成 `0x00 0x43 0x45 0x48`，用于把配置里的表直接摊在界面上。
+fn hex_table(table: &[u8]) -> String {
+    table
+        .iter()
+        .map(|value| format!("0x{value:02x}"))
+        .collect::<Vec<_>>()
+        .join("  ")
 }
 
 /// 「会写配置」「没找到可执行文件」这类提示色，和系统状态区的告警保持一致。

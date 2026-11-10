@@ -24,6 +24,11 @@ pub struct Settings {
     pub step: u8,
     /// 键盘侧档数：与键盘背光对齐时通常是 4 档，单独控制可用 8 档
     pub steps: u8,
+    /// 键盘 4 档各自对应的触摸板亮度 level（`0x00` 或 `0x41..=0x48`）。
+    ///
+    /// 只在 `steps == 4`（对齐键盘四档）时生效；8 档组仍按线性等分。表结构与驱动
+    /// 配置里的 `manual_brightness_levels` 相同，可以整表写过去。
+    pub kbd_map: Vec<u8>,
     /// 当前是否点亮
     pub on: bool,
     /// NumLock 关闭时自动熄灯（Windows 没有键盘背光 sysfs，用它替代跟随逻辑）
@@ -39,8 +44,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            step: 4,
-            steps: VAL_BRIGHTNESS_MAX,
+            step: crate::kbdmap::KBD_STEPS as u8,
+            steps: crate::kbdmap::KBD_STEPS as u8,
+            kbd_map: crate::kbdmap::default_map(),
             on: true,
             follow_numlock: false,
             poll_ms: 500,
@@ -59,6 +65,7 @@ impl Settings {
         if self.step == 0 || self.step > self.steps {
             self.step = self.steps.clamp(1, self.steps);
         }
+        crate::kbdmap::sanitize(&mut self.kbd_map);
         self.poll_ms = self.poll_ms.clamp(100, 5000);
     }
 }
@@ -132,7 +139,33 @@ mod tests {
     fn missing_fields_fall_back_to_defaults() {
         let s: Settings = serde_json::from_str(r#"{"step": 2}"#).unwrap();
         assert_eq!(s.step, 2);
-        assert_eq!(s.steps, VAL_BRIGHTNESS_MAX);
+        assert_eq!(s.steps, crate::kbdmap::KBD_STEPS as u8);
+        assert_eq!(s.kbd_map, crate::kbdmap::default_map());
         assert!(s.apply_on_start);
+    }
+
+    #[test]
+    fn old_settings_without_kbd_map_get_defaults() {
+        // 旧版设置文件没有 kbd_map 字段，读出来必须补齐成默认四档，而不是空表
+        let s: Settings = serde_json::from_str(r#"{"step": 3, "steps": 4}"#).unwrap();
+        assert_eq!(s.kbd_map.len(), crate::kbdmap::KBD_STEPS);
+        assert_eq!(s.kbd_map, crate::kbdmap::default_map());
+    }
+
+    #[test]
+    fn sanitize_fixes_kbd_map() {
+        let mut s = Settings {
+            kbd_map: vec![0x48, 0x10],
+            ..Settings::default()
+        };
+        s.sanitize();
+        assert_eq!(s.kbd_map, crate::kbdmap::default_map());
+
+        let mut s = Settings {
+            kbd_map: vec![0x10, 0x41, 0x45, 0x99],
+            ..Settings::default()
+        };
+        s.sanitize();
+        assert_eq!(s.kbd_map, vec![0x41, 0x41, 0x45, 0x48]);
     }
 }

@@ -19,6 +19,7 @@ mod autostart;
 mod backend;
 mod cli_bridge;
 mod cmdform;
+mod kbdmap;
 mod settings;
 mod shot;
 mod sysinfo;
