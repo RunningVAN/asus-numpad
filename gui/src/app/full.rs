@@ -312,16 +312,6 @@ impl App {
                     &mut self.driver.cfg.grab,
                     "独占触摸板（关掉后系统手势也能同时收到事件）",
                 );
-                ui.horizontal(|ui| {
-                    ui.label("激活压力阈值");
-                    ui.add(
-                        egui::DragValue::new(&mut self.driver.cfg.pressure_numpad_min)
-                            .speed(10.0)
-                            .range(0..=4095)
-                            .suffix(" raw"),
-                    );
-                    ui.label(small("0 = 用固件默认"));
-                });
             });
     }
 
@@ -485,7 +475,7 @@ impl App {
     }
 
     fn draw_gestures(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new("手势与力度（改错会影响手感）")
+        egui::CollapsingHeader::new("手势与阈值（改错会影响手感）")
             .default_open(false)
             .show(ui, |ui| {
                 let rows: [(&str, &mut f64, &str); 5] = [

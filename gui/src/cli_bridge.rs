@@ -455,7 +455,6 @@ mod tests {
 
         let mut advanced = base(SubCmd::Check);
         advanced.advanced.i2c_bus = "1".to_string();
-        advanced.advanced.pressure_min = "120".to_string();
         advanced.advanced.numlock = "off".to_string();
         cases.push(("数字型全局参数", advanced));
 

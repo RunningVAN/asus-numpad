@@ -372,10 +372,6 @@ pub fn probe_report(cfg: &Config) -> Result<(Geometry, Vec<String>)> {
                     "tid",
                     &dev.supports(kc::EV_ABS, kc::ABS_MT_TRACKING_ID).to_string(),
                 ),
-                (
-                    "p",
-                    &dev.supports(kc::EV_ABS, kc::ABS_MT_PRESSURE).to_string(),
-                ),
             ],
         ),
         crate::i18n::tf(
@@ -493,7 +489,6 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
         .abs_info(kc::ABS_MT_POSITION_Y)
         .context(crate::i18n::t("dev.no_abs_y"))?;
     let has_mt = tpad.borrow().supports(kc::EV_ABS, kc::ABS_MT_TRACKING_ID);
-    let has_pressure = tpad.borrow().supports(kc::EV_ABS, kc::ABS_MT_PRESSURE);
     let geometry = geometry_from_abs(&xi, &yi, &cfg, layout_name);
 
     let keyboard_dev = Rc::new(RefCell::new(VirtualDevice::create_keyboard("asus-numpad")?));
@@ -551,7 +546,7 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
         grabber: Some(Box::new(DevGrab { dev: tpad.clone() }) as Box<dyn GrabSink>),
     };
 
-    let mut engine = Engine::new(cfg.clone(), geometry, deps, has_mt, has_pressure);
+    let mut engine = Engine::new(cfg.clone(), geometry, deps, has_mt);
     if verbose {
         println!("{}", crate::banner());
         for line in engine.geometry_report() {

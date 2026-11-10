@@ -34,7 +34,6 @@ struct Opts {
     allow_unverified: bool,
     numlock: Option<String>,
     mixed_mode: Option<String>,
-    pressure_min: Option<i32>,
     no_follow_brightness: bool,
     grab: bool,
     no_grab: bool,
@@ -189,14 +188,6 @@ fn build_cli() -> Command {
                 .help(t("cli.mixed_mode.help")),
         )
         .arg(
-            Arg::new("pressure_min")
-                .long("pressure-min")
-                .global(true)
-                .value_name("PRESSURE")
-                .value_parser(clap::value_parser!(i32))
-                .help(t("cli.pressure_min.help")),
-        )
-        .arg(
             Arg::new("no_follow_brightness")
                 .long("no-follow-brightness")
                 .global(true)
@@ -340,7 +331,6 @@ fn opts_from(matches: &ArgMatches) -> Opts {
         allow_unverified: matches.get_flag("allow_unverified"),
         numlock: matches.get_one::<String>("numlock").cloned(),
         mixed_mode: matches.get_one::<String>("mixed_mode").cloned(),
-        pressure_min: matches.get_one::<i32>("pressure_min").copied(),
         no_follow_brightness: matches.get_flag("no_follow_brightness"),
         grab: matches.get_flag("grab"),
         no_grab: matches.get_flag("no_grab"),
@@ -446,9 +436,6 @@ fn build_config(cli: &Opts) -> (Config, Vec<String>, std::path::PathBuf) {
                 cfg.mixed_mode
             }
         };
-    }
-    if let Some(v) = cli.pressure_min {
-        cfg.pressure_numpad_min = v.max(0);
     }
     if cli.no_follow_brightness {
         cfg.follow_keyboard_brightness = false;

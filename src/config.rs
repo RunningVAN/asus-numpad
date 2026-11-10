@@ -65,9 +65,6 @@ pub const LED_LEVEL: u8 = 1;
 pub const SUPPORT_LED: u8 = 1;
 /// APSettingParameters COMMONFEATURE_00
 pub const CALCULATOR_FEATURE: u8 = 1;
-/// FORCE_07 Normal = 1 / FORCE_08 Particular（小键盘态）= 2
-pub const FORCE_LEVEL_NORMAL: u8 = 1;
-pub const FORCE_LEVEL_NUMPAD: u8 = 2;
 
 /// 点灯命令取值（官方仅两态，另加一个解锁值）
 ///
@@ -290,9 +287,6 @@ pub struct Config {
     /// `asus-numpad sku auto` 可清空本字段、回到自动识别。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sku: Option<String>,
-    // ---- 按压力度（FORCE_07 = 1 / FORCE_08 = 2 档位） ----
-    /// 官方只给档位号，未在 INF 暴露原始压力值；0 = 不做压力过滤
-    pub pressure_numpad_min: i32,
     // ---- 行为 ----
     pub key_mode: KeyMode,
     pub numlock: NumLockMode,
@@ -381,7 +375,6 @@ impl Default for Config {
             layout_name: "auto".to_string(),
             allow_unverified_layout: false,
             sku: None,
-            pressure_numpad_min: 0,
             key_mode: KeyMode::Keypad,
             numlock: NumLockMode::Sync,
             calc_gesture: true,
@@ -700,9 +693,6 @@ impl Config {
             ));
             self.manual_brightness_step = steps;
         }
-        if self.pressure_numpad_min < 0 {
-            self.pressure_numpad_min = 0;
-        }
         let layout_raw = self.layout_name.trim().to_string();
         if layout_raw.is_empty() {
             // 空值按 auto 处理：跨机型通用靠的是按 HID 自动识别，而不是写死默认布局
@@ -739,6 +729,9 @@ impl Config {
             }
             map.remove("numlock_zone");
             map.remove("hidraw_prefix");
+            // 已废弃：这代 NumberPad 触摸板没有压感，压力过滤整条链路已删掉，
+            // 老配置里残留的键直接丢掉，免得下次保存又被写回去
+            map.remove("pressure_numpad_min");
         }
         serde_json::from_value(value).map_err(|e| e.to_string())
     }
@@ -906,7 +899,6 @@ impl Config {
             "repeat_interval_ms": self.repeat_interval_ms,
             "layout_name": self.layout_name,
             "allow_unverified_layout": self.allow_unverified_layout,
-            "pressure_numpad_min": self.pressure_numpad_min,
             "key_mode": self.key_mode.as_str(),
             "numlock": self.numlock.as_str(),
             "calc_gesture": self.calc_gesture,
@@ -1103,7 +1095,6 @@ mod tests {
         assert_eq!(c.max_work_time_ms, 120_000);
         assert_eq!(c.cont_sendkey_trigger_frames, 25);
         assert_eq!(c.numadv_trigger_frames, 40);
-        assert_eq!(c.pressure_numpad_min, 0);
         assert!(c.calc_gesture);
         assert!(c.grab);
         assert_eq!(c.key_mode, KeyMode::Keypad);

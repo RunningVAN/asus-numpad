@@ -193,7 +193,6 @@ pub struct Advanced {
     pub sku: String,
     pub numlock: String,
     pub mixed_mode: String,
-    pub pressure_min: String,
     pub no_follow_brightness: bool,
     pub grab: bool,
     pub no_grab: bool,
@@ -232,14 +231,6 @@ impl Advanced {
                 .map_err(|_| format!("--i2c-bus 需要整数：{}", self.i2c_bus.trim()))?;
             argv.push("--i2c-bus".to_string());
             argv.push(bus.to_string());
-        }
-        if !self.pressure_min.trim().is_empty() {
-            let value: i32 =
-                self.pressure_min.trim().parse().map_err(|_| {
-                    format!("--pressure-min 需要整数：{}", self.pressure_min.trim())
-                })?;
-            argv.push("--pressure-min".to_string());
-            argv.push(value.to_string());
         }
 
         for (on, flag) in [
@@ -562,11 +553,10 @@ mod tests {
     #[test]
     fn advanced_numbers_are_validated() {
         let mut f = form(SubCmd::Check);
-        f.advanced.i2c_bus = "12".to_string();
-        f.advanced.pressure_min = "abc".to_string();
-        assert!(f.argv().unwrap_err().contains("--pressure-min"));
+        f.advanced.i2c_bus = "abc".to_string();
+        assert!(f.argv().unwrap_err().contains("--i2c-bus"));
 
-        f.advanced.pressure_min.clear();
+        f.advanced.i2c_bus = "12".to_string();
         assert_eq!(f.argv().unwrap(), vec!["--i2c-bus", "12", "check"]);
     }
 

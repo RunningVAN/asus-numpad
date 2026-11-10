@@ -19,7 +19,6 @@ cli.key_mode.help = Key style: keypad / digits
 cli.layout.help = Layout code; `auto` (default) picks it from the touchpad HID module, `asus-numpad layout` lists every supported code
 cli.numlock.help = NumLock linkage: sync / toggle / off
 cli.mixed_mode.help = Mixed mode: auto / on / off
-cli.pressure_min.help = Minimum pressure in numpad mode (0 = no filtering)
 cli.no_follow_brightness.help = Disable "numpad brightness follows keyboard backlight" and fall back to fixed 0x01
 cli.grab.help = Grab the touchpad (default)
 cli.no_grab.help = Do not grab the touchpad (numpad clicks leak to the desktop)
@@ -194,7 +193,7 @@ dev.no_abs_y = no ABS_MT_POSITION_Y
 dev.warn.grab = [warn] EVIOCGRAB failed: {err}
 dev.warn.uinput = [warn] Cannot create the virtual touchpad ({err}); mixed mode degrades to pure numpad
 dev.report.device = device: {path} ({name})
-dev.report.touch_axes = touch axes: MT_X={x} MT_Y={y} TRACKING_ID={tid} PRESSURE={p}
+dev.report.touch_axes = touch axes: MT_X={x} MT_Y={y} TRACKING_ID={tid}
 dev.report.keyboard_led = keyboard LED channel: {state}
 dev.report.keyboard_ok = available
 dev.report.keyboard_ng = unavailable (NumLock linkage degrades)
@@ -231,10 +230,7 @@ engine.bright.line = [brightness] keyboard backlight {kbd} → numpad 0x{level}
 engine.geo.range = touchpad coordinate range x[{x0},{x1}] y[{y0},{y1}]
 engine.geo.unit = 1 unit = {ux} µm (X) / {uy} µm (Y)
 engine.geo.official = Official GH3XLNDZ conversion: {text}
-engine.geo.pressure = pressure axis: {state} | pressure_numpad_min={min}
 engine.warn.grab = [warn] cannot grab the touchpad; digits are still emitted, but the pointer moves as well
-engine.geo.pressure_yes = supported
-engine.geo.pressure_no = unsupported (pressure steps bypassed)
 cfg.err.mixed_mode = invalid mixed_mode: {v}
 cfg.err.brightness_levels = brightness_levels[{idx}] is not a value in 0..255: {item} (use 65 or "0x41")
 common.list_sep = ,\s

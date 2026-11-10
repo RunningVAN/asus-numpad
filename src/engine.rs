@@ -188,7 +188,6 @@ pub struct Engine {
     slot: i32,
     primary: Option<i32>,
     has_mt_tracking: bool,
-    has_pressure: bool,
     last_activity_ms: f64,
     last_tap: HashMap<u16, f64>,
 
@@ -217,8 +216,6 @@ pub struct Engine {
     got_x: bool,
     got_y: bool,
     pending_since: f64,
-    pub pressure: Option<i32>,
-    await_pressure: bool,
     armed_key: Option<u16>,
     armed_since: f64,
     armed_delay_frames: u32,
@@ -254,13 +251,7 @@ const MAX_TOUCH_SLOTS: usize = 8;
 const STAGED_LEVEL_GAP_MS: f64 = 15.0;
 
 impl Engine {
-    pub fn new(
-        cfg: Config,
-        geometry: Geometry,
-        deps: Deps,
-        has_mt_tracking: bool,
-        has_pressure: bool,
-    ) -> Self {
+    pub fn new(cfg: Config, geometry: Geometry, deps: Deps, has_mt_tracking: bool) -> Self {
         let tol_ux = cfg.tap_threshold_mm * 1000.0 * geometry.ux;
         let tol_uy = cfg.tap_threshold_mm * 1000.0 * geometry.uy;
         let now = deps.clock.now_ms();
@@ -289,7 +280,6 @@ impl Engine {
             slot: 0,
             primary: None,
             has_mt_tracking,
-            has_pressure,
             last_activity_ms: now,
             last_tap: HashMap::new(),
             gesture_seen: false,
@@ -314,8 +304,6 @@ impl Engine {
             got_x: false,
             got_y: false,
             pending_since: 0.0,
-            pressure: None,
-            await_pressure: false,
             armed_key: None,
             armed_since: 0.0,
             armed_delay_frames: 0,
@@ -770,8 +758,6 @@ impl Engine {
         self.got_x = false;
         self.got_y = false;
         self.pending_since = 0.0;
-        self.pressure = None;
-        self.await_pressure = false;
         self.armed_key = None;
         self.armed_since = 0.0;
         self.armed_delay_frames = 0;
@@ -828,27 +814,7 @@ impl Engine {
         }
     }
 
-    /// 小键盘态按键是否达到官方要求的下压档位。
-    ///
-    /// 官方 FORCE_07 Normal = 1、FORCE_08 Particular（小键盘模式）= 2，即小键盘态
-    /// 需要更实的下压才能出键，用于抑制轻扫/手掌误触。INF 只给档位号、未给原始压力值，
-    /// 阈值由 `pressure_numpad_min` 校准；未配置或设备无压力轴时旁路。
-    fn pressure_ready(&self) -> bool {
-        let thr = self.cfg.pressure_numpad_min;
-        if thr <= 0 {
-            return true;
-        }
-        if !self.has_pressure {
-            // 设备根本不上报压力轴 → 只能旁路，否则所有键都不出
-            return true;
-        }
-        match self.pressure {
-            None => false, // 本次触点的压力尚未上报，先挂起等它到齐
-            Some(p) => p >= thr,
-        }
-    }
-
-    /// 按下点命中判定并按需发键；压力尚未上报时挂起，等压力到齐再判定。
+    /// 按下点命中判定并按需发键。
     fn emit_at_down_point(&mut self) -> bool {
         let key = self.geometry.key_at(
             self.x0,
@@ -859,10 +825,6 @@ impl Engine {
             self.tol_uy,
         );
         let Some(key) = key else { return false };
-        if !self.pressure_ready() {
-            self.await_pressure = true;
-            return true;
-        }
         if self.mixed_active() {
             // GESTURE_01：混合模式下先挂起 80 ms，确认不是滑动才真发键
             self.arm_key(key);
@@ -1188,7 +1150,7 @@ impl Engine {
         }
     }
 
-    /// 当前事件是否来自非首个触点（第二个手指的坐标/压力不该改动首触点的判键状态）。
+    /// 当前事件是否来自非首个触点（第二个手指的坐标不该改动首触点的判键状态）。
     fn slot_is_primary(&self) -> bool {
         matches!(self.primary, Some(p) if self.slot == p)
     }
@@ -1197,30 +1159,8 @@ impl Engine {
         match ev.etype {
             kc::EV_ABS => {
                 if ev.code == kc::ABS_PRESSURE || ev.code == kc::ABS_MT_PRESSURE {
-                    if self.has_mt_tracking && !self.slot_is_primary() {
-                        return;
-                    }
-                    self.pressure = Some(ev.value);
-                    // 按下判定时压力还没到齐 → 此刻补判，避免把小键盘态变成「按了没反应」。
-                    // 压力不达标时保持等待：同一触点后续压力上升仍可出键；始终不达标则整触点不出键
-                    if self.await_pressure && self.down && self.pressure_ready() {
-                        self.await_pressure = false;
-                        let key = self.geometry.key_at(
-                            self.x0,
-                            self.y0,
-                            self.cfg.key_mode,
-                            self.cfg.tap_threshold_mm,
-                            self.tol_ux,
-                            self.tol_uy,
-                        );
-                        if let Some(key) = key {
-                            if self.pressed_key.is_none() {
-                                self.mode = Mode::Key;
-                                self.pressed_key = Some(key);
-                                self.emit_key(key);
-                            }
-                        }
-                    }
+                    // 这代 NumberPad 是普通电容触摸板，没有压感档位；压力轴不参与判键，
+                    // 留着只会让「按下没反应」多一种可疑原因，直接忽略。
                     return;
                 }
                 if ev.code == kc::ABS_MT_SLOT {
@@ -1334,10 +1274,9 @@ impl Engine {
     /// `--dump` 用的一行状态。
     pub fn state_line(&self) -> String {
         format!(
-            "x={} y={} p={} dist={:.0}µm spread={:.1}mm numlock={} cell={} key={} mode={} enabled={} fwd={}",
+            "x={} y={} dist={:.0}µm spread={:.1}mm numlock={} cell={} key={} mode={} enabled={} fwd={}",
             self.cur_x,
             self.cur_y,
-            self.pressure.map(|p| p.to_string()).unwrap_or_else(|| "-".into()),
             self.moved_units,
             self.scroll_spread_mm,
             self.geometry.in_numlock(self.cur_x, self.cur_y),
@@ -1404,20 +1343,6 @@ impl Engine {
         out.push(crate::i18n::tf(
             "engine.geo.official",
             &[("text", &self.geometry.describe())],
-        ));
-        out.push(crate::i18n::tf(
-            "engine.geo.pressure",
-            &[
-                (
-                    "state",
-                    &crate::i18n::t(if self.has_pressure {
-                        "engine.geo.pressure_yes"
-                    } else {
-                        "engine.geo.pressure_no"
-                    }),
-                ),
-                ("min", &self.cfg.pressure_numpad_min.to_string()),
-            ],
         ));
         out
     }
@@ -1519,7 +1444,7 @@ mod tests {
             grabber: Some(Box::new(FakeGrab)),
             clock: Box::new(ManualClock { now }),
         };
-        (Engine::new(cfg, geom, deps, true, false), pointer)
+        (Engine::new(cfg, geom, deps, true), pointer)
     }
 
     /// 造一台已进入小键盘态的引擎（时钟与 LED 调用方可控）。

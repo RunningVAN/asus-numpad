@@ -1230,13 +1230,6 @@ impl App {
                                 .desired_width(240.0),
                         );
                         ui.end_row();
-                        ui.monospace("--pressure-min");
-                        ui.add(
-                            egui::TextEdit::singleline(&mut adv.pressure_min)
-                                .hint_text("整数")
-                                .desired_width(240.0),
-                        );
-                        ui.end_row();
                     });
 
                 ui.add_space(2.0);

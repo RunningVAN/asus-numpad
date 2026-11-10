@@ -19,7 +19,6 @@ cli.key_mode.help = 鍵位風格：keypad / digits
 cli.layout.help = 佈局代號；預設 auto 依觸控板 HID 模組自動辨識，asus-numpad layout 可列出全部代號
 cli.numlock.help = NumLock 連動：sync / toggle / off
 cli.mixed_mode.help = 混合模式：auto / on / off
-cli.pressure_min.help = 小鍵盤態最小壓力（0 = 不過濾）
 cli.no_follow_brightness.help = 關閉「數字區亮度跟隨鍵盤背光」，退回固定 0x01 點亮
 cli.grab.help = 抓取觸控板（預設開啟）
 cli.no_grab.help = 不抓取觸控板（數字區點擊會穿透到桌面）
@@ -194,7 +193,7 @@ dev.no_abs_y = 無 ABS_MT_POSITION_Y
 dev.warn.grab = [警告] EVIOCGRAB 失敗: {err}
 dev.warn.uinput = [警告] 無法建立虛擬觸控板（{err}），混合模式降級為純數字鍵盤
 dev.report.device = 裝置: {path}（{name}）
-dev.report.touch_axes = 觸控軸: MT_X={x} MT_Y={y} TRACKING_ID={tid} PRESSURE={p}
+dev.report.touch_axes = 觸控軸: MT_X={x} MT_Y={y} TRACKING_ID={tid}
 dev.report.keyboard_led = 鍵盤 LED 通道: {state}
 dev.report.keyboard_ok = 可用
 dev.report.keyboard_ng = 不可用（NumLock 連動降級）
@@ -231,10 +230,7 @@ engine.bright.line = [亮度] 鍵盤背光 {kbd} → 數字區 0x{level}
 engine.geo.range = 觸控板座標範圍 x[{x0},{x1}] y[{y0},{y1}]
 engine.geo.unit = 1 unit = {ux} µm(X) / {uy} µm(Y)
 engine.geo.official = 官方 GH3XLNDZ 換算結果：{text}
-engine.geo.pressure = 壓力軸：{state} | pressure_numpad_min={min}
 engine.warn.grab = [warn] 無法獨占觸控板：數字鍵照常輸出，但游標仍會移動
-engine.geo.pressure_yes = 支援
-engine.geo.pressure_no = 不支援（壓力段位自動旁路）
 cfg.err.mixed_mode = 無效 mixed_mode：{v}
 cfg.err.brightness_levels = brightness_levels[{idx}] 無法解析為 0..255：{item}（可用 65 或 "0x41"）
 common.list_sep = 、

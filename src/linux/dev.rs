@@ -268,7 +268,7 @@ impl InputDevice {
         let mut buf = std::mem::MaybeUninit::<[u8; EVENT_BUF_BYTES]>::uninit();
         let buf = buf.as_mut_ptr() as *mut u8;
         // 一次唤醒内排着的不止一块事件：多点触摸加快速滑动时，一帧 64 条很容易读满。
-        // 只读一块会把剩下的事件压到下一帧（8 ms 之后），坐标与压力被拆到两帧，
+        // 只读一块会把剩下的事件压到下一帧（8 ms 之后），坐标与按键被拆到两帧，
         // 判键、判手势都会错位。这里持续读到 EAGAIN 为止；上限防止某设备持续灌
         // 数据把主循环饿死（剩下的下一帧继续读）。
         for _ in 0..MAX_BURST_READS {
