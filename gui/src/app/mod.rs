@@ -679,6 +679,21 @@ impl App {
                                 .response;
                             let resp =
                                 ui.interact(card.rect, card.id.with("row"), egui::Sense::click());
+                            // 卡片里的路径与产品名在窄侧栏里会被截断，悬浮一次给全。
+                            let resp = theme::tip(
+                                resp,
+                                format!(
+                                    "{} · {}\n{}\n{}",
+                                    d.vid_pid(),
+                                    d.vendor(),
+                                    if d.product.is_empty() {
+                                        d.tail().to_string()
+                                    } else {
+                                        d.product.clone()
+                                    },
+                                    d.path
+                                ),
+                            );
                             if resp.clicked() {
                                 clicked = Some(i);
                             }
@@ -709,9 +724,24 @@ impl App {
         let current = self.settings.step;
 
         theme::section(ui, &p, "亮度档位", |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("档位组").size(13.0).color(p.text_weak));
-                let items = [(4u8, "4 档 · 对齐键盘背光"), (8u8, "8 档 · 纯亮度")];
+            theme::row(
+                ui,
+                &p,
+                "档位组",
+                Some("4 档＝和键盘背光的四个亮度档一一对齐；8 档＝只用触摸板自身的纯亮度分档，过渡更细。"),
+                |ui| {
+                let items = [
+                    (
+                        4u8,
+                        "4 档 · 对齐键盘背光",
+                        "把键盘背光的 4 个档映射到触摸板，观感与官方四档一致",
+                    ),
+                    (
+                        8u8,
+                        "8 档 · 纯亮度",
+                        "只用触摸板自身的 8 档亮度，不跟键盘背光走",
+                    ),
+                ];
                 if let Some(picked) = theme::segmented(ui, &p, "steps", steps, &items) {
                     self.settings.steps = picked;
                     if self.settings.step > picked {
@@ -730,46 +760,76 @@ impl App {
             ui.add_space(4.0);
 
             let level = self.level_for_step(self.settings.step);
-            ui.horizontal(|ui| {
-                let text = match level {
-                    Some(0) => "当前：熄灭".to_string(),
-                    Some(v) => format!("当前：第 {} 档 · 0x{v:02x}", self.settings.step),
-                    None => format!("当前：第 {} 档", self.settings.step),
-                };
-                ui.label(
-                    egui::RichText::new(text)
-                        .size(13.0)
-                        .strong()
-                        .color(p.accent),
-                );
-                ui.label(
-                    egui::RichText::new(format!("共 {steps} 档 · 点格子直接切档"))
-                        .size(12.0)
-                        .color(p.text_weak),
-                );
-            });
+            theme::row(
+                ui,
+                &p,
+                "当前档位",
+                Some("界面上选中的档位，以及它真正写进 FEATURE 0x0d 的 level 字节。"),
+                |ui| {
+                    let text = match level {
+                        Some(0) => "当前：熄灭".to_string(),
+                        Some(v) => format!("当前：第 {} 档 · 0x{v:02x}", self.settings.step),
+                        None => format!("当前：第 {} 档", self.settings.step),
+                    };
+                    ui.label(
+                        egui::RichText::new(text)
+                            .size(13.0)
+                            .strong()
+                            .color(p.accent),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!("共 {steps} 档 · 点格子直接切档"))
+                            .size(12.0)
+                            .color(p.text_weak),
+                    );
+                },
+            );
             ui.add_space(2.0);
             let mapped = table
                 .iter()
                 .map(|v| format!("0x{v:02x}"))
                 .collect::<Vec<_>>()
                 .join("  ");
-            ui.label(
-                egui::RichText::new(format!("档位 → 报文：{mapped}"))
-                    .size(11.5)
-                    .monospace()
-                    .color(p.text_weak),
+            theme::row(
+                ui,
+                &p,
+                "档位 → 报文",
+                Some("每档下发时用的 level 字节：0x41 最暗到 0x48 最亮，0x00 是熄灭。"),
+                |ui| {
+                    ui.label(
+                        egui::RichText::new(mapped)
+                            .size(11.5)
+                            .monospace()
+                            .color(p.text_weak),
+                    );
+                },
             );
 
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                if theme::primary(ui, &p, "点亮（保持当前档）").clicked() {
-                    *action = Some(Action::SendCurrent);
-                }
-                if theme::secondary(ui, &p, "熄灭").clicked() {
-                    *action = Some(Action::SendOff);
-                }
-            });
+            theme::row(
+                ui,
+                &p,
+                "下发",
+                Some("两个动作都只碰背光，不改配置：点亮＝按当前档重发一帧，熄灭＝下发 0x00。"),
+                |ui| {
+                    if theme::tip(
+                        theme::primary(ui, &p, "点亮（保持当前档）"),
+                        "把当前档位立刻写进背光。休眠、热插拔后 EC 丢状态时用它找回亮度。",
+                    )
+                    .clicked()
+                    {
+                        *action = Some(Action::SendCurrent);
+                    }
+                    if theme::tip(
+                        theme::secondary(ui, &p, "熄灭"),
+                        "下发 0x00 熄灯；数字键和手势不受影响。",
+                    )
+                    .clicked()
+                    {
+                        *action = Some(Action::SendOff);
+                    }
+                },
+            );
         });
 
         ui.add_space(10.0);
@@ -804,36 +864,79 @@ impl App {
     /// （`0x00` 灭 / `0x41..=0x48` 八档，没有中间灰度）。这里把两条轴对齐：每一档
     /// 单独选触摸板档位、单独试亮，还可以整表写进驱动配置，让后台服务用同一份表。
     fn draw_kbd_map(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
-        ui.label(small(
+        let p = self.palette;
+        theme::note(
+            ui,
+            &p,
             "键盘第 N 档对应哪个触摸板档位逐档可选；第 1 档选「熄灭」即与官方四档观感一致。",
-        ));
+        );
 
         let mut retouch_current = false;
+        // 四列各给固定宽度：表头、下拉框、报文、按钮各自成列，行与行之间才不会左右跳
+        let col_step = 62.0;
+        let col_combo = 176.0;
+        let col_frame = 104.0;
+        let col_send = 60.0;
         egui::Grid::new("kbd_map")
             .num_columns(4)
             .striped(true)
-            .spacing([14.0, 6.0])
+            .spacing([12.0, 6.0])
             .show(ui, |ui| {
-                ui.label(small("键盘档"));
-                ui.label(small("触摸板档位"));
-                ui.label(small("报文"));
-                ui.label(small("试亮"));
+                let head = |ui: &mut egui::Ui, text: &str, help: &str, width: f32| {
+                    let resp = ui.add_sized([width, 18.0], egui::Label::new(small(text)));
+                    theme::tip(resp, help.to_owned());
+                };
+                head(
+                    ui,
+                    "键盘档",
+                    "键盘背光由 BIOS 给出的 4 个档位，这里逐档对齐。",
+                    col_step,
+                );
+                head(
+                    ui,
+                    "触摸板档位",
+                    "这一档要写成哪个 level：0x00 熄灭，0x41 最暗到 0x48 最亮。",
+                    col_combo,
+                );
+                head(
+                    ui,
+                    "报文",
+                    "该档对应的 FEATURE 0x0d 原始帧，可直接和 hidraw 抓包对照。",
+                    col_frame,
+                );
+                head(
+                    ui,
+                    "试亮",
+                    "只把这一档发一次，不改当前档位，用来逐档比对硬件。",
+                    col_send,
+                );
                 ui.end_row();
 
                 for step in 1..=kbdmap::KBD_STEPS as u8 {
                     let index = (step - 1) as usize;
                     let mut level = self.settings.kbd_map[index];
-                    ui.label(format!("第 {step} 档"));
-                    egui::ComboBox::from_id_salt(("kbd_map", step))
-                        .width(150.0)
+                    ui.add_sized([col_step, 20.0], egui::Label::new(format!("第 {step} 档")));
+                    let combo = egui::ComboBox::from_id_salt(("kbd_map", step))
+                        .width(col_combo - 6.0)
                         .selected_text(kbdmap::level_label(level))
                         .show_ui(ui, |ui| {
                             for (value, text) in kbdmap::level_choices() {
                                 ui.selectable_value(&mut level, value, text);
                             }
                         });
-                    ui.monospace(kbdmap::frame_preview(level));
-                    if ui.button("下发").clicked() {
+                    theme::tip(
+                        combo.response,
+                        "这一档对应的触摸板亮度；选「熄灭」即与官方四档观感一致。",
+                    );
+                    ui.add_sized(
+                        [col_frame, 20.0],
+                        egui::Label::new(
+                            egui::RichText::new(kbdmap::frame_preview(level)).monospace(),
+                        ),
+                    );
+                    let send = ui.add_sized([col_send, 26.0], egui::Button::new("下发"));
+                    if theme::tip(send, format!("把第 {step} 档的亮度立刻下发一次")).clicked()
+                    {
                         *action = Some(Action::SendLevel(
                             level,
                             format!("键盘第 {step} 档 → {}", kbdmap::level_label(level)),
@@ -855,69 +958,116 @@ impl App {
         }
 
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            if ui.button("恢复默认四档").clicked() {
-                self.settings.kbd_map = kbdmap::default_map();
-                *action = Some(Action::SendCurrent);
-            }
-            if ui.button("写入驱动配置").clicked() {
-                *action = Some(Action::SyncLevelsToDriver);
-            }
-            if ui.button("从驱动配置读取").clicked() {
-                *action = Some(Action::LoadLevelsFromDriver);
-            }
-        });
+        theme::row(
+            ui,
+            &p,
+            "整表操作",
+            Some("三颗按钮作用在整张四档表上；写入前会先检查是否从暗到亮递增。"),
+            |ui| {
+                if theme::tip(
+                    theme::secondary(ui, &p, "恢复默认四档"),
+                    "恢复成与官方四档观感一致的映射。",
+                )
+                .clicked()
+                {
+                    self.settings.kbd_map = kbdmap::default_map();
+                    *action = Some(Action::SendCurrent);
+                }
+                if theme::tip(
+                    theme::secondary(ui, &p, "写入驱动配置"),
+                    "把这张表写进驱动的 manual_brightness_levels，后台服务随即按它映射。",
+                )
+                .clicked()
+                {
+                    *action = Some(Action::SyncLevelsToDriver);
+                }
+                if theme::tip(
+                    theme::secondary(ui, &p, "从驱动配置读取"),
+                    "用驱动配置里的档位表覆盖界面上这张表。",
+                )
+                .clicked()
+                {
+                    *action = Some(Action::LoadLevelsFromDriver);
+                }
+            },
+        );
 
         if kbdmap::monotonic(&self.settings.kbd_map) {
-            ui.label(small("整表从暗到亮递增，可直接写入驱动配置。"));
+            theme::note(ui, &p, "整表从暗到亮递增，可直接写入驱动配置。");
         } else {
-            ui.label(
-                egui::RichText::new(
-                    "当前不是从暗到亮递增：驱动要求相邻档不得变暗，写入驱动配置会被拒绝。",
-                )
-                .small()
-                .color(WARN),
-            );
+            theme::row(ui, &p, "校验", None, |ui| {
+                ui.label(
+                    egui::RichText::new(
+                        "当前不是从暗到亮递增：驱动要求相邻档不得变暗，写入驱动配置会被拒绝。",
+                    )
+                    .small()
+                    .color(WARN),
+                );
+            });
         }
         match self.driver.cfg.manual_brightness_levels.as_ref() {
             Some(table) => {
-                ui.label(small(format!(
-                    "驱动配置当前档位表：{}（{} 档）",
-                    hex_table(table),
-                    table.len()
-                )));
+                theme::read_row(
+                    ui,
+                    &p,
+                    "驱动档位表",
+                    &format!("{}（{} 档）", hex_table(table), table.len()),
+                    Some("驱动配置里 manual_brightness_levels 的当前值，后台服务按这张表映射键盘四档。"),
+                );
             }
             None => {
-                ui.label(small("驱动配置当前未指定档位表（由驱动自己线性等分）。"));
+                theme::note(ui, &p, "驱动配置当前未指定档位表（由驱动自己线性等分）。");
             }
         }
-        ui.label(small(format!(
-            "四档报文：{}",
-            kbdmap::frames_text(&self.settings.kbd_map)
-        )));
+        theme::read_row(
+            ui,
+            &p,
+            "四档报文",
+            &kbdmap::frames_text(&self.settings.kbd_map),
+            Some("四档依次下发的 FEATURE 0x0d 帧，写入驱动配置时就是这四行。"),
+        );
     }
 
     fn draw_follow(&mut self, ui: &mut egui::Ui) {
         let p = self.palette;
         theme::section(ui, &p, "联动", |ui| {
-            ui.checkbox(&mut self.settings.follow_numlock, "NumLock 关闭时自动熄灯");
+            theme::check_row(
+                ui,
+                &p,
+                &mut self.settings.follow_numlock,
+                "跟随 NumLock",
+                Some("NumLock 关掉就自动熄灯，打开就恢复。状态按下面的间隔轮询一次。"),
+            );
             if self.settings.follow_numlock {
-                ui.horizontal(|ui| {
-                    ui.label("轮询间隔");
-                    ui.add(
-                        egui::Slider::new(&mut self.settings.poll_ms, 100..=2000)
-                            .step_by(50.0)
-                            .suffix(" ms"),
-                    );
-                });
-                ui.label(small(self.numlock_text()));
+                theme::row(
+                    ui,
+                    &p,
+                    "轮询间隔",
+                    Some("读 NumLock 状态的周期。调小反应更快，但每秒会多读几次 sysfs。"),
+                    |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut self.settings.poll_ms, 100..=2000)
+                                .step_by(50.0)
+                                .suffix(" ms"),
+                        );
+                    },
+                );
+                theme::read_row(ui, &p, "当前状态", &self.numlock_text(), None);
                 if self.sent_numlock.is_none() {
-                    ui.label(small("等待第一次状态读取……"));
+                    theme::note(ui, &p, "等待第一次状态读取……");
                 }
             }
             if !self.backend.is_real() {
                 let mut mock_on = self.backend.numlock().unwrap_or(true);
-                if ui.checkbox(&mut mock_on, "模拟 NumLock 状态").changed() {
+                if theme::check_row(
+                    ui,
+                    &p,
+                    &mut mock_on,
+                    "模拟 NumLock 状态",
+                    Some("只有模拟后端才有：手动设定 NumLock 真假，用来验证联动逻辑。"),
+                )
+                .changed()
+                {
                     self.backend.set_numlock(mock_on);
                     self.last_numlock = Some(mock_on);
                 }
@@ -931,7 +1081,12 @@ impl App {
             ui.horizontal(|ui| {
                 ui.label(small("每次下发都会记一行，用来对照硬件表现"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::secondary(ui, &p, "清空").clicked() {
+                    if theme::tip(
+                        theme::secondary(ui, &p, "清空"),
+                        "清空这份日志；不影响硬件状态，也不动配置。",
+                    )
+                    .clicked()
+                    {
                         self.log.clear();
                     }
                 });
@@ -970,29 +1125,29 @@ impl App {
             ui.horizontal(|ui| {
                 theme::title_row(ui, &p, "系统状态");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::secondary(ui, &p, "刷新").clicked() {
+                    if theme::tip(
+                        theme::secondary(ui, &p, "刷新"),
+                        "重读机型、布局、背光通道与后台服务状态。插拔设备后点一下即可。",
+                    )
+                    .clicked()
+                    {
                         *action = Some(Action::RefreshState);
                     }
                 });
             });
 
-            egui::Grid::new("system_state")
-                .num_columns(2)
-                .striped(true)
-                .show(ui, |ui| {
-                    for (name, value) in &self.state.rows {
-                        ui.label(name);
-                        ui.label(small(value.clone()));
-                        ui.end_row();
-                    }
-                });
+            for (name, value) in &self.state.rows {
+                theme::read_row(ui, &p, name, value, state_help(name));
+            }
 
             for hint in &self.state.hints {
-                ui.label(
-                    egui::RichText::new(hint.clone())
-                        .small()
-                        .color(egui::Color32::from_rgb(200, 150, 40)),
-                );
+                theme::row(ui, &p, "提示", None, |ui| {
+                    ui.label(
+                        egui::RichText::new(hint.clone())
+                            .small()
+                            .color(egui::Color32::from_rgb(200, 150, 40)),
+                    );
+                });
             }
 
             if let Some(service) = &self.state.service {
@@ -1010,19 +1165,24 @@ impl App {
                         ))
                         .color(color),
                     );
-                    if ui.button("启动").clicked() {
+                    if theme::tip(ui.button("启动"), "systemctl --user start asus-numpad").clicked()
+                    {
                         *action = Some(Action::ServiceRun(ServiceVerb::Start));
                     }
-                    if ui.button("停止").clicked() {
+                    if theme::tip(ui.button("停止"), "systemctl --user stop asus-numpad").clicked()
+                    {
                         *action = Some(Action::ServiceRun(ServiceVerb::Stop));
                     }
-                    if ui.button("重启").clicked() {
+                    if theme::tip(ui.button("重启"), "改完驱动配置后用它让新配置生效").clicked()
+                    {
                         *action = Some(Action::ServiceRun(ServiceVerb::Restart));
                     }
                 });
-                ui.label(small(
+                theme::note(
+                    ui,
+                    &p,
                     "用户单元不需要 root；停止后数字键与手势失效，触摸板恢复成普通触摸板。",
-                ));
+                );
             }
 
             // 诊断出口放最后：它是「要发出去问人」时才点的，不该挤掉上面的状态与服务操作
@@ -1035,12 +1195,22 @@ impl App {
     /// 报文去开终端。写文件只落在界面自己的配置目录旁边，不碰系统路径。
     fn draw_diagnostics(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("复制诊断信息").clicked() {
+            if theme::tip(
+                ui.button("复制诊断信息"),
+                "把整份诊断文本放进剪贴板，方便贴到 issue 里",
+            )
+            .clicked()
+            {
                 let text = self.diagnostics();
                 ui.ctx().copy_text(text);
                 self.set_status("诊断信息已复制到剪贴板".to_string(), false);
             }
-            if ui.button("保存诊断报告").clicked() {
+            if theme::tip(
+                ui.button("保存诊断报告"),
+                "在界面设置文件旁边写一份 diag-时间戳.txt，内容与 --selftest 一致",
+            )
+            .clicked()
+            {
                 let text = self.diagnostics();
                 let path = settings::config_path()
                     .parent()
@@ -1056,9 +1226,11 @@ impl App {
                 }
             }
         });
-        ui.label(small(
+        theme::note(
+            ui,
+            &self.palette,
             "内容：平台状态、接口列表、8 档与熄灭报文——和 --selftest 打印的一致。",
-        ));
+        );
     }
 
     /// 与 `--selftest` 同构的诊断文本。
@@ -1135,18 +1307,24 @@ impl App {
             self.draw_command_target(ui);
             ui.add_space(4.0);
 
-            ui.horizontal(|ui| {
-                ui.label("子命令");
-                egui::ComboBox::from_id_salt("cmd_sub")
-                    .width(130.0)
-                    .selected_text(self.cmd.sub.name())
-                    .show_ui(ui, |ui| {
-                        for sub in SubCmd::ALL {
-                            ui.selectable_value(&mut self.cmd.sub, sub, sub.name());
-                        }
-                    });
-                ui.label(small(self.cmd.sub.about()));
-            });
+            theme::row(
+                ui,
+                &p,
+                "子命令",
+                Some("选一条 asus-numpad 子命令，下面的参数会跟着变；执行时拼出的命令行与终端里完全一致。"),
+                |ui| {
+                    let combo = egui::ComboBox::from_id_salt("cmd_sub")
+                        .width(132.0)
+                        .selected_text(self.cmd.sub.name())
+                        .show_ui(ui, |ui| {
+                            for sub in SubCmd::ALL {
+                                ui.selectable_value(&mut self.cmd.sub, sub, sub.name());
+                            }
+                        });
+                    theme::tip(combo.response, "切换子命令；右侧一句是该子命令的作用。");
+                    ui.label(small(self.cmd.sub.about()));
+                },
+            );
 
             ui.add_space(2.0);
             self.draw_command_args(ui);
@@ -1186,115 +1364,171 @@ impl App {
     }
 
     fn draw_command_args(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette;
         match self.cmd.sub {
             SubCmd::Check => {
-                ui.label(small("这条子命令不需要参数。"));
+                theme::note(ui, &p, "这条子命令不需要参数。");
             }
             SubCmd::Dump => {
-                ui.label(small(
+                theme::note(
+                    ui,
+                    &p,
                     "打印原始触摸板事件，本该一直跑到 Ctrl+C。这里只跑 5 秒就收工，把这段时间里的事件贴到下面。",
-                ));
+                );
             }
             SubCmd::Bright => {
                 let items: Vec<_> = BrightAction::ALL.iter().map(|a| (*a, a.label())).collect();
-                ui.horizontal(|ui| {
-                    ui.label("动作");
-                    combo(ui, "cmd_bright_action", &mut self.cmd.bright_action, &items);
-                });
+                theme::row(
+                    ui,
+                    &p,
+                    "动作",
+                    Some("bright 的动作：step 设档、cycle/up/down 挪一档、follow 开关跟随、status 只看状态。"),
+                    |ui| combo(ui, "cmd_bright_action", &mut self.cmd.bright_action, &items),
+                );
                 match self.cmd.bright_action {
                     BrightAction::Step => {
-                        field(ui, "档位", &mut self.cmd.bright_step, "1 起，取决于档位数");
+                        field(
+                            ui,
+                            &p,
+                            "档位",
+                            &mut self.cmd.bright_step,
+                            "1 起，取决于档位数",
+                            Some("要切到的档位序号，从 1 开始，上限是当前档位组的大小。"),
+                        );
                     }
                     BrightAction::Follow => {
-                        ui.checkbox(&mut self.cmd.bright_follow_on, "开启跟随（不勾＝关闭跟随）");
-                        ui.label(small("会写入配置并重启后台服务。"));
+                        theme::check_row(
+                            ui,
+                            &p,
+                            &mut self.cmd.bright_follow_on,
+                            "开启跟随",
+                            Some(
+                                "不勾＝关闭跟随；关闭后不管键盘背光怎么变，触摸板都保持固定亮度。",
+                            ),
+                        );
+                        theme::note(ui, &p, "会写入配置并重启后台服务。");
                     }
                     BrightAction::Status => {
-                        ui.label(small("只打印当前档位与跟随状态，不改配置。"));
+                        theme::note(ui, &p, "只打印当前档位与跟随状态，不改配置。");
                     }
                     BrightAction::Cycle | BrightAction::Up | BrightAction::Down => {
-                        ui.label(small("按当前档位表挪一档，并重启后台服务。"));
+                        theme::note(ui, &p, "按当前档位表挪一档，并重启后台服务。");
                     }
                 }
             }
             SubCmd::Levels => {
                 let items: Vec<_> = LevelsAction::ALL.iter().map(|a| (*a, a.label())).collect();
-                ui.horizontal(|ui| {
-                    ui.label("动作");
-                    combo(ui, "cmd_levels_action", &mut self.cmd.levels_action, &items);
-                });
+                theme::row(
+                    ui,
+                    &p,
+                    "动作",
+                    Some("levels 的动作：table 打印档位表、set 单档改命令字、reset 恢复默认。"),
+                    |ui| combo(ui, "cmd_levels_action", &mut self.cmd.levels_action, &items),
+                );
                 match self.cmd.levels_action {
                     LevelsAction::Table => {
-                        ui.label(small("打印每档对应的命令字。"));
+                        theme::note(ui, &p, "打印每档对应的命令字。");
                     }
                     LevelsAction::Reset => {
-                        ui.label(small("把档位表恢复成默认，并重启后台服务。"));
+                        theme::note(ui, &p, "把档位表恢复成默认，并重启后台服务。");
                     }
                     LevelsAction::Set => {
-                        field(ui, "档位", &mut self.cmd.levels_step, "从 1 开始");
                         field(
                             ui,
+                            &p,
+                            "档位",
+                            &mut self.cmd.levels_step,
+                            "从 1 开始",
+                            Some("要改的是第几档。"),
+                        );
+                        field(
+                            ui,
+                            &p,
                             "命令字",
                             &mut self.cmd.levels_value,
                             "0x41 到 0x48，或十进制",
+                            Some("这一档要写的 level 字节，合法范围 0x41..=0x48。"),
                         );
-                        ui.label(small("相邻档必须单调，写反了 CLI 会拒绝并保持原配置。"));
+                        theme::note(ui, &p, "相邻档必须单调，写反了 CLI 会拒绝并保持原配置。");
                     }
                 }
             }
             SubCmd::Led => {
                 let items: Vec<_> = LedAction::ALL.iter().map(|a| (*a, a.label())).collect();
-                ui.horizontal(|ui| {
-                    ui.label("动作");
-                    combo(ui, "cmd_led_action", &mut self.cmd.led_action, &items);
-                });
+                theme::row(
+                    ui,
+                    &p,
+                    "动作",
+                    Some("led 的动作：on/off 直接下发，raw 绕开状态机写指定命令字。"),
+                    |ui| combo(ui, "cmd_led_action", &mut self.cmd.led_action, &items),
+                );
                 match self.cmd.led_action {
                     LedAction::Status => {
-                        ui.label(small(
+                        theme::note(
+                            ui,
+                            &p,
                             "CLI 的 led 没有状态查询，不带值只会打印用法。当前命令字看「灯光」区或 check。",
-                        ));
+                        );
                     }
                     LedAction::Raw => {
-                        field(ui, "命令字", &mut self.cmd.led_raw, "如 0x41");
-                        ui.label(small(
+                        field(
+                            ui,
+                            &p,
+                            "命令字",
+                            &mut self.cmd.led_raw,
+                            "如 0x41",
+                            Some("要直接下发的 level 字节，十六进制或十进制都可以。"),
+                        );
+                        theme::note(
+                            ui,
+                            &p,
                             "绕开状态机直接下发：led on 亮而 led 0x41 不亮，就说明这台机器只吃两态。",
-                        ));
+                        );
                     }
                     LedAction::On | LedAction::Off => {
-                        ui.label(small("直接从当前选中的接口下发一帧，不改配置。"));
+                        theme::note(ui, &p, "直接从当前选中的接口下发一帧，不改配置。");
                     }
                 }
             }
             SubCmd::Layout => {
                 field(
                     ui,
+                    &p,
                     "布局名",
                     &mut self.cmd.layout_name,
                     "留空＝只查看，如 g614",
+                    Some("填布局名会写配置；留空只打印当前布局与可选列表。"),
                 );
-                ui.checkbox(
+                theme::check_row(
+                    ui,
+                    &p,
                     &mut self.cmd.layout_ids,
-                    "同时打印 HID 号 → 布局对照表（--ids）",
+                    "打印 HID 对照表",
+                    Some("勾上相当于加 --ids：把 HID 号与布局的对照表一并打印出来。"),
                 );
                 if !self.cmd.layout_name.trim().is_empty() {
-                    ui.label(small("填了布局名就会写配置并重启后台服务。"));
+                    theme::note(ui, &p, "填了布局名就会写配置并重启后台服务。");
                 }
             }
             SubCmd::Sku => {
                 field(
                     ui,
+                    &p,
                     "机型",
                     &mut self.cmd.sku_id,
                     "留空＝查看；list＝列全部；auto＝恢复自动识别",
+                    Some("填具体机型 ID 会覆盖自动识别结果；list 列全部机型，auto 恢复自动。"),
                 );
-                ui.label(small("指定具体机型 ID 会写配置，覆盖自动识别结果。"));
+                theme::note(ui, &p, "指定具体机型 ID 会写配置，覆盖自动识别结果。");
             }
             SubCmd::Lang => {
                 field(
                     ui,
+                    &p,
                     "语言",
                     &mut self.cmd.lang_code,
                     "留空＝查看；auto / en / zh_CN / zh_TW",
+                    Some("界面与日志的语言：auto 跟系统，也可指定 en / zh_CN / zh_TW。"),
                 );
             }
         }
@@ -1304,61 +1538,153 @@ impl App {
         egui::CollapsingHeader::new("高级选项（全局参数）")
             .default_open(false)
             .show(ui, |ui| {
+                let p = self.palette;
                 let adv = &mut self.cmd.advanced;
-                egui::Grid::new("cmd_adv")
-                    .num_columns(2)
-                    .spacing([12.0, 4.0])
-                    .show(ui, |ui| {
-                        let rows: [(&str, &mut String, &str); 12] = [
-                            ("--config", &mut adv.config, "配置文件路径"),
-                            ("--device", &mut adv.device, "指定触摸板设备"),
-                            ("--keyboard", &mut adv.keyboard, "键盘设备（读背光状态用）"),
-                            ("--led", &mut adv.led, "LED 设备"),
-                            ("--hidraw", &mut adv.hidraw, "hidraw 节点名，如 hidraw3"),
-                            ("--i2c-bus", &mut adv.i2c_bus, "整数"),
-                            ("--i2c-addr", &mut adv.i2c_addr, "如 0x15"),
-                            ("--i2c-transfer", &mut adv.i2c_transfer, "i2c 传输方式"),
-                            ("--key-mode", &mut adv.key_mode, "键盘扫描码模式"),
-                            ("--layout", &mut adv.layout, "覆盖布局名"),
-                            ("--sku", &mut adv.sku, "覆盖机型 ID"),
-                            ("--numlock", &mut adv.numlock, "覆盖 NumLock 状态来源"),
-                        ];
-                        for (flag, value, hint) in rows {
-                            ui.monospace(flag);
-                            ui.add(
-                                egui::TextEdit::singleline(value)
-                                    .hint_text(hint)
-                                    .desired_width(240.0),
-                            );
-                            ui.end_row();
-                        }
-                        ui.monospace("--mixed-mode");
+                let rows: [(&str, &mut String, &str, &str); 12] = [
+                    (
+                        "--config",
+                        &mut adv.config,
+                        "配置文件路径",
+                        "改用另一份配置文件，默认走系统的 /etc/asus-numpad/config.json。",
+                    ),
+                    (
+                        "--device",
+                        &mut adv.device,
+                        "指定触摸板设备",
+                        "覆盖自动挑选的触摸板节点。",
+                    ),
+                    (
+                        "--keyboard",
+                        &mut adv.keyboard,
+                        "键盘设备（读背光状态用）",
+                        "跟着键盘背光走时，从这里读当前背光档。",
+                    ),
+                    (
+                        "--led",
+                        &mut adv.led,
+                        "LED 设备",
+                        "指定 LEDs 节点，一般是 input::numlock。",
+                    ),
+                    (
+                        "--hidraw",
+                        &mut adv.hidraw,
+                        "hidraw 节点名，如 hidraw3",
+                        "直连 hidraw 下发 FEATURE 报文时用。",
+                    ),
+                    (
+                        "--i2c-bus",
+                        &mut adv.i2c_bus,
+                        "整数",
+                        "走 i2c 通道时指定总线号。",
+                    ),
+                    (
+                        "--i2c-addr",
+                        &mut adv.i2c_addr,
+                        "如 0x15",
+                        "走 i2c 通道时指定从机地址。",
+                    ),
+                    (
+                        "--i2c-transfer",
+                        &mut adv.i2c_transfer,
+                        "i2c 传输方式",
+                        "i2c 的传输模式，默认 i2ctransfer。",
+                    ),
+                    (
+                        "--key-mode",
+                        &mut adv.key_mode,
+                        "键盘扫描码模式",
+                        "键码风格：raw / mapped 一类，和布局配套。",
+                    ),
+                    (
+                        "--layout",
+                        &mut adv.layout,
+                        "覆盖布局名",
+                        "临时覆盖配置里的布局，不落盘。",
+                    ),
+                    (
+                        "--sku",
+                        &mut adv.sku,
+                        "覆盖机型 ID",
+                        "临时覆盖配置里的机型，不落盘。",
+                    ),
+                    (
+                        "--numlock",
+                        &mut adv.numlock,
+                        "覆盖 NumLock 状态来源",
+                        "临时指定 NumLock 状态来源，如 sysfs / evdev。",
+                    ),
+                ];
+                for (flag, value, hint, help) in rows {
+                    theme::row(ui, &p, flag, Some(help), |ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(value)
+                                .hint_text(hint)
+                                .desired_width(240.0),
+                        );
+                    });
+                }
+                theme::row(
+                    ui,
+                    &p,
+                    "--mixed-mode",
+                    Some("混排模式：有虚拟触摸板就开（auto）/ 强制开 / 纯数字键盘。"),
+                    |ui| {
                         ui.add(
                             egui::TextEdit::singleline(&mut adv.mixed_mode)
                                 .hint_text("混排模式")
                                 .desired_width(240.0),
                         );
-                        ui.end_row();
-                    });
+                    },
+                );
 
                 ui.add_space(2.0);
-                ui.checkbox(&mut adv.verbose, "--verbose  打印识别与通道细节");
-                ui.checkbox(&mut adv.dump_config, "--dump-config  打印解析前的原始配置");
-                ui.checkbox(
+                theme::check_row(
+                    ui,
+                    &p,
+                    &mut adv.verbose,
+                    "--verbose",
+                    Some("打印识别过程与通道细节，排查收获接口时用。"),
+                );
+                theme::check_row(
+                    ui,
+                    &p,
+                    &mut adv.dump_config,
+                    "--dump-config",
+                    Some("打印解析前的原始配置，用来确认配置有没有被正确读到。"),
+                );
+                theme::check_row(
+                    ui,
+                    &p,
                     &mut adv.no_follow_brightness,
-                    "--no-follow-brightness  不跟随键盘背光",
+                    "--no-follow-brightness",
+                    Some("不跟随键盘背光，触摸板保持自己的档位。"),
                 );
-                ui.checkbox(
+                theme::check_row(
+                    ui,
+                    &p,
                     &mut adv.allow_unverified,
-                    "--allow-unverified  允许未验证机型 / 布局",
+                    "--allow-unverified",
+                    Some("允许在未验证机型 / 布局上运行，键位可能对不上。"),
                 );
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut adv.grab, "--grab  独占抓取输入设备");
-                    ui.checkbox(&mut adv.no_grab, "--no-grab");
-                });
-                ui.label(small(
+                theme::check_row(
+                    ui,
+                    &p,
+                    &mut adv.grab,
+                    "--grab",
+                    Some("独占抓取输入设备；与 --no-grab 互斥，只能勾一个。"),
+                );
+                theme::check_row(
+                    ui,
+                    &p,
+                    &mut adv.no_grab,
+                    "--no-grab",
+                    Some("不独占抓取设备；与 --grab 互斥。"),
+                );
+                theme::note(
+                    ui,
+                    &p,
                     "留空的项不会出现在命令行里；--grab 与 --no-grab 只能勾一个。",
-                ));
+                );
             });
     }
 
@@ -1445,47 +1771,76 @@ impl App {
     fn draw_settings(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
         let p = self.palette;
         theme::section(ui, &p, "启动行为", |ui| {
-            ui.checkbox(
+            theme::check_row(
+                ui,
+                &p,
                 &mut self.settings.apply_on_start,
-                "启动时自动下发一次当前档位",
+                "启动时下发当前档位",
+                Some("勾上后每次打开界面都重发一遍当前档位，省得手动点「点亮」。"),
             );
-            ui.label(small(
+            theme::note(
+                ui,
+                &p,
                 "休眠、热插拔后 EC 会丢状态；勾选后每次启动都会重发一遍。",
-            ));
+            );
 
             if autostart::supported() {
                 let mut on = self.autostart_on;
-                if ui
-                    .checkbox(&mut on, "开机自动启动（HKCU\\...\\Run，无需管理员）")
-                    .changed()
+                if theme::check_row(
+                    ui,
+                    &p,
+                    &mut on,
+                    "开机自动启动",
+                    Some("写入 HKCU\\...\\Run，不需要管理员权限；取消勾选即删除该项。"),
+                )
+                .changed()
                 {
                     *action = Some(Action::SetAutostart(on));
                 }
             } else if sysinfo::has_service() {
                 // Linux 的「自启」就是 systemd 用户单元的 enable，和后台服务共用一份状态
                 let mut on = self.service_enabled;
-                if ui
-                    .checkbox(&mut on, "开机自启（systemctl --user enable asus-numpad）")
-                    .changed()
+                if theme::check_row(
+                    ui,
+                    &p,
+                    &mut on,
+                    "开机自启",
+                    Some(
+                        "等价于 systemctl --user enable asus-numpad，和系统状态页共用同一份状态。",
+                    ),
+                )
+                .changed()
                 {
                     *action = Some(Action::ServiceAutostart(on));
                 }
             } else {
-                ui.label(small("当前平台不支持开机自启"));
+                theme::note(ui, &p, "当前平台不支持开机自启");
             }
 
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                if theme::primary(ui, &p, "保存设置").clicked() {
+            theme::row(ui, &p, "设置", None, |ui| {
+                if theme::tip(
+                    theme::primary(ui, &p, "保存设置"),
+                    "把上面的开关写进界面的设置文件，下次打开沿用。",
+                )
+                .clicked()
+                {
                     *action = Some(Action::SaveSettings);
                 }
-                if theme::secondary(ui, &p, "恢复默认").clicked() {
+                if theme::tip(
+                    theme::secondary(ui, &p, "恢复默认"),
+                    "界面设置回到初始值；驱动配置不受影响。",
+                )
+                .clicked()
+                {
                     *action = Some(Action::ResetSettings);
                 }
             });
             match &self.font_note {
-                Some(path) => ui.label(small(format!("界面字体：{path}"))),
-                None => ui.label(small("未找到可用中文字体，界面可能显示为方块")),
+                Some(path) => {
+                    theme::read_row(ui, &p, "界面字体", path, Some("界面实际加载的中文字体文件"));
+                }
+                None => theme::note(ui, &p, "未找到可用中文字体，界面可能显示为方块"),
             };
         });
 
@@ -1493,41 +1848,61 @@ impl App {
 
         // 路径与版本：出问题时第一个要看的就是这几行
         theme::section(ui, &p, "路径与版本", |ui| {
-            egui::Grid::new("settings_paths")
-                .num_columns(2)
-                .striped(true)
-                .show(ui, |ui| {
-                    ui.label("界面设置");
-                    ui.label(small(settings::config_path().display().to_string()));
-                    ui.end_row();
-                    ui.label("驱动配置");
-                    ui.label(small(self.driver.write_path.display().to_string()));
-                    ui.end_row();
-                    ui.label("当前接口");
-                    ui.label(small(
-                        self.devices
-                            .get(self.selected.unwrap_or(usize::MAX))
-                            .map(|device| device.path.clone())
-                            .unwrap_or_else(|| "未选择".to_string()),
-                    ));
-                    ui.end_row();
-                    ui.label("版本");
-                    ui.label(small(format!(
-                        "界面 {} / 库 {}",
-                        env!("CARGO_PKG_VERSION"),
-                        asus_numpad::VERSION
-                    )));
-                    ui.end_row();
-                });
+            theme::read_row(
+                ui,
+                &p,
+                "界面设置",
+                &settings::config_path().display().to_string(),
+                Some("界面自己的设置文件：档位、联动间隔、开自启等。"),
+            );
+            theme::read_row(
+                ui,
+                &p,
+                "驱动配置",
+                &self.driver.write_path.display().to_string(),
+                Some("后台服务读的那份配置；界面上「保存并重启服务」改的就是它。"),
+            );
+            theme::read_row(
+                ui,
+                &p,
+                "当前接口",
+                &self
+                    .devices
+                    .get(self.selected.unwrap_or(usize::MAX))
+                    .map(|device| device.path.clone())
+                    .unwrap_or_else(|| "未选择".to_string()),
+                Some("当前选中的 HID 接口节点，报文都从这里出去。"),
+            );
+            theme::read_row(
+                ui,
+                &p,
+                "版本",
+                &format!(
+                    "界面 {} / 库 {}",
+                    env!("CARGO_PKG_VERSION"),
+                    asus_numpad::VERSION
+                ),
+                Some("界面与驱动库各自的版本；对不上说明装的是混搭包。"),
+            );
 
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                if theme::secondary(ui, &p, "打开设置目录").clicked() {
+                if theme::tip(
+                    theme::secondary(ui, &p, "打开设置目录"),
+                    "在文件管理器里打开界面设置所在目录",
+                )
+                .clicked()
+                {
                     let dir = settings::config_path();
                     let dir = dir.parent().unwrap_or(&dir).to_path_buf();
                     self.report_open(open_dir(&dir), &dir);
                 }
-                if theme::secondary(ui, &p, "打开驱动配置目录").clicked() {
+                if theme::tip(
+                    theme::secondary(ui, &p, "打开驱动配置目录"),
+                    "在文件管理器里打开驱动配置所在目录",
+                )
+                .clicked()
+                {
                     let file = self.driver.write_path.clone();
                     let dir = file.parent().unwrap_or(&file).to_path_buf();
                     self.report_open(open_dir(&dir), &dir);
@@ -1716,11 +2091,31 @@ impl eframe::App for App {
             .show(root, |ui| {
                 if self.ui_full {
                     let pages = [
-                        (Page::Light, Page::Light.title()),
-                        (Page::Driver, Page::Driver.title()),
-                        (Page::System, Page::System.title()),
-                        (Page::Command, Page::Command.title()),
-                        (Page::Settings, Page::Settings.title()),
+                        (
+                            Page::Light,
+                            Page::Light.title(),
+                            "灯光：档位条、四档映射、NumLock 联动、报文日志",
+                        ),
+                        (
+                            Page::Driver,
+                            Page::Driver.title(),
+                            "驱动配置：机型、布局、键码风格、手势阈值、背光通道、时序、语言",
+                        ),
+                        (
+                            Page::System,
+                            Page::System.title(),
+                            "系统状态：认出哪台机、走哪条背光通道、后台服务状态、诊断导出",
+                        ),
+                        (
+                            Page::Command,
+                            Page::Command.title(),
+                            "命令行：把 asus-numpad 全部子命令拼好再执行，输出与终端一致",
+                        ),
+                        (
+                            Page::Settings,
+                            Page::Settings.title(),
+                            "设置：启动行为、开机自启、配置文件路径与版本",
+                        ),
                     ];
                     if let Some(page) = theme::segmented(ui, &p, "tabs", self.tab, &pages) {
                         self.tab = page;
@@ -1875,16 +2270,36 @@ fn combo<T: PartialEq + Copy>(
 }
 
 /// 一行「标签 + 输入框」。空串一律视为「不传这个参数」，由 cmdform 判空。
-fn field(ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str) -> egui::Response {
-    ui.horizontal(|ui| {
-        ui.label(label);
+///
+/// 标签走统一的左列、输入框从控件列起，`help` 挂在标签右侧的 `i` 上悬浮显示。
+fn field(
+    ui: &mut egui::Ui,
+    p: &crate::theme::Palette,
+    label: &str,
+    value: &mut String,
+    hint: &str,
+    help: Option<&str>,
+) -> egui::Response {
+    theme::row(ui, p, label, help, |ui| {
         ui.add(
             egui::TextEdit::singleline(value)
                 .hint_text(hint)
                 .desired_width(220.0),
         )
     })
-    .inner
+}
+
+/// 系统状态每一行的悬浮说明：字段名对用户不直观，停一下鼠标给出含义与排查方向。
+fn state_help(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "平台" => "当前跑在哪个平台，以及数字键与手势由谁处理。",
+        "配置文件" => "驱动读取的配置文件路径；发现改不生效时先看这里指的是哪一份。",
+        "机型" => "驱动识别出的华硕机型 ID，它决定了默认布局与键位。",
+        "布局" => "数字键区当前使用的键位布局；认错机型时这里通常也跟着错。",
+        "背光通道" => "灯不亮先看这一行：能否找到带 FEATURE 0x0d 的 HID 接口。",
+        "数字键 / 手势" => "数字键与手势事件的实现方；Linux 下应为本程序的后台服务。",
+        _ => return None,
+    })
 }
 
 /// 日志时间戳（UTC，`HH:MM:SS`）。只用于看报文先后，不做展示级时区换算。

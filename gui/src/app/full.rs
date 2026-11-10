@@ -87,22 +87,44 @@ impl App {
 
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if theme::primary(ui, &p, "保存并重启服务").clicked() {
+                if theme::tip(
+                    theme::primary(ui, &p, "保存并重启服务"),
+                    "写回配置文件并 systemctl --user restart，改机型/布局/阈值后必须走这个。",
+                )
+                .clicked()
+                {
                     *action = Some(Action::SaveDriverAndRestart);
                 }
-                if theme::secondary(ui, &p, "保存").clicked() {
+                if theme::tip(
+                    theme::secondary(ui, &p, "保存"),
+                    "只落盘，不重启后台服务；正在用的触摸板不中断。",
+                )
+                .clicked()
+                {
                     *action = Some(Action::SaveDriver);
                 }
-                if theme::secondary(ui, &p, "重新载入").clicked() {
+                if theme::tip(
+                    theme::secondary(ui, &p, "重新载入"),
+                    "丢掉界面上的改动，重新从磁盘读一遍配置。",
+                )
+                .clicked()
+                {
                     *action = Some(Action::ReloadDriver);
                 }
-                if theme::secondary(ui, &p, "恢复默认").clicked() {
+                if theme::tip(
+                    theme::secondary(ui, &p, "恢复默认"),
+                    "把驱动配置改回官方默认值；需要再保存才落盘。",
+                )
+                .clicked()
+                {
                     *action = Some(Action::ResetDriver);
                 }
             });
-            ui.label(small(
+            theme::note(
+                ui,
+                &p,
                 "只点保存不会打断正在用的触摸板；改机型/布局/阈值这类参数要点「保存并重启服务」才生效。",
-            ));
+            );
         });
     }
 
@@ -116,7 +138,12 @@ impl App {
                 // ---- 机型 ----
                 let mut manual = self.driver.cfg.sku.clone().unwrap_or_default();
                 ui.horizontal(|ui| {
-                    ui.label("机型");
+                    theme::label_cell(
+                        ui,
+                        &p,
+                        "机型",
+                        Some("驱动认哪台机器：自动识别按 HID 模组判定。认错会让键位、背光档位一起错，先看下面的判定依据。"),
+                    );
                     let text = if manual.is_empty() {
                         "自动识别".to_string()
                     } else {
@@ -173,7 +200,12 @@ impl App {
                 ui.add_space(4.0);
                 let mut layout = self.driver.cfg.layout_name.clone();
                 ui.horizontal(|ui| {
-                    ui.label("布局");
+                    theme::label_cell(
+                        ui,
+                        &p,
+                        "布局",
+                        Some("数字键区的键表。auto 按 HID 模组挑；列数决定键区宽度，认错时按 7 会串到 8。"),
+                    );
                     let text = if layout == "auto" || layout.is_empty() {
                         "自动（按 HID 模组）".to_string()
                     } else {
@@ -226,14 +258,22 @@ impl App {
                         );
                     }
                 }
-                ui.checkbox(
+                theme::check_row(
+                    ui,
+                    &p,
                     &mut self.driver.cfg.allow_unverified_layout,
-                    "允许未核对的布局（family / unsupported 也放行）",
+                    "允许未核对布局",
+                    Some("family / unsupported 的键表也放行：能用，但没在真机上逐键核对过。"),
                 );
 
                 ui.add_space(2.0);
                 ui.horizontal(|ui| {
-                    ui.label("键码风格");
+                    theme::label_cell(
+                        ui,
+                        &p,
+                        "键码风格",
+                        Some("keypad 发 KEY_KP* 小键盘码；digits 发主键区 0-9——某些游戏和输入法只认后者。"),
+                    );
                     let mut mode = self.driver.cfg.key_mode;
                     egui::ComboBox::from_id_salt("cfg_key_mode")
                         .width(200.0)
@@ -255,9 +295,11 @@ impl App {
                         });
                     self.driver.cfg.key_mode = mode;
                 });
-                ui.label(small(
+                theme::note(
+                    ui,
+                    &p,
                     "keypad 对小键盘层有效；digits 让数字进主键区，某些游戏与输入法只认这一种。",
-                ));
+                );
             });
         });
     }
@@ -269,7 +311,12 @@ impl App {
             .default_open(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("NumLock 联动");
+                    theme::label_cell(
+                        ui,
+                        &p,
+                        "NumLock 联动",
+                        Some("点数字键区时怎么处理系统 NumLock：sync 先补一次按键、toggle 无条件切换、off 完全不碰。"),
+                    );
                     egui::ComboBox::from_id_salt("cfg_numlock")
                         .width(320.0)
                         .selected_text(numlock_label(self.driver.cfg.numlock))
@@ -287,13 +334,20 @@ impl App {
                             }
                         });
                 });
-                ui.label(small(
+                theme::note(
+                    ui,
+                    &p,
                     "驱动自己不模拟 NumLock 灯，这里决定的是「点数字键区时要不要顺手把系统 NumLock 打开」。",
-                ));
+                );
 
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.label("混合模式");
+                    theme::label_cell(
+                        ui,
+                        &p,
+                        "混合模式",
+                        Some("混排模式：auto 检测到虚拟触摸板才开，force 总是开，off 就只剩纯数字键盘。"),
+                    );
                     egui::ComboBox::from_id_salt("cfg_mixed")
                         .width(320.0)
                         .selected_text(mixed_label(self.driver.cfg.mixed_mode))
@@ -319,7 +373,12 @@ impl App {
                 ui.checkbox(&mut self.driver.cfg.calc_gesture, "计算器手势（长按左上图标区）");
                 if self.driver.cfg.calc_gesture {
                     ui.horizontal(|ui| {
-                        ui.label("手势模式");
+                        theme::label_cell(
+                            ui,
+                            &p,
+                            "手势模式",
+                            Some("触摸手势的触发方式，取决于这套模组是否支持；改了之后要点「保存并重启服务」。"),
+                        );
                         egui::ComboBox::from_id_salt("cfg_calc_mode")
                             .width(200.0)
                             .selected_text(match self.driver.cfg.calc_gesture_mode {
@@ -358,7 +417,12 @@ impl App {
             .default_open(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("通道");
+                    theme::label_cell(
+                        ui,
+                        &p,
+                        "通道",
+                        Some("背光报文走哪条链路：自动挑选，或强制 hidraw / i2c。灯不亮时先在这里换一条试。"),
+                    );
                     egui::ComboBox::from_id_salt("cfg_led_kind")
                         .width(240.0)
                         .selected_text(self.driver.cfg.led_kind.clone())
@@ -379,13 +443,27 @@ impl App {
                 });
 
                 let mut hidraw = self.driver.cfg.hidraw.clone().unwrap_or_default();
-                if field(ui, "hidraw 设备", &mut hidraw, "留空 = 自动挑选").changed() {
+                if field(
+                    ui,
+                    &p,
+                    "hidraw 设备",
+                    &mut hidraw,
+                    "留空 = 自动挑选",
+                    Some("指定 hidraw 节点名（如 hidraw3）；留空就按机型自动挑带 FEATURE 0x0d 的那个。"),
+                )
+                .changed()
+                {
                     let text = hidraw.trim().to_string();
                     self.driver.cfg.hidraw = if text.is_empty() { None } else { Some(text) };
                 }
 
                 ui.horizontal(|ui| {
-                    ui.label("i2c 总线");
+                    theme::label_cell(
+                            ui,
+                            &p,
+                            "i2c 总线",
+                            Some("走 i2c 通道时的总线号，一般配合下面的从机地址一起用。"),
+                        );
                     let mut auto_bus = self.driver.cfg.i2c_bus.is_none();
                     if ui.checkbox(&mut auto_bus, "自动").changed() {
                         self.driver.cfg.i2c_bus = if auto_bus { None } else { Some(0) };
@@ -393,7 +471,12 @@ impl App {
                     if let Some(bus) = self.driver.cfg.i2c_bus.as_mut() {
                         ui.add(egui::DragValue::new(bus).range(0..=99));
                     }
-                    ui.label("地址");
+                    theme::label_cell(
+                            ui,
+                            &p,
+                            "地址",
+                            Some("走 i2c 通道时的从机地址，触摸板通常在 0x15 附近。"),
+                        );
                     let mut auto_addr = self.driver.cfg.i2c_addr.is_none();
                     if ui.checkbox(&mut auto_addr, "自动").changed() {
                         self.driver.cfg.i2c_addr = if auto_addr { None } else { Some(0x38) };
@@ -407,29 +490,66 @@ impl App {
                     }
                 });
                 let mut payload = self.driver.cfg.i2c_payload.clone();
-                if field(ui, "i2c 载荷首字节", &mut payload, "0x00").changed() {
+                if field(
+                    ui,
+                    &p,
+                    "i2c 载荷首字节",
+                    &mut payload,
+                    "0x00",
+                    Some("走 i2c 时每帧的第一个字节，官方默认 0x00。"),
+                )
+                .changed()
+                {
                     self.driver.cfg.i2c_payload = payload.trim().to_string();
                 }
                 let mut transfer = self.driver.cfg.i2c_transfer.clone();
-                if field(ui, "i2c 工具", &mut transfer, "i2ctransfer").changed() {
+                if field(
+                    ui,
+                    &p,
+                    "i2c 工具",
+                    &mut transfer,
+                    "i2ctransfer",
+                    Some("用来发 i2c 帧的外部命令，默认 i2ctransfer。"),
+                )
+                .changed()
+                {
                     self.driver.cfg.i2c_transfer = transfer.trim().to_string();
                 }
-                ui.label(small(
+                theme::note(
+                    ui,
+                    &p,
                     "条件是 hidraw 上没有 FEATURE 0x0d（少数模组被官方驱动占掉了报告）。i2c 只在 Linux 有效。",
-                ));
+                );
 
                 ui.add_space(6.0);
-                ui.checkbox(
+                theme::check_row(
+                    ui,
+                    &p,
                     &mut self.driver.cfg.follow_keyboard_brightness,
-                    "跟随键盘背光（默认）",
+                    "跟随键盘背光",
+                    Some("默认开启：键盘背光变几档，触摸板跟着变几档。关掉后各走各的。"),
                 );
                 if self.driver.cfg.follow_keyboard_brightness {
                     let mut dir = self.driver.cfg.keyboard_brightness_dir.clone();
-                    if field(ui, "键盘背光目录", &mut dir, "/sys/class/leds/…").changed() {
+                    if field(
+                        ui,
+                        &p,
+                        "键盘背光目录",
+                        &mut dir,
+                        "/sys/class/leds/…",
+                        Some("从哪个 leds 节点读键盘背光档位；机型不同节点名也不同。"),
+                    )
+                    .changed()
+                    {
                         self.driver.cfg.keyboard_brightness_dir = dir.trim().to_string();
                     }
                     ui.horizontal(|ui| {
-                        ui.label("轮询间隔");
+                        theme::label_cell(
+                            ui,
+                            &p,
+                            "轮询间隔",
+                            Some("多久读一次键盘背光状态。调小跟得更紧，但每秒读的次数也更多。"),
+                        );
                         ui.add(
                             egui::DragValue::new(&mut self.driver.cfg.brightness_poll_ms)
                                 .range(50..=5000)
@@ -441,7 +561,12 @@ impl App {
                 }
 
                 ui.add_space(6.0);
-                ui.label("手动档位表");
+                theme::label_cell(
+                    ui,
+                    &p,
+                    "手动档位表",
+                    Some("自己填每档对应的命令字；相邻档必须单调，否则 CLI 会拒绝。"),
+                );
                 self.draw_manual_levels(ui, action);
             });
         });
@@ -449,6 +574,7 @@ impl App {
 
     /// `manual_brightness_levels` 的编辑器：每档一个命令字，增删档都直接改表长。
     fn draw_manual_levels(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
+        let p = self.palette;
         let mut levels = self.driver.cfg.manual_brightness_levels.clone();
         let explicit = levels.is_some();
         let mut use_explicit = explicit;
@@ -506,7 +632,12 @@ impl App {
         }
 
         ui.horizontal(|ui| {
-            ui.label("固定档位序号");
+            theme::label_cell(
+                ui,
+                &p,
+                "固定档位序号",
+                Some("固定停在这一档，不再跟随键盘背光。"),
+            );
             ui.add(egui::DragValue::new(&mut self.driver.cfg.manual_brightness_step).range(1..=8));
             ui.label(small("不跟灯时亮到第几档"));
         });
@@ -545,7 +676,12 @@ impl App {
                         });
                     }
                     ui.horizontal(|ui| {
-                        ui.label("触摸板尺寸");
+                        theme::label_cell(
+                            ui,
+                            &p,
+                            "触摸板尺寸",
+                            Some("触摸板物理尺寸（mm），手势阈值按它换算。"),
+                        );
                         ui.add(egui::DragValue::new(&mut self.driver.cfg.touchpad_width_mm));
                         ui.label("×");
                         ui.add(egui::DragValue::new(
@@ -584,7 +720,12 @@ impl App {
                         });
                     }
                     ui.horizontal(|ui| {
-                        ui.label("SENDKEY 判定比例");
+                        theme::label_cell(
+                            ui,
+                            &p,
+                            "SENDKEY 判定比例",
+                            Some("手势里判定为 SENDKEY 的比例阈值，越小越灵敏。"),
+                        );
                         ui.add(egui::DragValue::new(
                             &mut self.driver.cfg.touch_sendkey_ratio,
                         ));
@@ -600,7 +741,12 @@ impl App {
                 .default_open(false)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label("语言");
+                        theme::label_cell(
+                            ui,
+                            &p,
+                            "语言",
+                            Some("界面与日志的语言，auto 跟系统语言走。"),
+                        );
                         egui::ComboBox::from_id_salt("cfg_lang")
                             .width(240.0)
                             .selected_text(lang_label(&self.driver.cfg.language))

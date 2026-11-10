@@ -298,13 +298,13 @@ pub fn segmented<T: PartialEq + Copy>(
     p: &Palette,
     id: &str,
     current: T,
-    items: &[(T, &str)],
+    items: &[(T, &str, &str)],
 ) -> Option<T> {
     let font = FontId::proportional(14.0);
     let pad = Vec2::new(16.0, 7.0);
     let widths: Vec<f32> = items
         .iter()
-        .map(|(_, text)| {
+        .map(|(_, text, _)| {
             ui.painter()
                 .layout_no_wrap((*text).to_owned(), font.clone(), p.text)
                 .size()
@@ -321,7 +321,7 @@ pub fn segmented<T: PartialEq + Copy>(
 
     let mut picked = None;
     let mut x = rect.left() + 4.0;
-    for ((value, text), width) in items.iter().zip(&widths) {
+    for ((value, text, help), width) in items.iter().zip(&widths) {
         let item = egui::Rect::from_min_size(
             egui::pos2(x, rect.top() + 4.0),
             Vec2::new(*width, height - 8.0),
@@ -351,6 +351,9 @@ pub fn segmented<T: PartialEq + Copy>(
                 color
             },
         );
+        if resp.hovered() && !help.is_empty() {
+            tip(resp.clone(), *help);
+        }
         if resp.clicked() {
             picked = Some(*value);
         }
@@ -382,7 +385,10 @@ pub fn level_meter(ui: &mut egui::Ui, p: &Palette, id: &str, step: u8, steps: u8
         );
         let index = i + 1;
         let lit = index <= step;
-        let resp = ui.interact(cell_rect, ui.scope_id().with((id, index)), Sense::click());
+        let resp = tip(
+            ui.interact(cell_rect, ui.scope_id().with((id, index)), Sense::click()),
+            format!("第 {index} 档：点这一格直接切到该亮度"),
+        );
         let fill = if lit {
             // 越亮越偏暖，暗档用强调色的深色版本，视觉上有「渐亮」的连续感
             let t = if steps > 1 {
@@ -438,4 +444,153 @@ fn lerp_color(from: Color32, to: Color32, t: f32) -> Color32 {
         mix(from.g(), to.g()),
         mix(from.b(), to.b()),
     )
+}
+
+/// 表单左列宽度。所有「标签 + 控件」的行共用这一列，控件因此永远从同一条竖线起，
+/// 换行、换卡片都不会左右错位。
+pub const LABEL_W: f32 = 112.0;
+
+/// 给任意控件挂一段悬浮说明：统一宽度与字号，各页 tooltip 不会长短不一。
+pub fn tip(resp: Response, text: impl Into<String>) -> Response {
+    let text = text.into();
+    resp.on_hover_ui(move |ui| {
+        ui.set_max_width(320.0);
+        ui.label(RichText::new(text).size(12.5));
+    })
+}
+
+/// 标签后面那个小圆圈 `i`：鼠标停上去出说明。
+///
+/// 参数面板里每一项都值得解释一句，但全铺成正文会把界面撑散，所以统一做法是
+/// 标签右侧留一个图标，想看的人停一下鼠标。
+pub fn info_dot(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
+    let hot = resp.hovered();
+    // 常态就用主题色描边 + 淡底：灰描边的 1px 圆在浅色卡片上几乎看不见，
+    // 用户根本不知道这里能悬浮，所以底色与描边都取主色，只在悬浮时加深。
+    let stroke = if hot {
+        p.accent
+    } else {
+        p.accent.gamma_multiply(0.75)
+    };
+    ui.painter().circle(
+        rect.center(),
+        7.0,
+        if hot {
+            p.accent_soft
+        } else {
+            p.accent_soft.gamma_multiply(0.7)
+        },
+        Stroke::new(1.2, stroke),
+    );
+    ui.painter().text(
+        rect.center() + Vec2::new(0.0, 0.5),
+        egui::Align2::CENTER_CENTER,
+        "i",
+        FontId::proportional(10.5),
+        stroke,
+    );
+    tip(resp, text)
+}
+
+/// 一行「标签 + 控件」：标签右对齐占固定宽度，控件从控件列起。
+///
+/// 有没有 info 图标都预留同样的位置，这样同一张卡片里所有控件左边缘能连成一条线。
+pub fn row<R>(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    label: &str,
+    help: Option<&str>,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(
+            Vec2::new(LABEL_W, 24.0),
+            egui::Layout::right_to_left(egui::Align::Center),
+            |ui| {
+                ui.spacing_mut().item_spacing.x = 5.0;
+                match help {
+                    Some(text) => {
+                        info_dot(ui, p, text);
+                    }
+                    None => {
+                        ui.add_space(15.0);
+                    }
+                }
+                ui.label(RichText::new(label).size(13.0).color(p.text_weak));
+            },
+        );
+        add(ui)
+    })
+    .inner
+}
+
+/// 只出标签、不带控件：给那些自带 `ui.horizontal(|ui| { label; combo })` 的老布局就地补对齐。
+///
+/// 标签本身也挂悬浮说明——这类行没有可以放 `i` 的地方，鼠标停在标签上一样能看解释。
+pub fn label_cell(ui: &mut egui::Ui, p: &Palette, text: &str, help: Option<&str>) {
+    ui.allocate_ui_with_layout(
+        Vec2::new(LABEL_W, 24.0),
+        egui::Layout::right_to_left(egui::Align::Center),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = 5.0;
+            match help {
+                Some(h) => {
+                    info_dot(ui, p, h);
+                }
+                None => {
+                    ui.add_space(15.0);
+                }
+            }
+            let resp = ui.label(RichText::new(text).size(13.0).color(p.text_weak));
+            if let Some(h) = help {
+                tip(resp, h);
+            }
+        },
+    );
+}
+
+/// 复选框行：勾选框挪到控件列，和下拉框、输入框对齐，不再各自缩进。
+pub fn check_row(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    checked: &mut bool,
+    label: &str,
+    help: Option<&str>,
+) -> Response {
+    row(ui, p, label, help, |ui| {
+        let mut resp = ui.checkbox(checked, "");
+        if let Some(text) = help {
+            resp = tip(resp, text);
+        }
+        resp
+    })
+}
+
+/// 只读行：左边标签、右边值。值过长先截断，悬浮看全文（路径类基本都超宽）。
+pub fn read_row(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    label: &str,
+    value: &str,
+    help: Option<&str>,
+) -> Response {
+    let text = RichText::new(value).size(12.5).color(p.text_weak);
+    row(ui, p, label, help, |ui| {
+        let resp = ui.add(egui::Label::new(text).truncate());
+        tip(resp, value.to_owned())
+    })
+}
+
+/// 说明文字：缩进到控件列，和上面的控件左缘对齐，不再贴着卡片左边堆成一片。
+pub fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
+    let offset = LABEL_W + ui.spacing().item_spacing.x;
+    ui.horizontal_top(|ui| {
+        ui.add_space(offset);
+        ui.vertical(|ui| {
+            ui.add(
+                egui::Label::new(RichText::new(text.into()).size(12.0).color(p.text_weak)).wrap(),
+            );
+        });
+    });
 }
