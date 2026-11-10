@@ -213,7 +213,12 @@ pub fn card<R>(ui: &mut egui::Ui, p: &Palette, add: impl FnOnce(&mut egui::Ui) -
             spread: 0,
             color: Color32::from_black_alpha(if dark { 70 } else { 16 }),
         })
-        .show(ui, add)
+        .show(ui, |ui| {
+            // 卡片里不缩进：折叠头、列表这些默认会按 indent 往右推，一推控件列就跟着
+            // 偏移，同一份表单在「折叠卡片」和「带标题卡片」里就错开十几像素。
+            ui.spacing_mut().indent = 0.0;
+            add(ui)
+        })
         .inner
 }
 
@@ -250,7 +255,7 @@ pub fn primary(ui: &mut egui::Ui, p: &Palette, text: &str) -> Response {
             .fill(p.accent)
             .stroke(Stroke::new(0.0, Color32::TRANSPARENT))
             .corner_radius(CornerRadius::same(WIDGET_RADIUS))
-            .min_size(Vec2::new(0.0, 30.0)),
+            .min_size(Vec2::new(BTN_W, CTRL_H)),
     )
 }
 
@@ -261,7 +266,7 @@ pub fn secondary(ui: &mut egui::Ui, p: &Palette, text: &str) -> Response {
             .fill(p.sunk)
             .stroke(Stroke::new(1.0, p.stroke))
             .corner_radius(CornerRadius::same(WIDGET_RADIUS))
-            .min_size(Vec2::new(0.0, 30.0)),
+            .min_size(Vec2::new(BTN_W, CTRL_H)),
     )
 }
 
@@ -312,7 +317,15 @@ pub fn segmented<T: PartialEq + Copy>(
                 + pad.x * 2.0
         })
         .collect();
-    let total = widths.iter().sum::<f32>() + 8.0;
+    // 铺满控件列：两格按文字宽度成比例分配，右边缘于是和下拉框、按钮组落在同一条线上
+    let total = ui.available_width().min(ctrl_width()).max(120.0);
+    let natural = widths.iter().sum::<f32>() + 8.0;
+    let scale = if natural > 0.0 {
+        (total - 8.0) / (natural - 8.0)
+    } else {
+        1.0
+    };
+    let widths: Vec<f32> = widths.iter().map(|w| w * scale).collect();
     let height = pad.y * 2.0 + 16.0;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(total, height), Sense::hover());
 
@@ -448,7 +461,65 @@ fn lerp_color(from: Color32, to: Color32, t: f32) -> Color32 {
 
 /// 表单左列宽度。所有「标签 + 控件」的行共用这一列，控件因此永远从同一条竖线起，
 /// 换行、换卡片都不会左右错位。
-pub const LABEL_W: f32 = 112.0;
+///
+/// 取 132 而不是更窄：中文标签（「应用手势触发距离」「独占触摸板」）在 13px 下排开
+/// 就要 100 出头，列宽给小了标签会折成两行，行高一变，整片表单就跟着参差。
+pub const LABEL_W: f32 = 132.0;
+
+/// 卡片内容到卡片边缘的左右留白（[`card`] 的 `inner_margin`）。
+pub const CARD_PAD_X: f32 = 16.0;
+
+/// 标签列与控件列之间的间距，与全局 `item_spacing.x` 取同一个值。
+pub const ROW_GAP: f32 = 10.0;
+
+/// 控件列宽度下限：窄窗口下也不能窄到把下拉框里的档位名切掉。
+pub const CTRL_MIN_W: f32 = 280.0;
+
+/// 控件列宽度上限：正好放得下一排四颗 [`BTN_W`] 按钮（4×104 + 3×8）。
+///
+/// 上限存在的意义是别让控件在大窗口里拉成一条横贯整页的输入框；
+/// 四颗按钮这一档是页面上最宽的一组控件，控件列只要够它，其余行就不会有任何
+/// 元素越出控件列的右边缘。
+pub const CTRL_MAX_W: f32 = 4.0 * BTN_W + 3.0 * 8.0;
+
+/// 控件行高。输入框、下拉框、数字框、按钮都取这个高度，一行里高矮一致。
+pub const CTRL_H: f32 = 30.0;
+
+/// 一格并排两个控件时左边那个（勾选框、小序号）的宽度；右边那个补齐到
+/// 控件列剩下的宽度，于是「两个小控件一行」与「一个大控件」的右边缘仍然齐平。
+pub const PAIR_A: f32 = 84.0;
+/// 并排两控件之间的间距。
+pub const PAIR_GAP: f32 = 8.0;
+
+/// 按钮统一宽度：全界面只有这一个按钮宽度。
+pub const BTN_W: f32 = 104.0;
+
+/// 当前页的控件列宽度（以千分之一像素存，`AtomicU32` 不能直接存 `f32`）。
+///
+/// **为什么要做成每帧算一次的全局值**：每张卡片、每个折叠区里 `ui.available_width()`
+/// 各不相同（折叠头、滚动条、内层 `Frame` 都会吃掉几像素），如果每一行各自按自己的
+/// 可用宽度算控件列，同一页里就会同时出现 300 / 294 / 288 三种列宽——右边缘差几像素，
+/// 看着就是「没对齐」。所以一页只算一次，整页所有行都用这一个数字。
+static COLUMN_W_MILLI: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(300_000);
+
+/// 每页开画时调用一次：按本页内容宽度定下控件列宽度。
+pub fn begin_page(ui: &mut egui::Ui) {
+    use std::sync::atomic::Ordering;
+    let content = ui.available_width() - CARD_PAD_X * 2.0;
+    let width = (content - LABEL_W - ROW_GAP).clamp(CTRL_MIN_W, CTRL_MAX_W);
+    COLUMN_W_MILLI.store((width * 1000.0).round() as u32, Ordering::Relaxed);
+}
+
+/// 本页控件列宽度。
+pub fn ctrl_width() -> f32 {
+    use std::sync::atomic::Ordering;
+    COLUMN_W_MILLI.load(Ordering::Relaxed) as f32 / 1000.0
+}
+
+/// 并排两控件时右边那个的宽度：控件列减掉左边那格与间距。
+pub fn pair_b() -> f32 {
+    ctrl_width() - PAIR_A - PAIR_GAP
+}
 
 /// 给任意控件挂一段悬浮说明：统一宽度与字号，各页 tooltip 不会长短不一。
 pub fn tip(resp: Response, text: impl Into<String>) -> Response {
@@ -493,9 +564,47 @@ pub fn info_dot(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) -> Resp
     tip(resp, text)
 }
 
-/// 一行「标签 + 控件」：标签右对齐占固定宽度，控件从控件列起。
+/// 在行内切出一块**宽度精确**的格子，让内部内容照自己的布局画。
 ///
-/// 有没有 info 图标都预留同样的位置，这样同一张卡片里所有控件左边缘能连成一条线。
+/// 不用 `allocate_ui_with_layout`：它按内容实际大小结算，标签只有两个字时那一格就
+/// 只占两字的宽度，控件起点于是跟着往左跳（同一页里曾出现 492 / 514 / 520 三种起点）。
+/// 这里先定死矩形、画完再把矩形整块交给布局，起点与宽度都不受内容影响。
+fn cell<R>(
+    ui: &mut egui::Ui,
+    size: Vec2,
+    layout: egui::Layout,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    let rect = egui::Rect::from_min_size(ui.next_widget_position(), size);
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(layout));
+    let out = add(&mut child);
+    ui.allocate_rect(rect, Sense::hover());
+    out
+}
+
+/// 同上，但高度按内容走（多行格子用）。
+fn cell_auto_height<R>(
+    ui: &mut egui::Ui,
+    width: f32,
+    layout: egui::Layout,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    let start = ui.next_widget_position();
+    let max = egui::Rect::from_min_size(start, Vec2::new(width, ui.available_height().max(CTRL_H)));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(max).layout(layout));
+    let out = add(&mut child);
+    let height = child.min_rect().height().max(CTRL_H);
+    ui.allocate_rect(
+        egui::Rect::from_min_size(start, Vec2::new(width, height)),
+        Sense::hover(),
+    );
+    out
+}
+
+/// 一行「标签 + 控件」：标签右对齐占固定宽度，控件从控件列起、宽度锁死为控件列宽。
+///
+/// 有没有 info 图标都预留同样的位置，控件再被塞进宽度正好是控件列的格子里，无论里面
+/// 放下拉框、滑块还是数字框，左右边缘都落在同一条竖线上——调用点不用再各自 add_sized。
 pub fn row<R>(
     ui: &mut egui::Ui,
     p: &Palette,
@@ -504,23 +613,249 @@ pub fn row<R>(
     add: impl FnOnce(&mut egui::Ui) -> R,
 ) -> R {
     ui.horizontal(|ui| {
-        ui.allocate_ui_with_layout(
-            Vec2::new(LABEL_W, 24.0),
-            egui::Layout::right_to_left(egui::Align::Center),
+        label_cell(ui, p, label, help);
+        ctrl_cell(ui, add)
+    })
+    .inner
+}
+
+/// 与 [`row`] 相同，但控件右边再挂一句说明：说明从固定的说明列起排，
+/// 于是整张卡片里所有说明文字的左边缘也是一条线。
+pub fn row_hint<R>(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    label: &str,
+    help: Option<&str>,
+    hint: &str,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    ui.horizontal(|ui| {
+        label_cell(ui, p, label, help);
+        let value = ctrl_cell(ui, add);
+        hint_cell(ui, p, hint);
+        value
+    })
+    .inner
+}
+
+/// 多行控件用的行：标签仍在左列，右侧格子的宽度同样是控件列，高度由内容决定。
+///
+/// 档位表、列表这类「一格里有好几行」的内容走这个，标签列与单行控件同样对齐。
+pub fn block<R>(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    label: &str,
+    help: Option<&str>,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    ui.horizontal_top(|ui| {
+        label_cell(ui, p, label, help);
+        cell_auto_height(
+            ui,
+            ctrl_width(),
+            egui::Layout::top_down(egui::Align::Min),
             |ui| {
-                ui.spacing_mut().item_spacing.x = 5.0;
-                match help {
-                    Some(text) => {
-                        info_dot(ui, p, text);
-                    }
-                    None => {
-                        ui.add_space(15.0);
-                    }
-                }
-                ui.label(RichText::new(label).size(13.0).color(p.text_weak));
+                ui.spacing_mut().item_spacing.y = 6.0;
+                add(ui)
             },
-        );
-        add(ui)
+        )
+    })
+    .inner
+}
+
+/// 没有标签的一行：内容缩进到控件列，左右边缘与其它带标签的行对齐。
+///
+/// 档位条、「执行 / 复制命令」这类整排控件没有标签，若直接从卡片左边起排，
+/// 就会比别处整整左移一个标签列，看着像单独一栏。
+pub fn ctrl_column<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    ui.horizontal_top(|ui| {
+        ui.add_space(LABEL_W + ROW_GAP);
+        cell_auto_height(
+            ui,
+            ctrl_width(),
+            egui::Layout::left_to_right(egui::Align::Center),
+            add,
+        )
+    })
+    .inner
+}
+
+/// 控件格：宽度锁死控件列，一行里的控件从同一竖线起、到同一竖线止。
+fn ctrl_cell<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    cell(
+        ui,
+        Vec2::new(ctrl_width(), CTRL_H),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ctrl_spacing(ui);
+            add(ui)
+        },
+    )
+}
+
+/// 说明格：控件右边那句话，左边缘与其它行的说明对齐。
+fn hint_cell(ui: &mut egui::Ui, p: &Palette, text: &str) -> Response {
+    let width = ui.available_width().max(120.0);
+    cell_auto_height(
+        ui,
+        width,
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.add(
+                egui::Label::new(RichText::new(text).size(12.0).color(p.text_weak))
+                    .wrap()
+                    .halign(egui::Align::Min),
+            )
+        },
+    )
+}
+
+/// 把当前 `ui` 的控件尺寸统一到控件列宽 / [`CTRL_H`]。
+///
+/// 滑块要把「滑块长度 + 右侧数值框」凑成整列，所以这里给数值框留出 52 像素。
+fn ctrl_spacing(ui: &mut egui::Ui) {
+    ui.spacing_mut().combo_width = ctrl_width();
+    ui.spacing_mut().slider_width = ctrl_width() - 52.0;
+    ui.spacing_mut().interact_size.y = CTRL_H;
+}
+
+/// 单行输入框：宽度与行高都取控件列，和下拉框、滑块右边缘齐平。
+pub fn text_field(ui: &mut egui::Ui, value: &mut String, hint: &str) -> Response {
+    ui.add_sized(
+        Vec2::new(ctrl_width(), CTRL_H),
+        egui::TextEdit::singleline(value).hint_text(hint),
+    )
+}
+
+/// 一行里并排两个控件：左边固定 [`PAIR_A`]，右边补到控件列剩下的宽度。
+///
+/// 「自动 + 数字框」「勾选框 + 数值」都用这个，右边缘因此不会比整宽控件短一截。
+pub fn pair<A, B>(
+    ui: &mut egui::Ui,
+    left: impl FnOnce(&mut egui::Ui) -> A,
+    right: impl FnOnce(&mut egui::Ui) -> B,
+) -> (A, B) {
+    let a = cell(
+        ui,
+        Vec2::new(PAIR_A, CTRL_H),
+        egui::Layout::left_to_right(egui::Align::Center),
+        left,
+    );
+    ui.add_space(PAIR_GAP);
+    let b = cell(
+        ui,
+        Vec2::new(pair_b(), CTRL_H),
+        egui::Layout::left_to_right(egui::Align::Center),
+        right,
+    );
+    (a, b)
+}
+
+/// 等宽数字框：宽度取 [`pair_b`]，和 [`pair`] 右边的格子一样宽。
+pub fn pair_num<Num: egui::emath::Numeric>(
+    ui: &mut egui::Ui,
+    value: &mut Num,
+    range: std::ops::RangeInclusive<Num>,
+) -> Response {
+    ui.add_sized(
+        Vec2::new(pair_b(), CTRL_H),
+        egui::DragValue::new(value).range(range),
+    )
+}
+
+/// 档位表格子：每档一个数字框，四格一行铺满控件列，第二行的格子与第一行严格对齐。
+///
+/// 之前用的是 `horizontal_wrapped` + 固定 74 像素的框，档数一变就换行位置不定，
+/// 表里表外的框宽还各不相同。
+pub fn slot_grid(ui: &mut egui::Ui, p: &Palette, values: &mut [u8], low: u8, high: u8) {
+    const COLS: usize = 4;
+    let gap = 6.0;
+    let slot = (ctrl_width() - gap * (COLS as f32 - 1.0)) / COLS as f32;
+    for chunk_start in (0..values.len()).step_by(COLS) {
+        let chunk_end = (chunk_start + COLS).min(values.len());
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            for (offset, value) in values[chunk_start..chunk_end].iter_mut().enumerate() {
+                let index = chunk_start + offset + 1;
+                let resp = ui.add_sized(
+                    Vec2::new(slot, CTRL_H),
+                    egui::DragValue::new(value)
+                        .range(low..=high)
+                        .custom_formatter(|v, _| format!("0x{:02x}", v as u8)),
+                );
+                tip(
+                    resp,
+                    format!("第 {index} 档的命令字，取值 {low:#04x}..={high:#04x}"),
+                );
+            }
+        });
+    }
+    let _ = p;
+}
+
+/// 一排按钮：每颗都正好 [`BTN_W`] 宽、从当前行首依次排开，**永远不缩**。
+///
+/// 之前按「总数平分」算宽度，于是同一页里出现 123 / 104 / 91 三种按钮宽——一排三颗
+/// 的被压窄、一排两颗的又被拉宽，整页看上去宽度乱七八糟。这里定死一颗按钮的尺寸：
+/// 同一行几颗就几颗排过去，多出的宽度不够就让它往右伸，宁可伸进空白，也不改按钮宽。
+pub fn actions(ui: &mut egui::Ui, p: &Palette, items: &[(&str, bool, &str)]) -> Option<usize> {
+    let gap = ui.spacing().item_spacing.x;
+    // 一排按钮的总宽不能超过控件列：四颗 104 的按钮加上间距是 446，比控件列多出几像素，
+    // 最后一颗就会顶出卡片右边。按钮多于「控件列放得下」时按控件列等分，右边缘永远齐平。
+    let count = items.len().max(1) as f32;
+    let btn_w = if count > 1.0 {
+        ((ctrl_width() - gap * (count - 1.0)) / count).min(BTN_W)
+    } else {
+        BTN_W
+    };
+    let mut clicked = None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = gap;
+        for (index, (text, primary_style, help)) in items.iter().enumerate() {
+            let button = if *primary_style {
+                egui::Button::new(RichText::new(*text).color(Color32::WHITE).strong())
+                    .fill(p.accent)
+                    .stroke(Stroke::new(0.0, Color32::TRANSPARENT))
+                    .corner_radius(CornerRadius::same(WIDGET_RADIUS))
+                    .min_size(Vec2::new(btn_w, CTRL_H))
+            } else {
+                egui::Button::new(RichText::new(*text).color(p.text))
+                    .fill(p.sunk)
+                    .stroke(Stroke::new(1.0, p.stroke))
+                    .corner_radius(CornerRadius::same(WIDGET_RADIUS))
+                    .min_size(Vec2::new(btn_w, CTRL_H))
+            };
+            // 用 add_sized 给死宽高：`min_size` 只是下限，文字一长按钮就自己长胖，
+            // 一排里几颗按钮于是宽窄不一、还把右边那颗顶出控件列。
+            let resp = ui.add_sized(Vec2::new(btn_w, CTRL_H), button);
+            let resp = if help.is_empty() {
+                resp
+            } else {
+                tip(resp, *help)
+            };
+            if resp.clicked() && clicked.is_none() {
+                clicked = Some(index);
+            }
+        }
+    });
+    clicked
+}
+
+/// 「标签 + 一排按钮」：按钮组左边缘与下拉框、输入框同一条竖线起。
+///
+/// 这一行是整页唯一允许往右伸过控件列的布局——三颗按钮就是 3×[`BTN_W`] 加两道间距，
+/// 硬塞进控件列只能靠压窄按钮，那正是界面看着不齐的根源。
+pub fn action_row(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    label: &str,
+    help: Option<&str>,
+    items: &[(&str, bool, &str)],
+) -> Option<usize> {
+    ui.horizontal(|ui| {
+        label_cell(ui, p, label, help);
+        ctrl_spacing(ui);
+        actions(ui, p, items)
     })
     .inner
 }
@@ -529,17 +864,21 @@ pub fn row<R>(
 ///
 /// 标签本身也挂悬浮说明——这类行没有可以放 `i` 的地方，鼠标停在标签上一样能看解释。
 pub fn label_cell(ui: &mut egui::Ui, p: &Palette, text: &str, help: Option<&str>) {
-    ui.allocate_ui_with_layout(
-        Vec2::new(LABEL_W, 24.0),
-        egui::Layout::right_to_left(egui::Align::Center),
+    // 左对齐四线网格：图标槽位 / 标签文字 / 控件左缘 / 控件右缘，整页各成一条竖线。
+    // 标签右对齐会让左缘随字数参差，看上去像「一堆宽度不一样的东西」，所以改成左对齐、
+    // 说明图标统一放最左侧的图标槽里，没有说明的行也留同样宽的槽。
+    cell(
+        ui,
+        Vec2::new(LABEL_W, CTRL_H),
+        egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            ui.spacing_mut().item_spacing.x = 5.0;
+            ui.spacing_mut().item_spacing.x = 6.0;
             match help {
                 Some(h) => {
                     info_dot(ui, p, h);
                 }
                 None => {
-                    ui.add_space(15.0);
+                    ui.add_space(16.0);
                 }
             }
             let resp = ui.label(RichText::new(text).size(13.0).color(p.text_weak));
@@ -589,7 +928,9 @@ pub fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
         ui.add_space(offset);
         ui.vertical(|ui| {
             ui.add(
-                egui::Label::new(RichText::new(text.into()).size(12.0).color(p.text_weak)).wrap(),
+                egui::Label::new(RichText::new(text.into()).size(12.0).color(p.text_weak))
+                    .wrap()
+                    .halign(egui::Align::Min),
             );
         });
     });
