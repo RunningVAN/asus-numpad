@@ -40,7 +40,7 @@ use std::os::unix::io::RawFd;
 use std::path::Path;
 use std::process::Command;
 
-use crate::config::{Config, VAL_UNLOCK};
+use crate::config::Config;
 use crate::engine::LedSink;
 
 fn open_rw(path: &str) -> io::Result<RawFd> {
@@ -112,23 +112,11 @@ struct HidrawReportDescriptor {
 // --------------------------------------------------------------------------- //
 
 /// 背光 FEATURE 报告 ID（报告描述符里 `85 0d ... b1 02`）。
-pub const LED_FEATURE_REPORT_ID: u8 = 0x0d;
-/// 报文第 2/3 字节：固定 0x14 / 0x03（对应 usage ff00.00c4 的写法）。
-const LED_FEATURE_BODY: [u8; 2] = [0x14, 0x03];
-/// 报文末字节：固定 0xad。
-const LED_FEATURE_TAIL: u8 = 0xad;
-/// FEATURE 报告总长（含 report id）。
-const LED_FEATURE_LEN: usize = 5;
-
-/// 把亮度命令字映射成 FEATURE 报文里的 level 字节。
 ///
-/// `0x01` 亮 / `0x00` 灭原样透传；`0x60`（i2c 解锁字）在 hidraw 通道无意义，直接忽略。
-pub fn level_byte(value: u8) -> Option<u8> {
-    match value {
-        VAL_UNLOCK => None,
-        v => Some(v),
-    }
-}
+/// 报文定义已上移到 [`crate::led_proto`]，Linux 这里只做转出，两个平台共用一份字节。
+pub use crate::led_proto::{
+    level_byte, LED_FEATURE_BODY, LED_FEATURE_LEN, LED_FEATURE_REPORT_ID, LED_FEATURE_TAIL,
+};
 
 pub struct HidrawLed {
     pub path: String,

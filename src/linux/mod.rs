@@ -399,7 +399,7 @@ pub fn probe_report(cfg: &Config) -> Result<(Geometry, Vec<String>)> {
         &[
             ("layout", rl.entry.name),
             ("support", rl.entry.support.as_str()),
-            ("source", crate::i18n::t(layout_source_key(rl.source))),
+            ("source", &crate::i18n::t(layout_source_key(rl.source))),
             ("hid", rl.hid.as_deref().unwrap_or("-")),
         ],
     ));
