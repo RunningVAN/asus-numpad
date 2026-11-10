@@ -317,6 +317,8 @@ asusctl 側實作同樣的功能，兩條路都歡迎。
 
 ### 圖形介面
 
+![ASUS NumberPad 背光控制視窗](site/assets/screenshots/gui-main.png)
+
 `gui/` 是一個可選的 egui 視窗，寫的是同一份 FEATURE `0x0d` 報文：介面清單、亮度檔位、跟隨
 NumLock、寫入日誌。Linux 上還會顯示辨識出的機型、佈局、hidraw 通道，以及 `asus-numpad` 使用者
 單元的狀態，可啟動 / 停止 / 重啟、設定登入自啟。守護行程與 CLI 不依賴它。

@@ -428,6 +428,14 @@ asus-numpad --lang en check</code></pre>
         Keys left out keep the vendor defaults — <code>numlock</code>, <code>mixed_mode</code>, <code>grab</code>,
         <code>follow_keyboard_brightness</code>, <code>allow_unverified_layout</code> and the brightness tables.
       </p>
+      <figure class="gui-shot reveal">
+        <img src="assets/screenshots/gui-main.png" alt="asus-numpad-gui window: device list, backlight steps, NumLock follow, command panel" width="1160" height="860" loading="lazy" decoding="async">
+        <figcaption data-i18n="use.gui">
+          The optional egui window (<code>asus-numpad-gui</code>) writes the same FEATURE <code>0x0d</code> report and
+          turns every <code>asus-numpad</code> subcommand into a form: the panel runs the same binary in the background
+          and pastes its output back, so the GUI never re-implements the CLI.
+        </figcaption>
+      </figure>
     </div>
   </section>
 

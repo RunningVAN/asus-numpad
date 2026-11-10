@@ -316,6 +316,8 @@ ACPI 对象，任意多点触控板走的是同一条代码路径。移植工作
 
 ### 图形界面
 
+![ASUS NumberPad 背光控制窗口](site/assets/screenshots/gui-main.png)
+
 `gui/` 是一个可选的 egui 窗口，写的是同一份 FEATURE `0x0d` 报文：接口列表、亮度档位、跟随
 NumLock、写入日志。Linux 上还显示识别出的机型、布局、hidraw 通道，以及 `asus-numpad` 用户单元
 的状态，可启动 / 停止 / 重启、设置登录自启。守护进程与 CLI 不依赖它。

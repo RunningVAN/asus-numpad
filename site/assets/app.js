@@ -91,6 +91,7 @@
 
     "use.title": "常用命令",
     "use.sub": "守护进程由 systemd 启动，命令行用于排查与调参。",
+    "use.gui": "可选的 egui 窗口（<code>asus-numpad-gui</code>）写的是同一份 FEATURE <code>0x0d</code> 报文，并把 <code>asus-numpad</code> 的每个子命令做成了表单：面板在后台跑同一个可执行文件，输出原样贴回，界面不重写一遍逻辑。",
     "use.a.t": "运行与自检",
     "use.b.t": "背光",
     "use.c.t": "布局与语言",
@@ -208,6 +209,7 @@
 
     "use.title": "常用指令",
     "use.sub": "守護行程由 systemd 啟動，命令列用於排查與調參。",
+    "use.gui": "可選的 egui 視窗（<code>asus-numpad-gui</code>）寫的是同一份 FEATURE <code>0x0d</code> 報文，並把 <code>asus-numpad</code> 的每個子命令做成表單：面板在背景跑同一個執行檔，輸出原樣貼回，介面不重寫一遍邏輯。",
     "use.a.t": "執行與自我檢查",
     "use.b.t": "背光",
     "use.c.t": "佈局與語言",

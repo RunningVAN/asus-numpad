@@ -19,6 +19,8 @@ ASUS 触摸板数字小键盘（NumberPad）的 **背光控制图形界面**，W
 
 ## 命令面板
 
+![ASUS NumberPad 背光控制窗口](../site/assets/screenshots/gui-main.png)
+
 窗口里那张「命令行」面板把 `asus-numpad` 的子命令逐个接进来。它不是另写一份实现：表单拼出
 argv，后台跑同一个可执行文件，stdout / stderr 原样贴回输出框，面板上还显示完整的命令行，方便
 复制到终端复现。CLI 加参数、改文案，界面跟着变，不存在两套逻辑各自漂移的问题。

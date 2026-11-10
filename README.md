@@ -351,6 +351,8 @@ with FEATURE `0x0d` takes priority, then ASUS `0b05:*`, then i2c (`0x38` / `0x15
 
 ### GUI
 
+![ASUS NumberPad backlight GUI](site/assets/screenshots/gui-main.png)
+
 `gui/` is an optional egui window that writes the same FEATURE `0x0d` report: interface list,
 brightness steps, NumLock follow, write log. On Linux it also shows the detected model, layout,
 hidraw channel and the state of the `asus-numpad` user unit, with start / stop / restart and

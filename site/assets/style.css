@@ -557,6 +557,15 @@ pre.mini code { background: none; padding: 0; font-size: 12.6px; }
 .use-card pre { margin: 0; overflow-x: auto; }
 .use-card code { background: none; padding: 0; white-space: pre; font-size: 12.4px; line-height: 1.9; color: var(--text-2); }
 
+.gui-shot { margin: 30px 0 0; }
+.gui-shot img {
+  width: 100%; height: auto; display: block;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface);
+}
+.gui-shot figcaption { margin-top: 12px; font-size: 13px; line-height: 1.75; color: var(--text-3); }
+.gui-shot figcaption code { font-size: 12.4px; }
+
 /* faq */
 .faq { display: grid; gap: 10px; }
 details {
