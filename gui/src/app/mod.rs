@@ -1,8 +1,19 @@
 //! 主界面。
 //!
-//! 界面只做三件事：选接口、调档位、看报文。所有档位映射都走
-//! [`asus_numpad::brightness`] 与 [`asus_numpad::led_proto`]——和 Linux 侧同一份函数，
-//! 避免两边灯效暗中不一致。
+//! 界面按平台分两套，共用一个窗口骨架：
+//!
+//! * **Windows**：只做灯光（选接口、调档位、NumLock 联动、看报文）。键位与手势交给
+//!   ASUS 官方驱动，界面一个字节都不碰 FEATURE 0x0d 之外的东西。
+//! * **Linux**：全套。除灯光之外，驱动配置的每一项（机型、布局、键码风格、混合模式、
+//!   手势阈值、背光通道、跟灯参数、时序、语言）都在 [`full`] 里有对应控件，另加系统
+//!   状态、服务启停与命令行兜底。
+//!
+//! 所有档位映射都走 [`asus_numpad::brightness`] 与 [`asus_numpad::led_proto`]——和
+//! Linux 侧同一份函数，避免两边灯效暗中不一致。
+
+mod driver;
+mod full;
+mod windows;
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -43,6 +54,47 @@ enum Action {
     ServiceAutostart(bool),
     RefreshState,
     RunCommand,
+    SaveDriver,
+    SaveDriverAndRestart,
+    ReloadDriver,
+    ResetDriver,
+}
+
+/// 右侧页签。Windows 侧只有灯光，Linux 侧五页齐全。
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum Page {
+    Light,
+    Driver,
+    System,
+    Command,
+    Settings,
+}
+
+impl Page {
+    fn title(self) -> &'static str {
+        match self {
+            Page::Light => "灯光",
+            Page::Driver => "驱动配置",
+            Page::System => "系统状态",
+            Page::Command => "命令行",
+            Page::Settings => "设置",
+        }
+    }
+
+    /// 启动时落在哪一页。默认灯光；`ASUS_NUMPAD_GUI_PAGE=driver|system|command|settings`
+    /// 可以直接进对应页（文档截图与排障都省一次点击）。
+    fn from_env() -> Self {
+        let Ok(value) = std::env::var("ASUS_NUMPAD_GUI_PAGE") else {
+            return Page::Light;
+        };
+        match value.trim().to_ascii_lowercase().as_str() {
+            "driver" | "cfg" | "config" => Page::Driver,
+            "system" | "sys" => Page::System,
+            "command" | "cmd" | "cli" => Page::Command,
+            "settings" | "prefs" => Page::Settings,
+            _ => Page::Light,
+        }
+    }
 }
 
 pub struct App {
@@ -61,6 +113,12 @@ pub struct App {
     /// 平台状态快照（机型、布局、背光通道、后台服务）
     state: Snapshot,
     state_at: Instant,
+    /// 是否画 Linux 全套面板；Windows 只画灯光
+    ui_full: bool,
+    /// 右侧当前页（只有全套模式才显示页签）
+    tab: Page,
+    /// Linux 侧驱动配置（`asus-numpad.json`）的编辑草稿
+    driver: driver::Draft,
     /// 后台服务是否开机自启；Windows 用注册表那份，Linux 用这一份
     service_enabled: bool,
     /// 命令面板：与 `asus-numpad` CLI 同一套实现，界面只负责拼参数
@@ -97,6 +155,9 @@ impl App {
             font_note,
             state,
             state_at: Instant::now(),
+            ui_full: ui_full(),
+            tab: Page::from_env(),
+            driver: driver::Draft::load(),
             service_enabled,
             cmd: CommandForm::default(),
             cmd_bin: cli_bridge::locate(),
@@ -368,7 +429,7 @@ impl App {
         egui::Panel::top("header").show(root, |ui| {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.heading("ASUS NumberPad 背光控制");
+                ui.heading(self.window_title());
                 ui.label(small(self.state.subtitle.clone()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("重新扫描").clicked() {
@@ -643,36 +704,128 @@ impl App {
             );
         }
 
-        let Some(service) = &self.state.service else {
-            return;
-        };
-        ui.add_space(4.0);
+        if let Some(service) = &self.state.service {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                let color = if service.is_active() {
+                    egui::Color32::from_rgb(90, 170, 90)
+                } else {
+                    egui::Color32::from_rgb(200, 150, 40)
+                };
+                ui.label(
+                    egui::RichText::new(format!(
+                        "后台服务：{} / {}",
+                        service.active, service.enabled
+                    ))
+                    .color(color),
+                );
+                if ui.button("启动").clicked() {
+                    *action = Some(Action::ServiceRun(ServiceVerb::Start));
+                }
+                if ui.button("停止").clicked() {
+                    *action = Some(Action::ServiceRun(ServiceVerb::Stop));
+                }
+                if ui.button("重启").clicked() {
+                    *action = Some(Action::ServiceRun(ServiceVerb::Restart));
+                }
+            });
+            ui.label(small(
+                "用户单元不需要 root；停止后数字键与手势失效，触摸板恢复成普通触摸板。",
+            ));
+        }
+
+        // 诊断出口放最后：它是「要发出去问人」时才点的，不该挤掉上面的状态与服务操作
+        ui.add_space(6.0);
+        self.draw_diagnostics(ui);
+    }
+
+    /// 诊断信息出口：内容与 `asus-numpad-gui --selftest` 同一份，省得为了看一眼接口和
+    /// 报文去开终端。写文件只落在界面自己的配置目录旁边，不碰系统路径。
+    fn draw_diagnostics(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            let color = if service.is_active() {
-                egui::Color32::from_rgb(90, 170, 90)
-            } else {
-                egui::Color32::from_rgb(200, 150, 40)
-            };
-            ui.label(
-                egui::RichText::new(format!(
-                    "后台服务：{} / {}",
-                    service.active, service.enabled
-                ))
-                .color(color),
-            );
-            if ui.button("启动").clicked() {
-                *action = Some(Action::ServiceRun(ServiceVerb::Start));
+            if ui.button("复制诊断信息").clicked() {
+                let text = self.diagnostics();
+                ui.ctx().copy_text(text);
+                self.set_status("诊断信息已复制到剪贴板".to_string(), false);
             }
-            if ui.button("停止").clicked() {
-                *action = Some(Action::ServiceRun(ServiceVerb::Stop));
-            }
-            if ui.button("重启").clicked() {
-                *action = Some(Action::ServiceRun(ServiceVerb::Restart));
+            if ui.button("保存诊断报告").clicked() {
+                let text = self.diagnostics();
+                let path = settings::config_path()
+                    .parent()
+                    .map(|dir| dir.join(format!("diag-{}.txt", stamp())));
+                match path.map(|path| std::fs::write(&path, &text).map(|_| path)) {
+                    Some(Ok(path)) => {
+                        self.set_status(format!("诊断报告已写入 {}", path.display()), false)
+                    }
+                    Some(Err(err)) => {
+                        self.set_status(format!("写诊断报告失败：{err}"), true);
+                    }
+                    None => self.set_status("取不到设置文件目录".to_string(), true),
+                }
             }
         });
         ui.label(small(
-            "用户单元不需要 root；停止后数字键与手势失效，触摸板恢复成普通触摸板。",
+            "内容：平台状态、接口列表、8 档与熄灭报文——和 --selftest 打印的一致。",
         ));
+    }
+
+    /// 与 `--selftest` 同构的诊断文本。
+    fn diagnostics(&self) -> String {
+        let mut out = String::new();
+        out.push_str(&format!(
+            "后端：{}（真实硬件：{}）\n",
+            self.backend.name(),
+            self.backend.is_real()
+        ));
+        out.push_str(&format!("{}\n", self.state.subtitle));
+        for (name, value) in &self.state.rows {
+            out.push_str(&format!("  {name}：{value}\n"));
+        }
+        for hint in &self.state.hints {
+            out.push_str(&format!("  提示：{hint}\n"));
+        }
+        if let Some(service) = &self.state.service {
+            out.push_str(&format!(
+                "  后台服务：{} / {}\n",
+                service.active, service.enabled
+            ));
+        }
+
+        if self.devices.is_empty() {
+            out.push_str("未枚举到任何 HID 接口。\n");
+        } else {
+            out.push_str(&format!("共 {} 个接口：\n", self.devices.len()));
+            for device in &self.devices {
+                out.push_str(&format!(
+                    "  {:<10} {:<8} feature={:<5} len={:<3} rank={:?} selected={}\n",
+                    device.vid_pid(),
+                    device.vendor(),
+                    device.has_feature,
+                    device.feature_len,
+                    device.rank,
+                    device.selected
+                ));
+                out.push_str(&format!("             path={}\n", device.path));
+            }
+        }
+
+        out.push_str("\n档位报文：\n");
+        for (index, level) in led_proto::brightness_levels().iter().enumerate() {
+            if let Some(frame) = led_proto::encode(*level) {
+                out.push_str(&format!(
+                    "  {} 档 0x{:02x} -> {}\n",
+                    index + 1,
+                    level,
+                    led_proto::hex(&frame)
+                ));
+            }
+        }
+        for (label, level) in [("熄灭", led_proto::LED_OFF), ("普通点亮", led_proto::LED_ON)] {
+            if let Some(frame) = led_proto::encode(level) {
+                out.push_str(&format!("{label}报文：{}\n", led_proto::hex(&frame)));
+            }
+        }
+        out
     }
 
     /// 命令面板：把 CLI 的全部子命令接到界面上。
@@ -995,9 +1148,9 @@ impl App {
     }
 
     fn draw_settings(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
-        ui.separator();
+        // 设置页是页签里的独立一页，再套一层默认折叠的标题就等于把内容藏起来
         egui::CollapsingHeader::new("设置")
-            .default_open(false)
+            .default_open(true)
             .show(ui, |ui| {
                 ui.checkbox(
                     &mut self.settings.apply_on_start,
@@ -1036,15 +1189,61 @@ impl App {
                         *action = Some(Action::ResetSettings);
                     }
                 });
-                ui.label(small(format!(
-                    "配置文件：{}",
-                    settings::config_path().display()
-                )));
                 match &self.font_note {
                     Some(path) => ui.label(small(format!("界面字体：{path}"))),
                     None => ui.label(small("未找到可用中文字体，界面可能显示为方块")),
                 };
             });
+
+        // 路径与版本：出问题时第一个要看的就是这几行
+        ui.separator();
+        ui.label(egui::RichText::new("路径与版本").strong());
+        egui::Grid::new("settings_paths")
+            .num_columns(2)
+            .striped(true)
+            .show(ui, |ui| {
+                ui.label("界面设置");
+                ui.label(small(settings::config_path().display().to_string()));
+                ui.end_row();
+                ui.label("驱动配置");
+                ui.label(small(self.driver.write_path.display().to_string()));
+                ui.end_row();
+                ui.label("当前接口");
+                ui.label(small(
+                    self.devices
+                        .get(self.selected.unwrap_or(usize::MAX))
+                        .map(|device| device.path.clone())
+                        .unwrap_or_else(|| "未选择".to_string()),
+                ));
+                ui.end_row();
+                ui.label("版本");
+                ui.label(small(format!(
+                    "界面 {} / 库 {}",
+                    env!("CARGO_PKG_VERSION"),
+                    asus_numpad::VERSION
+                )));
+                ui.end_row();
+            });
+
+        ui.horizontal(|ui| {
+            if ui.button("打开设置目录").clicked() {
+                let dir = settings::config_path();
+                let dir = dir.parent().unwrap_or(&dir).to_path_buf();
+                self.report_open(open_dir(&dir), &dir);
+            }
+            if ui.button("打开驱动配置目录").clicked() {
+                let file = self.driver.write_path.clone();
+                let dir = file.parent().unwrap_or(&file).to_path_buf();
+                self.report_open(open_dir(&dir), &dir);
+            }
+        });
+    }
+
+    fn report_open(&mut self, result: std::io::Result<()>, dir: &std::path::Path) {
+        match result {
+            Ok(()) => self.set_status(format!("已打开 {}", dir.display()), false),
+            Err(err) => self.set_status(format!("打不开 {}：{err}", dir.display()), true),
+        }
     }
 
     fn draw_status(&mut self, root: &mut egui::Ui) {
@@ -1124,12 +1323,49 @@ impl App {
             }
             Action::RefreshState => self.refresh_state(),
             Action::RunCommand => self.run_command(),
+            Action::SaveDriver => match self.driver.save() {
+                Ok(msg) => self.set_status(msg, false),
+                Err(err) => self.set_status(format!("保存驱动配置失败：{err:#}"), true),
+            },
+            Action::SaveDriverAndRestart => {
+                match self.driver.save() {
+                    Ok(msg) => match sysinfo::service_run(ServiceVerb::Restart) {
+                        Ok(done) => self.set_status(format!("{msg}；{done}"), false),
+                        Err(err) => self.set_status(
+                            format!("{msg}，但后台服务重启失败：{err:#}"),
+                            true,
+                        ),
+                    },
+                    Err(err) => self.set_status(format!("保存驱动配置失败：{err:#}"), true),
+                }
+                self.refresh_state();
+            }
+            Action::ReloadDriver => {
+                self.driver.reload();
+                let path = self.driver.write_path.display().to_string();
+                self.set_status(format!("已重新读取 {path}"), false);
+            }
+            Action::ResetDriver => {
+                self.driver.reset();
+                self.set_status("驱动配置已恢复官方默认值（还需点保存）".to_string(), false);
+            }
+        }
+    }
+
+    fn window_title(&self) -> &'static str {
+        if self.ui_full {
+            "ASUS NumberPad 控制中心"
+        } else {
+            "ASUS NumberPad 灯光控制"
         }
     }
 }
 
 impl eframe::App for App {
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // 文档截图模式（设置了 ASUS_NUMPAD_GUI_SHOT 才生效）
+        crate::shot::tick(root.ctx());
+
         let before = self.settings.clone();
         let mut action: Option<Action> = None;
 
@@ -1146,15 +1382,45 @@ impl eframe::App for App {
         self.draw_devices(root);
 
         egui::CentralPanel::default_margins().show(root, |ui| {
+            if self.ui_full {
+                ui.horizontal_wrapped(|ui| {
+                    for page in [
+                        Page::Light,
+                        Page::Driver,
+                        Page::System,
+                        Page::Command,
+                        Page::Settings,
+                    ] {
+                        if ui
+                            .selectable_label(self.tab == page, page.title())
+                            .clicked()
+                        {
+                            self.tab = page;
+                        }
+                    }
+                });
+                ui.separator();
+            }
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    self.draw_lighting(ui, &mut action);
-                    self.draw_follow(ui);
-                    self.draw_system(ui, &mut action);
-                    self.draw_commands(ui, &mut action);
-                    self.draw_log(ui);
-                    self.draw_settings(ui, &mut action);
+                .id_salt(("page", self.tab))
+                .show(ui, |ui| match (self.ui_full, self.tab) {
+                    (false, _) => {
+                        self.draw_lighting(ui, &mut action);
+                        self.draw_follow(ui);
+                        self.draw_log(ui);
+                        self.draw_lighting_note(ui, &mut action);
+                        self.draw_settings(ui, &mut action);
+                    }
+                    (true, Page::Light) => {
+                        self.draw_lighting(ui, &mut action);
+                        self.draw_follow(ui);
+                        self.draw_log(ui);
+                    }
+                    (true, Page::Driver) => self.draw_full_controls(ui, &mut action),
+                    (true, Page::System) => self.draw_system(ui, &mut action),
+                    (true, Page::Command) => self.draw_commands(ui, &mut action),
+                    (true, Page::Settings) => self.draw_settings(ui, &mut action),
                 });
         });
 
@@ -1172,6 +1438,53 @@ impl eframe::App for App {
             root.ctx()
                 .request_repaint_after(Duration::from_millis(self.settings.poll_ms));
         }
+    }
+}
+
+/// 用系统文件管理器打开一个目录。只读操作，失败就如实报出来。
+fn open_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    let opener = "xdg-open";
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(windows)]
+    let opener = "explorer";
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    let opener = "xdg-open";
+    std::process::Command::new(opener)
+        .arg(dir)
+        .spawn()
+        .map(|_| ())
+}
+
+/// 诊断报告文件名用的时间戳（Unix 秒，够排序了）。
+fn stamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// 是否画 Linux 全套面板。
+///
+/// 默认按平台走：Linux 全套、Windows 只灯光。环境变量 `ASUS_NUMPAD_GUI_FULL=1/0`
+/// 可以强制覆盖，用于在另一平台上预览对面那套界面（真机默认行为不受影响）。
+pub fn ui_full() -> bool {
+    let Ok(value) = std::env::var("ASUS_NUMPAD_GUI_FULL") else {
+        return cfg!(target_os = "linux");
+    };
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "on" | "true" | "full" | "yes" => true,
+        "0" | "off" | "false" | "lite" | "no" => false,
+        _ => cfg!(target_os = "linux"),
+    }
+}
+
+pub fn window_title() -> &'static str {
+    if ui_full() {
+        "ASUS NumberPad 控制中心"
+    } else {
+        "ASUS NumberPad 灯光控制"
     }
 }
 
@@ -1205,15 +1518,16 @@ fn combo<T: PartialEq + Copy>(
 }
 
 /// 一行「标签 + 输入框」。空串一律视为「不传这个参数」，由 cmdform 判空。
-fn field(ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str) {
+fn field(ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str) -> egui::Response {
     ui.horizontal(|ui| {
         ui.label(label);
         ui.add(
             egui::TextEdit::singleline(value)
                 .hint_text(hint)
                 .desired_width(220.0),
-        );
-    });
+        )
+    })
+    .inner
 }
 
 /// 日志时间戳（UTC，`HH:MM:SS`）。只用于看报文先后，不做展示级时区换算。

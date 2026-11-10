@@ -351,23 +351,32 @@ with FEATURE `0x0d` takes priority, then ASUS `0b05:*`, then i2c (`0x38` / `0x15
 
 ### GUI
 
-![ASUS NumberPad backlight GUI](site/assets/screenshots/gui-main.png)
+Two windows, one crate. Windows gets a lighting panel; Linux gets the full control center.
 
-`gui/` is an optional egui window that writes the same FEATURE `0x0d` report: interface list,
-brightness steps, NumLock follow, write log. On Linux it also shows the detected model, layout,
-hidraw channel and the state of the `asus-numpad` user unit, with start / stop / restart and
-enable-on-login. The daemon and the CLI do not depend on it.
+![ASUS NumberPad lighting window on Windows](site/assets/screenshots/gui-win.png)
 
-The Windows build of the same crate replaces the hidraw backend with `setupapi` + `hid.dll` and
-leaves numpad input to the vendor driver; the report bytes are produced by the shared `led_proto`
-layer, so both platforms send identical traffic.
+`gui/` writes the same FEATURE `0x0d` report the CLI does, so the traffic on both platforms comes
+from the shared `led_proto` layer and stays byte-identical.
 
-The window also carries a **command panel**: every `asus-numpad` subcommand (`check`, `dump`,
-`bright`, `levels`, `led`, `layout`, `sku`, `lang`) becomes a form. Running it spawns the same
-executable in the background and pastes its output back, so the GUI never re-implements what the
-CLI does or drifts from it. `run` stays out of the panel — the foreground engine is equivalent to
-start / stop on the `asus-numpad` unit in the system section. The binary is looked up via
-`ASUS_NUMPAD_BIN`, then the program's own directory, then `PATH`.
+On Windows the window is only about light: interface list, brightness steps, NumLock follow, write
+log. Numpad input stays with the vendor driver — the hidraw backend gives way to `setupapi` and
+`hid.dll`.
+
+On Linux it is the whole thing, split into five tabs:
+
+| Tab | Contents |
+| --- | --- |
+| Lighting | interface list, steps, on / off, NumLock follow, report log |
+| Driver config | every field of `/etc/asus-numpad.json` as a control: model, layout, keypad style, NumLock policy, gesture thresholds, backlight channel and follow poll, manual step table, timing constants, driver language |
+| System | config path, detected model, layout, hidraw channel, unit state, start / stop / restart |
+| Command line | one form per `asus-numpad` subcommand, spawning the real binary |
+| Settings | step count, NumLock follow, poll interval, enable on login |
+
+![Linux control center](site/assets/screenshots/gui-main.png)
+
+Edits live in memory until you press save, or "save and restart", which writes the file and restarts
+the `asus-numpad` user unit in one go. Nothing duplicates the CLI: the command tab spawns the same
+executable and pastes its output back.
 
 ```bash
 cargo run -p asus-numpad-gui      # or: cargo build --release -p asus-numpad-gui
@@ -393,7 +402,7 @@ No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs
 | `src/sku.rs` | Model table, runtime detection, manual pin, per-generation excludes |
 | `src/i18n.rs` | Three languages, overridable with external `.lang` files |
 | `src/linux/` | evdev, uinput, hidraw and i2c backends |
-| `gui/` | egui backlight window, shared by Windows and Linux |
+| `gui/` | egui window: lighting only on Windows, full control center on Linux |
 | `lang/` | zh-CN, zh-TW, en strings |
 | `site/` | Website sources, published to https://asus-numpad.github.io/ |
 | `tools/` | `push-site.sh` (site publish), `repo-gen.sh` (repository indexes) |

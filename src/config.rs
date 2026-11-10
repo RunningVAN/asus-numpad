@@ -244,7 +244,7 @@ impl<'de> Deserialize<'de> for KeyMode {
 // --------------------------------------------------------------------------- //
 
 /// 全部字段均可缺省；缺省即官方值。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct Config {
     // ---- 官方参数覆盖 ----

@@ -558,6 +558,7 @@ pre.mini code { background: none; padding: 0; font-size: 12.6px; }
 .use-card code { background: none; padding: 0; white-space: pre; font-size: 12.4px; line-height: 1.9; color: var(--text-2); }
 
 .gui-shot { margin: 30px 0 0; }
+.gui-shot.compact { max-width: 62%; margin-left: auto; margin-right: auto; }
 .gui-shot img {
   width: 100%; height: auto; display: block;
   border: 1px solid var(--line); border-radius: var(--radius);
@@ -672,6 +673,7 @@ html.js .reveal.in { opacity: 1; transform: none; }
 }
 
 @media (max-width: 1000px) {
+  .gui-shot.compact { max-width: 100%; }
   .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 44px; }
   .hero-visual { order: -1; }
   .pad { max-width: 100%; }

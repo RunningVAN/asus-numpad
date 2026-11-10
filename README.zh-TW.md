@@ -317,20 +317,29 @@ asusctl 側實作同樣的功能，兩條路都歡迎。
 
 ### 圖形介面
 
-![ASUS NumberPad 背光控制視窗](site/assets/screenshots/gui-main.png)
+同一份 crate 出兩個視窗：Windows 上只管燈光，Linux 上是完整的控制中心。
 
-`gui/` 是一個可選的 egui 視窗，寫的是同一份 FEATURE `0x0d` 報文：介面清單、亮度檔位、跟隨
-NumLock、寫入日誌。Linux 上還會顯示辨識出的機型、佈局、hidraw 通道，以及 `asus-numpad` 使用者
-單元的狀態，可啟動 / 停止 / 重啟、設定登入自啟。守護行程與 CLI 不依賴它。
+![Windows 上的燈光控制視窗](site/assets/screenshots/gui-win.png)
 
-同一份 crate 在 Windows 上把 hidraw 後端換成 `setupapi` + `hid.dll`，小鍵盤輸入仍交給官方驅動；
-報文由共用的 `led_proto` 產生，兩端送出的位元組完全一致。
+`gui/` 送的報文與 CLI 完全相同，兩端都出自共用的 `led_proto` 層，位元組不會漂移。
 
-視窗裡還有一張「命令列」面板，把 `asus-numpad` 的每個子命令（`check`、`dump`、`bright`、
-`levels`、`led`、`layout`、`sku`、`lang`）連同各自的參數做成表單。按下執行就是在背景跑同一個
-執行檔，輸出原樣貼回來——介面不重寫一遍邏輯，也就不存在與 CLI 漂移的問題。`run` 不進面板，
-前景常駐引擎對應「系統狀態」區的服務啟停。執行檔按 `ASUS_NUMPAD_BIN` → 程式同目錄 →
-`PATH` 的順序尋找。
+Windows 的視窗只解決燈光：介面清單、亮度檔位、跟隨 NumLock、寫入日誌。小鍵盤輸入交給官方驅動，
+後端是 `setupapi` + `hid.dll`，不碰 hidraw。
+
+Linux 上是全套，分五個頁籤：
+
+| 頁籤 | 內容 |
+| --- | --- |
+| 燈光 | 介面清單、檔位、點亮 / 熄滅、跟隨 NumLock、報文日誌 |
+| 驅動設定 | `/etc/asus-numpad.json` 的每個欄位都做成控制項：機型、佈局、鍵碼風格、NumLock 策略、手勢閾值、背光通道與跟燈輪詢、手動檔位表、時序常數、驅動語言 |
+| 系統狀態 | 設定檔路徑、機型、佈局、hidraw 通道、單元狀態，可啟動 / 停止 / 重啟 |
+| 命令列 | 每個 `asus-numpad` 子命令一張表單，執行時跑同一個執行檔 |
+| 設定 | 檔位數、跟隨 NumLock、輪詢間隔、開機自啟 |
+
+![Linux 控制中心](site/assets/screenshots/gui-main.png)
+
+改動在按下儲存之前只停在記憶體裡；「儲存並重啟」會寫檔並重啟 `asus-numpad` 使用者單元，一步到位。
+介面上不重寫一遍 CLI 的邏輯：命令頁執行的就是真二進位，輸出原樣貼回。
 
 ```bash
 cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
@@ -356,7 +365,7 @@ cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
 | `src/sku.rs` | 機型表、執行期辨識、手動指定、世代排除 |
 | `src/i18n.rs` | 三種語言，可用外部 `.lang` 檔覆寫 |
 | `src/linux/` | evdev、uinput、hidraw、i2c 後端 |
-| `gui/` | egui 背光介面，Windows 與 Linux 共用 |
+| `gui/` | egui 視窗：Windows 只管燈光，Linux 是完整控制中心 |
 | `lang/` | zh-CN、zh-TW、en 文案 |
 | `site/` | 官網原始碼，發佈到 https://asus-numpad.github.io/ |
 | `tools/` | `push-site.sh`（官網同步）、`repo-gen.sh`（倉庫索引） |

@@ -429,11 +429,19 @@ asus-numpad --lang en check</code></pre>
         <code>follow_keyboard_brightness</code>, <code>allow_unverified_layout</code> and the brightness tables.
       </p>
       <figure class="gui-shot reveal">
-        <img src="assets/screenshots/gui-main.png" alt="asus-numpad-gui window: device list, backlight steps, NumLock follow, command panel" width="1160" height="860" loading="lazy" decoding="async">
+        <img src="assets/screenshots/gui-main.png" alt="asus-numpad-gui control center on Linux: device list on the left, lighting and driver config tabs on the right" width="1180" height="900" loading="lazy" decoding="async">
         <figcaption data-i18n="use.gui">
-          The optional egui window (<code>asus-numpad-gui</code>) writes the same FEATURE <code>0x0d</code> report and
-          turns every <code>asus-numpad</code> subcommand into a form: the panel runs the same binary in the background
-          and pastes its output back, so the GUI never re-implements the CLI.
+          The optional egui window (<code>asus-numpad-gui</code>) writes the same FEATURE <code>0x0d</code> report.
+          On Linux it is the whole control center — lighting, every driver config field, system state with unit
+          control, and a form for each <code>asus-numpad</code> subcommand that runs the same binary in the
+          background. Nothing is re-implemented, so the two never drift apart.
+        </figcaption>
+      </figure>
+      <figure class="gui-shot compact reveal">
+        <img src="assets/screenshots/gui-win.png" alt="asus-numpad-gui lighting window on Windows" width="980" height="780" loading="lazy" decoding="async">
+        <figcaption data-i18n="use.guiWin">
+          On Windows the window only covers light: interfaces, steps, NumLock follow, write log. Numpad input is
+          left to the vendor driver.
         </figcaption>
       </figure>
     </div>

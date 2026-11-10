@@ -20,6 +20,7 @@ mod backend;
 mod cli_bridge;
 mod cmdform;
 mod settings;
+mod shot;
 mod sysinfo;
 mod ui_font;
 
@@ -255,11 +256,17 @@ fn run_gui() -> Result<()> {
     #[cfg(windows)]
     hide_console();
 
+    // Linux 面板多得多（驱动配置 + 系统状态 + 命令行），窗口开大一点；Windows 只有灯光。
+    let (size, min_size) = if app::ui_full() {
+        ([1180.0, 900.0], [960.0, 660.0])
+    } else {
+        ([980.0, 780.0], [820.0, 620.0])
+    };
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([920.0, 780.0])
-            .with_min_inner_size([780.0, 600.0])
-            .with_title("ASUS NumberPad 背光控制"),
+            .with_inner_size(size)
+            .with_min_inner_size(min_size)
+            .with_title(app::window_title()),
         ..Default::default()
     };
     eframe::run_native(
