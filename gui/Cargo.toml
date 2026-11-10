@@ -6,6 +6,7 @@ rust-version = "1.77"
 description = "ASUS NumberPad 背光控制图形界面（Windows / Linux 共用同一套界面与报文层）"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/asus-numpad/asus-numpad"
+homepage = "https://asus-numpad.github.io/"
 readme = "README.md"
 
 [[bin]]

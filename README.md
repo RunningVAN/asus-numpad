@@ -367,7 +367,7 @@ On Linux it is the whole thing, split into five tabs:
 | Tab | Contents |
 | --- | --- |
 | Lighting | interface list, keyboard 4 steps → touchpad brightness map (editable per step), on / off, NumLock follow, keyboard-brightness follow, report log |
-| Driver config | every field of `/etc/asus-numpad.json` as a control: model, layout, keypad style, NumLock policy, gesture thresholds, backlight channel and follow poll, manual step table, timing constants, driver language |
+| Driver config | every field of the driver config (`~/.config/asus-numpad/asus-numpad.json`, root: `/etc/asus-numpad/asus-numpad.json`) as a control: model, layout, keypad style, NumLock policy, gesture thresholds, backlight channel and follow poll, manual step table, timing constants, driver language |
 | System | config path, detected model, layout, hidraw channel, unit state, start / stop / restart |
 | Command line | one form per `asus-numpad` subcommand, spawning the real binary |
 | Settings | step count, NumLock follow, poll interval, enable on login |
@@ -393,6 +393,7 @@ No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs
 
 | Path | Purpose |
 | --- | --- |
+| `src/lib.rs` | Library root: modules shared by the binary and the GUI |
 | `src/main.rs` | CLI parsing and wiring |
 | `src/engine.rs` | Vendor algorithm state machine |
 | `src/layout.rs` | Layout geometry, 44 HID entries, coordinate conversion |
@@ -401,6 +402,8 @@ No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs
 | `src/led_policy.rs` | Backlight node scoring |
 | `src/sku.rs` | Model table, runtime detection, manual pin, per-generation excludes |
 | `src/i18n.rs` | Three languages, overridable with external `.lang` files |
+| `src/keycodes.rs` | Linux input event codes, kept local so `layout` / `engine` compile on any platform |
+| `src/led_proto.rs` | Backlight FEATURE `0x0d` report encoding, the single source for CLI and GUI |
 | `src/linux/` | evdev, uinput, hidraw and i2c backends |
 | `gui/` | egui window: lighting only on Windows, full control center on Linux |
 | `lang/` | zh-CN, zh-TW, en strings |

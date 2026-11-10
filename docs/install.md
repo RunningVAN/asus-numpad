@@ -223,7 +223,7 @@ sudo ./install.sh
 sudo mkdir -p /etc/portage/repos.conf
 # 用本地 overlay 即可：
 sudo mkdir -p /var/db/repos/asus-numpad/sys-apps/asus-numpad
-sudo cp packaging/gentoo/asus-numpad-1.0.1.ebuild /var/db/repos/asus-numpad/sys-apps/asus-numpad/
+sudo cp packaging/gentoo/asus-numpad-1.0.3.ebuild /var/db/repos/asus-numpad/sys-apps/asus-numpad/
 cd /var/db/repos/asus-numpad && sudo repoman manifest 2>/dev/null || sudo pkgdev manifest
 sudo emerge -av sys-apps/asus-numpad
 ```

@@ -91,7 +91,7 @@
 
     "use.title": "常用命令",
     "use.sub": "守护进程由 systemd 启动，命令行用于排查与调参。",
-    "use.gui": "可选的 egui 窗口（<code>asus-numpad-gui</code>）写的是同一份 FEATURE <code>0x0d</code> 报文。Linux 上它就是完整的控制中心：灯光、驱动配置的全部字段、系统状态与服务启停，外加每个 <code>asus-numpad</code> 子命令的表单——执行时跑的就是同一个可执行文件，不重写逻辑，也就不会漂移。",
+    "use.gui": "可选的 egui 窗口（<code>asus-numpad-gui</code>）写的是同一份 FEATURE <code>0x0d</code> 报文。Linux 上它是完整的控制中心，分五个页签：灯光（含键盘四档到触摸板亮度的映射，逐档可改）、驱动配置的全部字段、系统状态与服务启停、每个 <code>asus-numpad</code> 子命令的表单，以及窗口自身的设置。命令页执行的是同一个可执行文件，不重写逻辑，也就不会漂移。",
     "use.guiWin": "Windows 上只做灯光：接口、档位、跟随 NumLock、写入日志。小键盘输入交给官方驱动。",
     "use.a.t": "运行与自检",
     "use.b.t": "背光",
@@ -210,7 +210,7 @@
 
     "use.title": "常用指令",
     "use.sub": "守護行程由 systemd 啟動，命令列用於排查與調參。",
-    "use.gui": "可選的 egui 視窗（<code>asus-numpad-gui</code>）寫的是同一份 FEATURE <code>0x0d</code> 報文。Linux 上它就是完整的控制中心：燈光、驅動設定的全部欄位、系統狀態與服務啟停，外加每個 <code>asus-numpad</code> 子命令的表單——執行時跑的就是同一個執行檔，不重寫邏輯，也就不會漂移。",
+    "use.gui": "可選的 egui 視窗（<code>asus-numpad-gui</code>）寫的是同一份 FEATURE <code>0x0d</code> 報文。Linux 上它是完整的控制中心，分五個頁籤：燈光（含鍵盤四檔到觸控板亮度的對映，逐檔可改）、驅動設定的全部欄位、系統狀態與服務啟停、每個 <code>asus-numpad</code> 子命令的表單，以及視窗自行的設定。命令頁執行的是同一個執行檔，不重寫邏輯，也就不會漂移。",
     "use.guiWin": "Windows 上只做燈光：介面、檔位、跟隨 NumLock、寫入日誌。小鍵盤輸入交給官方驅動。",
     "use.a.t": "執行與自我檢查",
     "use.b.t": "背光",

@@ -7,6 +7,14 @@
 
 ## 1.0.3
 
+### 删掉机器上并不存在的压感
+
+- NumberPad 这块是普通电容触摸板，没有压力档位。原来照官方 INF 的 `FORCE_07` / `FORCE_08`
+  给「小键盘态要更实的下压」留了 `pressure_numpad_min`、`--pressure-min`、界面滑块，全部删除：
+  配置字段、引擎里的压力等待/旁路、`--dump` 的 `p=` 与 `--check` 的压力轴报告、三语文案一并清掉。
+- 老配置里残留的 `pressure_numpad_min` 在 `Config::from_json` 里显式丢弃，不会下次保存又被写回。
+- 压力轴事件现在直接忽略，判键不再有「压力还没上报所以按了没反应」这条可疑路径。
+
 ### 常驻循环的开销
 
 - 触摸板事件从「每帧逐条 `read`」改成一次批量读进复用缓冲，读到的条数按实际返回计，
@@ -63,6 +71,18 @@
 - 五个视口（360 / 390 / 430 / 768 / 1440）无横向溢出，导航不再被裁切、锚点跳转不被吸顶栏遮挡。
 - 键盘可达：跳过导航链接、可见焦点环、机型列表按 roving tabindex 走。
 - 主题跟随 `prefers-color-scheme`。
+
+### 文档、站点与包的口径对齐
+
+- 三份 README、`gui/README.md`、`docs/install.md` 里残留的 `/etc/asus-numpad.json` 改成实际路径：
+  普通用户 `~/.config/asus-numpad/asus-numpad.json`，root 下 `/etc/asus-numpad/asus-numpad.json`。
+- 三份 README 的源码清单补上一直漏记的 `src/lib.rs`、`src/keycodes.rs`、`src/led_proto.rs`。
+- man 页按 1.0.3 的实际行为重写：补 `levels` / `led` / `layout` 子命令和 `--i2c-bus` /
+  `--i2c-addr` / `--i2c-transfer` 选项，订正 `bright` 默认四档（`0x00` / `0x43` / `0x45` / `0x48`），
+  「已知限制」段原还在提已删掉的 hidraw 前缀，改成 `led` 诊断指引。
+- Gentoo ebuild 跟着版本号由 1.0.1 更名为 1.0.3，内部版本同步，`docs/install.md` 的指引一并改。
+- GUI 驱动配置页「手势与力度」更名「手势与阈值」：压感删掉之后这一组只剩距离与时间阈值。
+- 驱动配置页截图按当前界面重出；站点的 `use` 段补上五个页签与四档映射（三语）。
 
 ## 1.0.2
 

@@ -1,4 +1,4 @@
-.TH ASUS-NUMPAD 1 "2026-11-04" "asus-numpad 1.1.0" "用户命令"
+.TH ASUS-NUMPAD 1 "2026-11-10" "asus-numpad 1.0.3" "用户命令"
 .SH 名称
 asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .SH 概要
@@ -17,6 +17,18 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .br
 .B asus-numpad
 .RI [ 选项 ] " " bright " follow " on|off
+.br
+.B asus-numpad
+.RI [ 选项 ] " " levels
+.RI [ 档号 " " 档值 | reset ]
+.br
+.B asus-numpad
+.RI [ 选项 ] " " led
+.RI [ on|off|0x41 ]
+.br
+.B asus-numpad
+.RI [ 选项 ] " " layout
+.RI [ 代号|auto ] " " [ \-\-ids ]
 .br
 .B asus-numpad
 .RI [ 选项 ] " " lang
@@ -51,8 +63,8 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 打印触摸板原始事件流（排查手势识别问题用）。Ctrl-C 结束。
 .TP
 .BI bright " 0|1..N"
-手动固定档：0 熄灭，1 最暗，N 最亮（默认 N=4）。档位由硬件全档表线性等分得到，
-默认 8 档取 4 个等分点（0x41 / 0x43 / 0x46 / 0x48），可用配置项
+手动固定档：0 熄灭，1 最暗，N 最亮（默认 N=4）。档位由硬件全档表（熄灭 + 8 个亮度档）
+等分得到，默认四档为 0x00 / 0x43 / 0x45 / 0x48，可用配置项
 \fImanual_brightness_levels\fP 自定义档表（上限为 \fIbrightness_levels\fP 的长度）。
 写入配置文件后立即下发一次，服务在跑时自动重启让新档常驻。
 手动选档等价于关闭「跟随键盘背光」。
@@ -65,6 +77,40 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .TP
 .B bright status
 打印当前模式、手动档、档位映射与键盘背光实测值，只读。
+.TP
+.B levels
+不带参数时打印档位表：每档写进配置的字节值与对应报文，只读。
+.TP
+.BI levels " 档号 档值"
+把第几档改成指定值：档号取 1 到当前档数（上限 8），档值只能是 \fB0x00\fP（熄灭）
+或 \fB0x41..=0x48\fP（1..8 档），十进制、十六进制都收。整张表必须保持
+「从暗到亮不递减」，改完会写进配置并重启服务让新档生效。
+.TP
+.B levels reset
+把档位表恢复成默认四档（\fB0x00 / 0x43 / 0x45 / 0x48\fP），等价于 \fBlevels default\fP。
+.TP
+.B led
+不带参数时打印用法。绕过所有状态机与跟随逻辑，直接下发一个背光命令字，只用于诊断。
+.TP
+.BI led " on|off"
+按官方两态点灯 / 熄灭（i2c 通道会先发解锁字 0x60）。
+.TP
+.BI led " 0x41"
+直接写一个亮度档的 level 字节。\fBled on\fP 亮而 \fBled 0x41\fP 不亮，
+说明这台机器的 EC 只认两态、不认亮度档。
+.TP
+.B layout
+打印当前生效布局、全部官方布局的支持级别（\fB*\fP 已在真机验证、\fB~\fP 同族未收录、
+\fB-\fP 不支持）与几何参数，只读。
+.TP
+.B layout \-\-ids
+在上一行基础上追加触摸板 HID 硬件 ID 到布局的对照表。
+.TP
+.BI layout " 代号"
+写死布局，写进配置并重启服务。代号可用 \fBGH3XLNDZ\fP、\fBGH2XLNDZ\fP、\fBGH4XLNDZ\fP。
+.TP
+.B layout auto
+删掉写死的布局，恢复按触摸板 HID 硬件 ID 自动识别（默认行为）。
 .TP
 .B lang
 不带参数时打印当前语言、语言来源、可用语言与语言文件所在目录。
@@ -110,6 +156,15 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .BI \-\-led " auto|hidraw|i2c|none"
 背光通道，默认 auto。
 .TP
+.BI \-\-i2c\-bus " 编号"
+\fI\-\-led i2c\fP 时使用的 i2c 总线号，跳过自动探测。
+.TP
+.BI \-\-i2c\-addr " 地址"
+i2c 设备地址，只有 \fB0x38\fP 与 \fB0x15\fP 两个有效值。
+.TP
+.BI \-\-i2c\-transfer " 工具名"
+写 i2c 用的外部工具，默认 \fBi2ctransfer\fP（busybox 环境可换成 \fBi2cset\fP）。
+.TP
 .BI \-\-hidraw " /dev/hidrawN"
 强制指定背光 FEATURE 节点，跳过自动探测；仅在自动探测选错时需要。
 .TP
@@ -126,10 +181,11 @@ NumLock 联动策略，默认 toggle。
 数字键键位风格，默认 keypad。
 .TP
 .BI \-\-layout " 代号"
-布局代号，目前仅有 GH3XLNDZ 的有线框数据。
+本次运行强制使用的布局代号，\fBauto\fP（默认）按触摸板 HID 硬件 ID 自动识别；
+\fBasus-numpad layout\fP 列出全部可用代号与支持级别。
 .TP
 .B \-\-allow\-unverified
-放行「未收录键表的同族布局」。默认情况下布局支持级别为 family（同结构未收录）
+显式允许使用「未收录键表的同族布局」。默认情况下布局支持级别为 family（同结构未收录）
 或 unsupported（键表结构不同、套用会按错键）时驱动拒绝启动；加本开关可强行运行，
 仅建议对 family 使用，并配合 \fBcheck\fP 逐键核对。
 .TP
@@ -183,10 +239,12 @@ systemd 用户单元，随登录会话启动，不需要 root。手工控制：
 .B ASUS_NUMPAD_LANG_DIR
 追加一个语言文件搜索目录（最先查找），便于本地化试译。
 .SH 已知限制
-背光命令字（0x60 / 0x01 / 0x00）来自官方 INF，但 INF 没有描述怎么把这三个字节送到 EC
-（那部分在官方驱动的 WMI/ACPI 调用里）。用户态走 hidraw / i2c 通用通道，
-首次在真机上使用若灯不亮，请先用 \-\-led none 确认逻辑，再按本机 ACPI 抓包修正
-\fIhidraw_prefix\fP 或 \fIi2c_payload\fP，不要去改状态机。
+背光命令字（解锁 0x60、亮 0x01、灭 0x00、亮度档 0x41..0x48）来自官方 INF，但 INF 没有
+描述怎么把这些字节送到 EC（那部分在官方驱动的 WMI/ACPI 调用里）。用户态走 hidraw FEATURE
+0x0d 与 i2c 两条通用通道，hidraw 通道不需要 0x60 前置。
+首次在真机上使用若灯不亮，先用 \fBasus\-numpad led on\fP 与 \fBasus\-numpad led 0x41\fP
+区分「通道不通」与「EC 不认亮度档」，再按本机 ACPI 抓包修正 \fIi2c_payload\fP，
+不要去改状态机。
 .SH 参见
 .BR systemctl (1),
 .BR journalctl (1)

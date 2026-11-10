@@ -10,6 +10,7 @@ rust-version = "1.75"
 description = "ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动，官方 AlgoParameters 对齐"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/asus-numpad/asus-numpad"
+homepage = "https://asus-numpad.github.io/"
 keywords = ["asus", "numpad", "touchpad", "numberpad"]
 categories = ["hardware-support"]
 readme = "README.md"

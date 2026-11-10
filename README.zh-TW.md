@@ -331,7 +331,7 @@ Linux 上是全套，分五個頁籤：
 | 頁籤 | 內容 |
 | --- | --- |
 | 燈光 | 介面清單、鍵盤四檔 → 觸控板亮度對映（逐檔可改、可試亮、可與驅動設定互相同步）、點亮 / 熄滅、跟隨 NumLock 與鍵盤背光、報文日誌 |
-| 驅動設定 | `/etc/asus-numpad.json` 的每個欄位都做成控制項：機型、佈局、鍵碼風格、NumLock 策略、手勢閾值、背光通道與跟燈輪詢、手動檔位表、時序常數、驅動語言 |
+| 驅動設定 | 驅動設定（`~/.config/asus-numpad/asus-numpad.json`，root 下 `/etc/asus-numpad/asus-numpad.json`）的每個欄位都做成控制項：機型、佈局、鍵碼風格、NumLock 策略、手勢閾值、背光通道與跟燈輪詢、手動檔位表、時序常數、驅動語言 |
 | 系統狀態 | 設定檔路徑、機型、佈局、hidraw 通道、單元狀態，可啟動 / 停止 / 重啟 |
 | 命令列 | 每個 `asus-numpad` 子命令一張表單，執行時跑同一個執行檔 |
 | 設定 | 檔位數、跟隨 NumLock、輪詢間隔、開機自啟 |
@@ -356,6 +356,7 @@ cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
 
 | 路徑 | 用途 |
 | --- | --- |
+| `src/lib.rs` | 程式庫入口：執行檔與 GUI 共用的模組 |
 | `src/main.rs` | CLI 解析與組裝 |
 | `src/engine.rs` | 廠商演算法狀態機 |
 | `src/layout.rs` | 佈局幾何、44 條 HID 表、座標換算 |
@@ -364,6 +365,8 @@ cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
 | `src/led_policy.rs` | 背光節點評分 |
 | `src/sku.rs` | 機型表、執行期辨識、手動指定、世代排除 |
 | `src/i18n.rs` | 三種語言，可用外部 `.lang` 檔覆寫 |
+| `src/keycodes.rs` | Linux input 事件碼，自帶一份讓 `layout` / `engine` 跨平台可編譯 |
+| `src/led_proto.rs` | 背光 FEATURE `0x0d` 報文的編解碼，CLI 與 GUI 的單一真源 |
 | `src/linux/` | evdev、uinput、hidraw、i2c 後端 |
 | `gui/` | egui 視窗：Windows 只管燈光，Linux 是完整控制中心 |
 | `lang/` | zh-CN、zh-TW、en 文案 |

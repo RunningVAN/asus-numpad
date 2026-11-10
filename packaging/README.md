@@ -20,6 +20,10 @@ packaging/
 └── nix/              package.nix + NixOS module（配合根目录 flake.nix）
 ```
 
+分发包只装 `asus-numpad`、man 页、service 与 udev 规则。GUI（`asus-numpad-gui`）不进包：
+它在 Linux 上只是可选项，egui / winit 的依赖体积比驱动本体大一个量级，编译一次要拉几十个
+crate。要用就自行 `cargo build --release -p asus-numpad-gui`。
+
 ## 用法
 
 ```bash

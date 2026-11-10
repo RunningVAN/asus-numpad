@@ -432,9 +432,10 @@ asus-numpad --lang en check</code></pre>
         <img src="assets/screenshots/gui-main.png" alt="asus-numpad-gui control center on Linux: device list on the left, lighting and driver config tabs on the right" width="1180" height="900" loading="lazy" decoding="async">
         <figcaption data-i18n="use.gui">
           The optional egui window (<code>asus-numpad-gui</code>) writes the same FEATURE <code>0x0d</code> report.
-          On Linux it is the whole control center — lighting, every driver config field, system state with unit
-          control, and a form for each <code>asus-numpad</code> subcommand that runs the same binary in the
-          background. Nothing is re-implemented, so the two never drift apart.
+          On Linux it is the whole control center in five tabs: lighting — including the keyboard's four brightness
+          steps mapped onto touchpad levels, editable step by step — every driver config field, system state with
+          unit control, a form for each <code>asus-numpad</code> subcommand, and the window's own settings. The
+          command tab runs the same binary, so the two never drift apart.
         </figcaption>
       </figure>
       <figure class="gui-shot compact reveal">
