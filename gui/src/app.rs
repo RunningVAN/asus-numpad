@@ -14,9 +14,13 @@ use asus_numpad::led_proto;
 
 use crate::backend::Backend;
 use crate::settings::{self, Settings};
+use crate::sysinfo::{self, ServiceVerb, Snapshot};
 use crate::{autostart, backend, ui_font};
 
 const MAX_LOG: usize = 200;
+
+/// 平台状态里 systemctl 要真起进程，别每帧都刷。
+const STATE_REFRESH: Duration = Duration::from_secs(10);
 
 struct LogEntry {
     at: String,
@@ -33,6 +37,9 @@ enum Action {
     SaveSettings,
     ResetSettings,
     SetAutostart(bool),
+    ServiceRun(ServiceVerb),
+    ServiceAutostart(bool),
+    RefreshState,
 }
 
 pub struct App {
@@ -48,12 +55,23 @@ pub struct App {
     sent_numlock: Option<bool>,
     autostart_on: bool,
     font_note: Option<String>,
+    /// 平台状态快照（机型、布局、背光通道、后台服务）
+    state: Snapshot,
+    state_at: Instant,
+    /// 后台服务是否开机自启；Windows 用注册表那份，Linux 用这一份
+    service_enabled: bool,
 }
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let font_note = ui_font::install(&cc.egui_ctx);
         let settings = settings::load();
+        let state = sysinfo::snapshot();
+        let service_enabled = state
+            .service
+            .as_ref()
+            .map(|s| s.enabled.trim() == "enabled")
+            .unwrap_or(false);
         let mut app = Self {
             backend: backend::create(),
             devices: Vec::new(),
@@ -67,12 +85,27 @@ impl App {
             sent_numlock: None,
             autostart_on: autostart::enabled(),
             font_note,
+            state,
+            state_at: Instant::now(),
+            service_enabled,
         };
         app.rescan();
         if app.settings.apply_on_start && app.settings.on {
             app.apply_current();
         }
         app
+    }
+
+    /// 重读平台状态。服务启停之后必须调用，否则界面还显示旧状态。
+    fn refresh_state(&mut self) {
+        self.state = sysinfo::snapshot();
+        self.state_at = Instant::now();
+        self.service_enabled = self
+            .state
+            .service
+            .as_ref()
+            .map(|s| s.enabled.trim() == "enabled")
+            .unwrap_or(false);
     }
 
     fn set_status(&mut self, text: String, bad: bool) {
@@ -212,7 +245,7 @@ impl App {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.heading("ASUS NumberPad 背光控制");
-                ui.label(small("数字键与手势由 ASUS 官方驱动处理，本程序只写背光 FEATURE 报文"));
+                ui.label(small(self.state.subtitle.clone()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("重新扫描").clicked() {
                         *action = Some(Action::Rescan);
@@ -252,7 +285,13 @@ impl App {
                     .show(ui, |ui| {
                         if self.devices.is_empty() {
                             ui.label("没有枚举到任何 HID 接口。");
-                            ui.label(small("确认 ASUS 官方驱动已安装、设备未被其它程序独占。"));
+                            // 两个平台没枚举到接口的原因不同，提示跟着后端走
+                            let hint = if cfg!(windows) {
+                                "确认 ASUS 官方驱动已安装、设备未被其它程序独占。"
+                            } else {
+                                "确认触摸板带 FEATURE 0x0d、hidraw 已加载，且 udev 规则已生效。"
+                            };
+                            ui.label(small(hint));
                             return;
                         }
                         for (i, d) in self.devices.iter().enumerate() {
@@ -277,9 +316,7 @@ impl App {
                                     .small(),
                                 );
                             } else {
-                                ui.label(
-                                    egui::RichText::new("无可用 FEATURE 0x0d").small().weak(),
-                                );
+                                ui.label(egui::RichText::new("无可用 FEATURE 0x0d").small().weak());
                             }
                             match d.rank {
                                 Some(RANK_WARN_NO_FEATURE) => {
@@ -364,8 +401,15 @@ impl App {
         ui.horizontal(|ui| {
             ui.label("档位组");
             for n in [4u8, 8u8] {
-                let label = if n == 4 { "4 档（含熄灭）" } else { "8 档（纯亮度）" };
-                if ui.selectable_label(self.settings.steps == n, label).clicked() {
+                let label = if n == 4 {
+                    "4 档（含熄灭）"
+                } else {
+                    "8 档（纯亮度）"
+                };
+                if ui
+                    .selectable_label(self.settings.steps == n, label)
+                    .clicked()
+                {
                     self.settings.steps = n;
                     if self.settings.step > n {
                         self.settings.step = n;
@@ -428,16 +472,83 @@ impl App {
             .max_height(200.0)
             .auto_shrink([false, true])
             .show(ui, |ui| {
-                egui::Grid::new("log").striped(true).num_columns(3).show(ui, |ui| {
-                    for entry in &self.log {
-                        ui.monospace(&entry.at);
-                        let mark = if entry.ok { "ok" } else { "fail" };
-                        ui.monospace(format!("{mark}  {}", entry.frame));
-                        ui.label(small(entry.note.clone()));
-                        ui.end_row();
-                    }
-                });
+                egui::Grid::new("log")
+                    .striped(true)
+                    .num_columns(3)
+                    .show(ui, |ui| {
+                        for entry in &self.log {
+                            ui.monospace(&entry.at);
+                            let mark = if entry.ok { "ok" } else { "fail" };
+                            ui.monospace(format!("{mark}  {}", entry.frame));
+                            ui.label(small(entry.note.clone()));
+                            ui.end_row();
+                        }
+                    });
             });
+    }
+
+    /// 只读的平台状态 + 后台服务开关。
+    ///
+    /// 灯不亮时这一区先给答案：机型认没认出来、布局取的是哪套、背光通道在不在、
+    /// 后台服务是否在跑。省掉「回去敲命令行再看一遍」这一步。
+    fn draw_system(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.heading("系统状态");
+            if ui.button("刷新").clicked() {
+                *action = Some(Action::RefreshState);
+            }
+        });
+
+        egui::Grid::new("system_state")
+            .num_columns(2)
+            .striped(true)
+            .show(ui, |ui| {
+                for (name, value) in &self.state.rows {
+                    ui.label(name);
+                    ui.label(small(value.clone()));
+                    ui.end_row();
+                }
+            });
+
+        for hint in &self.state.hints {
+            ui.label(
+                egui::RichText::new(hint.clone())
+                    .small()
+                    .color(egui::Color32::from_rgb(200, 150, 40)),
+            );
+        }
+
+        let Some(service) = &self.state.service else {
+            return;
+        };
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let color = if service.is_active() {
+                egui::Color32::from_rgb(90, 170, 90)
+            } else {
+                egui::Color32::from_rgb(200, 150, 40)
+            };
+            ui.label(
+                egui::RichText::new(format!(
+                    "后台服务：{} / {}",
+                    service.active, service.enabled
+                ))
+                .color(color),
+            );
+            if ui.button("启动").clicked() {
+                *action = Some(Action::ServiceRun(ServiceVerb::Start));
+            }
+            if ui.button("停止").clicked() {
+                *action = Some(Action::ServiceRun(ServiceVerb::Stop));
+            }
+            if ui.button("重启").clicked() {
+                *action = Some(Action::ServiceRun(ServiceVerb::Restart));
+            }
+        });
+        ui.label(small(
+            "用户单元不需要 root；停止后数字键与手势失效，触摸板恢复成普通触摸板。",
+        ));
     }
 
     fn draw_settings(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
@@ -445,7 +556,10 @@ impl App {
         egui::CollapsingHeader::new("设置")
             .default_open(false)
             .show(ui, |ui| {
-                ui.checkbox(&mut self.settings.apply_on_start, "启动时自动下发一次当前档位");
+                ui.checkbox(
+                    &mut self.settings.apply_on_start,
+                    "启动时自动下发一次当前档位",
+                );
                 ui.label(small(
                     "休眠、热插拔后 EC 会丢状态；勾选后每次启动都会重发一遍。",
                 ));
@@ -458,8 +572,17 @@ impl App {
                     {
                         *action = Some(Action::SetAutostart(on));
                     }
+                } else if sysinfo::has_service() {
+                    // Linux 的「自启」就是 systemd 用户单元的 enable，和后台服务共用一份状态
+                    let mut on = self.service_enabled;
+                    if ui
+                        .checkbox(&mut on, "开机自启（systemctl --user enable asus-numpad）")
+                        .changed()
+                    {
+                        *action = Some(Action::ServiceAutostart(on));
+                    }
                 } else {
-                    ui.label(small("当前平台不支持开机自启（仅 Windows）"));
+                    ui.label(small("当前平台不支持开机自启"));
                 }
 
                 ui.horizontal(|ui| {
@@ -528,12 +651,35 @@ impl App {
                 match autostart::set(on, &cmd) {
                     Ok(()) => {
                         self.autostart_on = on;
-                        let msg = if on { "已登记开机自启" } else { "已取消开机自启" };
+                        let msg = if on {
+                            "已登记开机自启"
+                        } else {
+                            "已取消开机自启"
+                        };
                         self.set_status(msg.to_string(), false);
                     }
                     Err(err) => self.set_status(format!("更新自启项失败：{err:#}"), true),
                 }
             }
+            Action::ServiceRun(verb) => {
+                match sysinfo::service_run(verb) {
+                    Ok(msg) => self.set_status(msg, false),
+                    Err(err) => self.set_status(format!("{err:#}"), true),
+                }
+                // 服务状态刚变过，立刻重读，否则界面还显示旧值
+                self.refresh_state();
+            }
+            Action::ServiceAutostart(on) => {
+                match sysinfo::service_autostart(on) {
+                    Ok(msg) => {
+                        self.service_enabled = on;
+                        self.set_status(msg, false);
+                    }
+                    Err(err) => self.set_status(format!("{err:#}"), true),
+                }
+                self.refresh_state();
+            }
+            Action::RefreshState => self.refresh_state(),
         }
     }
 }
@@ -545,6 +691,11 @@ impl eframe::App for App {
 
         self.poll_numlock();
 
+        // 机型 / 服务状态在会话里会变（插拔、systemctl 被别处调用），定期重读一次
+        if self.state_at.elapsed() > STATE_REFRESH {
+            self.refresh_state();
+        }
+
         self.draw_header(root, &mut action);
         self.draw_status(root);
         self.draw_devices(root);
@@ -555,6 +706,7 @@ impl eframe::App for App {
                 .show(ui, |ui| {
                     self.draw_lighting(ui, &mut action);
                     self.draw_follow(ui);
+                    self.draw_system(ui, &mut action);
                     self.draw_log(ui);
                     self.draw_settings(ui, &mut action);
                 });
@@ -588,5 +740,10 @@ fn now_hms() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0)
         % 86_400;
-    format!("{:02}:{:02}:{:02}", secs / 3600, (secs % 3600) / 60, secs % 60)
+    format!(
+        "{:02}:{:02}:{:02}",
+        secs / 3600,
+        (secs % 3600) / 60,
+        secs % 60
+    )
 }

@@ -1,8 +1,10 @@
 //! 平台后端抽象。
 //!
-//! 灯光路径只有两件事：探测哪些 HID 接口能点灯、往选中的那个写 FEATURE 报文。
-//! Windows 用系统自带的 `setupapi` + `hid.dll`（见 [`crate::win_hid`]）；非 Windows
-//! 平台用 [`crate::mock`]，让界面与档位逻辑在任意开发机上都能跑起来调试。
+//! 灯光路径只有两件事：探测哪些接口能点灯、往选中的那个写 FEATURE 报文。
+//! Windows 用系统自带的 `setupapi` + `hid.dll`（见 [`crate::win_hid`]）；Linux 走
+//! hidraw 的 `HIDIOCSFEATURE`，探测与写入都复用驱动侧的 `linux::led`（见
+//! [`crate::linux_hid`]）；其余平台用 [`crate::mock`]，让界面与档位逻辑在任意
+//! 开发机上都能跑起来调试。
 
 use anyhow::Result;
 
@@ -11,7 +13,8 @@ use asus_numpad::led_policy::{ASUS_VID, ELAN_VID, PIXART_VID};
 /// 一个 HID 接口的探测结果。
 #[derive(Clone, Debug)]
 pub struct DeviceInfo {
-    /// Windows 设备接口路径（`\\?\hid#vid_04f3&pid_3275...`）
+    /// 平台设备路径：Windows 是 `\\?\hid#vid_04f3&pid_3275...` 接口路径，
+    /// Linux 是 `/dev/hidrawN`
     pub path: String,
     pub vid: u16,
     pub pid: u16,
@@ -69,8 +72,11 @@ pub trait Backend {
     fn scan(&mut self) -> Result<Vec<DeviceInfo>>;
 
     /// 向指定接口写入一帧 FEATURE 报文。
-    fn write(&mut self, device: &DeviceInfo, frame: [u8; asus_numpad::led_proto::LED_FEATURE_LEN])
-        -> Result<()>;
+    fn write(
+        &mut self,
+        device: &DeviceInfo,
+        frame: [u8; asus_numpad::led_proto::LED_FEATURE_LEN],
+    ) -> Result<()>;
 
     /// 读 NumLock 状态；平台读不到时返回 `None`。
     fn numlock(&mut self) -> Option<bool>;
@@ -85,7 +91,11 @@ pub fn create() -> Box<dyn Backend> {
     {
         Box::new(crate::win_hid::WindowsHid::new())
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        Box::new(crate::linux_hid::LinuxHid::new())
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         Box::new(crate::mock::MockBackend::new())
     }

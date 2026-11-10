@@ -1,23 +1,29 @@
-//! `asus-numpad-win`：Windows 上的 NumberPad 背光控制（图形界面 + 命令行）。
+//! `asus-numpad-gui`：NumberPad 背光控制的图形界面 + 命令行（Windows / Linux 共用）。
+//!
+//! 两个平台的界面、档位、报文完全一致，差别只在后端：Windows 走 `setupapi` +
+//! `hid.dll`，Linux 走 hidraw 的 `HIDIOCSFEATURE`。
 //!
 //! 不带参数启动界面；带参数时按命令行执行，便于脚本、开机自启与排障。
 //!
 //! ```text
-//! asus-numpad-win                      打开界面
-//! asus-numpad-win --selftest           只探测接口并打印档位报文，不写硬件
-//! asus-numpad-win --on                 按内置档位点亮
-//! asus-numpad-win --off                熄灭
-//! asus-numpad-win --level 6            点灯并设到第 6 档（也接受 0x45 这类原始值）
-//! asus-numpad-win --apply-startup      按配置文件下发一次（供开机自启用）
+//! asus-numpad-gui                      打开界面
+//! asus-numpad-gui --selftest           只探测接口并打印档位报文，不写硬件
+//! asus-numpad-gui --on                 按内置档位点亮
+//! asus-numpad-gui --off                熄灭
+//! asus-numpad-gui --level 6            点灯并设到第 6 档（也接受 0x45 这类原始值）
+//! asus-numpad-gui --apply-startup      按配置文件下发一次（供开机自启用）
 //! ```
 
 mod app;
 mod autostart;
 mod backend;
 mod settings;
+mod sysinfo;
 mod ui_font;
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+mod linux_hid;
+#[cfg(not(any(windows, target_os = "linux")))]
 mod mock;
 #[cfg(windows)]
 mod win_hid;
@@ -29,20 +35,21 @@ use asus_numpad::led_proto;
 use crate::backend::{mark_best, Backend, DeviceInfo};
 
 const USAGE: &str = "\
-ASUS NumberPad 背光控制（Windows）
+ASUS NumberPad 背光控制（图形界面 + 命令行）
 
 用法：
-  asus-numpad-win                    打开图形界面
-  asus-numpad-win --selftest         探测 HID 接口并打印报文，不写硬件
-  asus-numpad-win --on               点亮（配置文件里的档位）
-  asus-numpad-win --off              熄灭
-  asus-numpad-win --level <1-8|0xNN> 点灯并设到指定档
-  asus-numpad-win --apply-startup    按配置文件下发一次（开机自启调用）
-  asus-numpad-win --help             显示本说明
+  asus-numpad-gui                    打开图形界面
+  asus-numpad-gui --selftest         探测 HID 接口并打印报文，不写硬件
+  asus-numpad-gui --on               点亮（配置文件里的档位）
+  asus-numpad-gui --off              熄灭
+  asus-numpad-gui --level <1-8|0xNN> 点灯并设到指定档
+  asus-numpad-gui --apply-startup    按配置文件下发一次（开机自启调用）
+  asus-numpad-gui --help             显示本说明
 
 说明：
-  数字键、手势与触摸板行为由 ASUS 官方驱动负责，本程序只写背光
-  FEATURE 报告 0x0d，不接管任何输入。";
+  本程序只写背光 FEATURE 报告 0x0d，不接管任何输入。
+  Windows：数字键、手势与触摸板行为由 ASUS 官方驱动负责；
+  Linux：数字键与手势由 systemd 用户单元 asus-numpad 负责。";
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -91,13 +98,12 @@ fn fallback_level() -> u8 {
 
 /// 解析 `6` / `0x45` / `0` 三种写法。
 fn parse_level(text: &str) -> Result<u8> {
-    let value = if let Some(hex) = text
-        .strip_prefix("0x")
-        .or_else(|| text.strip_prefix("0X"))
-    {
+    let value = if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
         u8::from_str_radix(hex, 16).with_context(|| format!("无法解析档位：{text}"))?
     } else {
-        let n: u8 = text.parse().with_context(|| format!("无法解析档位：{text}"))?;
+        let n: u8 = text
+            .parse()
+            .with_context(|| format!("无法解析档位：{text}"))?;
         match n {
             0 => led_proto::LED_OFF,
             1..=8 => led_proto::level_value(n).context("档位换算失败")?,
@@ -112,10 +118,7 @@ fn pick_target(backend: &mut dyn Backend, devices: &mut [DeviceInfo]) -> Option<
     let _ = backend;
     let saved = settings::load().device_path;
     if let Some(path) = saved {
-        if let Some(i) = devices
-            .iter()
-            .position(|d| d.path == path && d.usable())
-        {
+        if let Some(i) = devices.iter().position(|d| d.path == path && d.usable()) {
             for d in devices.iter_mut() {
                 d.selected = false;
             }
@@ -129,13 +132,15 @@ fn pick_target(backend: &mut dyn Backend, devices: &mut [DeviceInfo]) -> Option<
 /// 下发一个原始值；CLI 三个命令共用。
 fn send_value(value: u8) -> Result<()> {
     let mut backend = backend::create();
-    let mut devices = backend
-        .scan()
-        .context("枚举 HID 接口失败")?;
+    let mut devices = backend.scan().context("枚举 HID 接口失败")?;
     let Some(index) = pick_target(&mut *backend, &mut devices) else {
-        bail!(
-            "没有找到可点灯的 NumberPad 接口。请确认 ASUS 官方驱动已安装，且没有其它程序独占设备。"
-        );
+        // 两个平台「找不到接口」的原因完全不同，提示分开写，别让人按错的文档去查
+        let hint = if cfg!(windows) {
+            "请确认 ASUS 官方驱动已安装，且没有其它程序独占设备。"
+        } else {
+            "请确认触摸板描述符带 FEATURE 0x0d、hidraw 已加载，且 udev 规则已生效。"
+        };
+        bail!("没有找到可点灯的 NumberPad 接口。{hint}");
     };
     let device = devices[index].clone();
     let frame = led_proto::encode(value).ok_or_else(|| anyhow!("非法档位值：0x{value:02x}"))?;
@@ -165,7 +170,25 @@ fn apply_startup() -> Result<()> {
 /// 只读自检：打印探测结果与各档报文，不写硬件。
 fn selftest() -> Result<i32> {
     let mut backend = backend::create();
-    println!("后端：{}（真实硬件：{}）", backend.name(), backend.is_real());
+    println!(
+        "后端：{}（真实硬件：{}）",
+        backend.name(),
+        backend.is_real()
+    );
+
+    // 平台状态放到自检最前面：灯不亮时先分清是没权限、没接口还是没这块硬件
+    let state = sysinfo::snapshot();
+    println!("{}", state.subtitle);
+    for (name, value) in &state.rows {
+        println!("  {name}：{value}");
+    }
+    for hint in &state.hints {
+        println!("  提示：{hint}");
+    }
+    if let Some(service) = &state.service {
+        println!("  后台服务：{} / {}", service.active, service.enabled);
+    }
+
     let mut devices = backend.scan().context("枚举 HID 接口失败")?;
     if devices.is_empty() {
         println!("未枚举到任何 HID 接口。");
@@ -192,11 +215,22 @@ fn selftest() -> Result<i32> {
     println!("\n8 档报文：");
     for (i, level) in led_proto::brightness_levels().iter().enumerate() {
         if let Some(frame) = led_proto::encode(*level) {
-            println!("  {} 档 0x{:02x} -> {}", i + 1, level, led_proto::hex(&frame));
+            println!(
+                "  {} 档 0x{:02x} -> {}",
+                i + 1,
+                level,
+                led_proto::hex(&frame)
+            );
         }
     }
-    println!("\n熄灭报文：{}", led_proto::hex(&led_proto::encode(led_proto::LED_OFF).unwrap()));
-    println!("普通点亮：{}", led_proto::hex(&led_proto::encode(led_proto::LED_ON).unwrap()));
+    println!(
+        "\n熄灭报文：{}",
+        led_proto::hex(&led_proto::encode(led_proto::LED_OFF).unwrap())
+    );
+    println!(
+        "普通点亮：{}",
+        led_proto::hex(&led_proto::encode(led_proto::LED_ON).unwrap())
+    );
 
     for steps in [4u8, 8u8] {
         let table = backend::level_table(steps);
@@ -208,7 +242,11 @@ fn selftest() -> Result<i32> {
         println!("{steps} 档组映射：{text}");
     }
 
-    Ok(if devices.iter().any(|d| d.usable()) { 0 } else { 1 })
+    Ok(if devices.iter().any(|d| d.usable()) {
+        0
+    } else {
+        1
+    })
 }
 
 fn run_gui() -> Result<()> {
@@ -223,7 +261,7 @@ fn run_gui() -> Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "asus-numpad-win",
+        "asus-numpad-gui",
         options,
         Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
     )

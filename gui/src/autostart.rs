@@ -1,13 +1,16 @@
-//! 开机自启（仅 Windows 有意义）。
+//! 开机自启（Windows）。
 //!
 //! 用 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 下一个字符串值，
 //! 不需要管理员权限，也不需要服务/计划任务。值名固定为 ASCII，便于脚本检查。
+//!
+//! Linux 不走这里：那边数字键与手势本来就有 systemd 用户单元，界面的「开机自启」
+//! 直接 `systemctl --user enable asus-numpad`（见 [`crate::sysinfo`]）。
 
 use anyhow::Result;
 
 /// 注册表值名（ASCII，避免某些系统工具读不了中文值名）。
 #[allow(dead_code)] // 非 Windows 分支不读它，但 README 与卸载脚本按这个名字说明
-pub const VALUE_NAME: &str = "AsusNumpadWin";
+pub const VALUE_NAME: &str = "AsusNumpadGui";
 
 /// 当前平台是否支持。
 pub fn supported() -> bool {
@@ -72,24 +75,21 @@ mod imp {
         let Ok(key) = open_run_key(false) else {
             return false;
         };
-        let name: Vec<u16> = VALUE_NAME.encode_utf16().chain(std::iter::once(0)).collect();
-        let rc = unsafe {
-            RegQueryValueExW(
-                key.0,
-                PCWSTR(name.as_ptr()),
-                None,
-                None,
-                None,
-                None,
-            )
-        };
+        let name: Vec<u16> = VALUE_NAME
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let rc = unsafe { RegQueryValueExW(key.0, PCWSTR(name.as_ptr()), None, None, None, None) };
         rc == ERROR_SUCCESS
     }
 
     /// 写入或删除自启项；`cmd` 为要执行的命令行（通常是当前 exe 的绝对路径）。
     pub fn set(on: bool, cmd: &str) -> Result<()> {
         let key = open_run_key(true)?;
-        let name: Vec<u16> = VALUE_NAME.encode_utf16().chain(std::iter::once(0)).collect();
+        let name: Vec<u16> = VALUE_NAME
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         let name = PCWSTR(name.as_ptr());
 
         if on {
@@ -137,6 +137,6 @@ pub fn set(on: bool, cmd: &str) -> Result<()> {
 pub fn command_line() -> String {
     let exe = std::env::current_exe()
         .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "asus-numpad-win.exe".to_string());
+        .unwrap_or_else(|_| "asus-numpad-gui".to_string());
     format!("\"{exe}\" --apply-startup")
 }

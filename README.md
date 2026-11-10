@@ -349,6 +349,23 @@ and follow mode share one step table.
 Node selection (`led_policy.rs`): the OMNI receiver `0b05:1ace` is always excluded, ELAN `04f3:*`
 with FEATURE `0x0d` takes priority, then ASUS `0b05:*`, then i2c (`0x38` / `0x15`).
 
+### GUI
+
+`gui/` is an optional egui window that writes the same FEATURE `0x0d` report: interface list,
+brightness steps, NumLock follow, write log. On Linux it also shows the detected model, layout,
+hidraw channel and the state of the `asus-numpad` user unit, with start / stop / restart and
+enable-on-login. The daemon and the CLI do not depend on it.
+
+The Windows build of the same crate replaces the hidraw backend with `setupapi` + `hid.dll` and
+leaves numpad input to the vendor driver; the report bytes are produced by the shared `led_proto`
+layer, so both platforms send identical traffic.
+
+```bash
+cargo run -p asus-numpad-gui      # or: cargo build --release -p asus-numpad-gui
+```
+
+See `gui/README.md` for the runtime requirements, settings path and troubleshooting.
+
 ### Permissions
 
 No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs as a
@@ -367,6 +384,7 @@ No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs
 | `src/sku.rs` | Model table, runtime detection, manual pin, per-generation excludes |
 | `src/i18n.rs` | Three languages, overridable with external `.lang` files |
 | `src/linux/` | evdev, uinput, hidraw and i2c backends |
+| `gui/` | egui backlight window, shared by Windows and Linux |
 | `lang/` | zh-CN, zh-TW, en strings |
 | `site/` | Website sources, published to https://asus-numpad.github.io/ |
 | `tools/` | `push-site.sh` (site publish), `repo-gen.sh` (repository indexes) |

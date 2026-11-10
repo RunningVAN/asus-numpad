@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "winapp"]
+members = [".", "gui"]
 resolver = "2"
 
 [package]

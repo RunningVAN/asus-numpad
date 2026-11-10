@@ -314,6 +314,21 @@ ACPI 对象，任意多点触控板走的是同一条代码路径。移植工作
 节点选择（`led_policy.rs`）：始终排除 OMNI 接收器 `0b05:1ace`；ELAN `04f3:*` 且带 FEATURE
 `0x0d` 优先，其次 ASUS `0b05:*`，最后 i2c（`0x38` / `0x15`）。
 
+### 图形界面
+
+`gui/` 是一个可选的 egui 窗口，写的是同一份 FEATURE `0x0d` 报文：接口列表、亮度档位、跟随
+NumLock、写入日志。Linux 上还显示识别出的机型、布局、hidraw 通道，以及 `asus-numpad` 用户单元
+的状态，可启动 / 停止 / 重启、设置登录自启。守护进程与 CLI 不依赖它。
+
+同一份 crate 在 Windows 上把 hidraw 后端换成 `setupapi` + `hid.dll`，小键盘输入仍交给官方驱动；
+报文由共用的 `led_proto` 生成，两端发出去的字节完全一致。
+
+```bash
+cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
+```
+
+运行条件、设置文件位置与排错见 `gui/README.md`。
+
 ### 权限
 
 不需要 root。udev 给 hidraw 与 event 节点打 `TAG+="uaccess"`，守护进程以 `systemd --user` 单元
@@ -332,6 +347,7 @@ ACPI 对象，任意多点触控板走的是同一条代码路径。移植工作
 | `src/sku.rs` | 机型表、运行期识别、手动指定、代际排除 |
 | `src/i18n.rs` | 三种语言，可用外部 `.lang` 文件覆盖 |
 | `src/linux/` | evdev、uinput、hidraw、i2c 后端 |
+| `gui/` | egui 背光界面，Windows 与 Linux 共用 |
 | `lang/` | zh-CN、zh-TW、en 文案 |
 | `site/` | 官网源码，发布到 https://asus-numpad.github.io/ |
 | `tools/` | `push-site.sh`（官网同步）、`repo-gen.sh`（仓库索引） |

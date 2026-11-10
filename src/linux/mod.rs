@@ -309,8 +309,8 @@ fn geometry_from_abs(
 ) -> Geometry {
     // 内核 resolution 单位是 units/mm，换成 units/µm；没报 resolution 的模组按标称尺寸折算。
     // 分母一律 max(1)，避免 ABS 范围退化成单点时除零。
-    let ux = abs_units_per_um(&xi, cfg.touchpad_width_mm);
-    let uy = abs_units_per_um(&yi, cfg.touchpad_height_mm);
+    let ux = abs_units_per_um(xi, cfg.touchpad_width_mm);
+    let uy = abs_units_per_um(yi, cfg.touchpad_height_mm);
     Geometry::new(
         xi.minimum,
         xi.maximum,

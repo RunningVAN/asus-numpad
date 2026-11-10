@@ -57,9 +57,7 @@ pub fn level_value(step: u8) -> Option<u8> {
 
 /// 全部亮度档位的 level 字节，从暗到亮（`0x41..=0x48`）。
 pub fn brightness_levels() -> Vec<u8> {
-    (1..=VAL_BRIGHTNESS_MAX)
-        .filter_map(level_value)
-        .collect()
+    (1..=VAL_BRIGHTNESS_MAX).filter_map(level_value).collect()
 }
 
 /// 熄灭 / 点亮（保持当前档）两个开关键值。

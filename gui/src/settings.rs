@@ -1,8 +1,11 @@
 //! 界面设置的持久化。
 //!
 //! 只存「用户的选择」，不存硬件状态：档位、联动开关、上次选中的接口。
-//! Windows 下放 `%APPDATA%\asus-numpad-win\settings.json`，其他平台放
-//! `~/.config/asus-numpad-win/settings.json`（后者只为开发机预览界面用）。
+//! Windows 下放 `%APPDATA%\asus-numpad-gui\settings.json`，其他平台放
+//! `~/.config/asus-numpad-gui/settings.json`。
+//!
+//! 界面设置与驱动的配置文件（`asus-numpad.toml`）是两份东西：驱动那份写机型与
+//! 布局，这里只写「这个界面自己记的事」，改这里不会影响驱动行为。
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -10,7 +13,7 @@ use std::path::PathBuf;
 
 use asus_numpad::config::VAL_BRIGHTNESS_MAX;
 
-const APP_DIR: &str = "asus-numpad-win";
+const APP_DIR: &str = "asus-numpad-gui";
 const FILE: &str = "settings.json";
 
 /// 界面设置。字段全部带默认值，旧版本配置缺项也能读。
@@ -92,7 +95,8 @@ pub fn load() -> Settings {
 pub fn save(settings: &Settings) -> Result<()> {
     let path = config_path();
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).with_context(|| format!("创建配置目录失败：{}", dir.display()))?;
+        std::fs::create_dir_all(dir)
+            .with_context(|| format!("创建配置目录失败：{}", dir.display()))?;
     }
     let text = serde_json::to_string_pretty(settings).context("序列化设置失败")?;
     std::fs::write(&path, text).with_context(|| format!("写入设置失败：{}", path.display()))?;

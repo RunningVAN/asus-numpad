@@ -25,8 +25,8 @@ use windows::Win32::Devices::DeviceAndDriverInstallation::{
 };
 use windows::Win32::Devices::HumanInterfaceDevice::{
     HidD_FreePreparsedData, HidD_GetAttributes, HidD_GetPreparsedData, HidD_GetProductString,
-    HidD_SetFeature, HidP_GetCaps, HidP_GetValueCaps, GUID_DEVINTERFACE_HID, HIDD_ATTRIBUTES,
-    HIDP_CAPS, HIDP_STATUS_SUCCESS, HIDP_VALUE_CAPS, HidP_Feature, PHIDP_PREPARSED_DATA,
+    HidD_SetFeature, HidP_Feature, HidP_GetCaps, HidP_GetValueCaps, GUID_DEVINTERFACE_HID,
+    HIDD_ATTRIBUTES, HIDP_CAPS, HIDP_STATUS_SUCCESS, HIDP_VALUE_CAPS, PHIDP_PREPARSED_DATA,
 };
 use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, HWND};
 use windows::Win32::Storage::FileSystem::{
@@ -92,9 +92,8 @@ fn interface_path(hdev: HDEVINFO, index: u32) -> Result<Option<String>> {
     }
 
     let mut required = 0u32;
-    let _ = unsafe {
-        SetupDiGetDeviceInterfaceDetailW(hdev, &did, None, 0, Some(&mut required), None)
-    };
+    let _ =
+        unsafe { SetupDiGetDeviceInterfaceDetailW(hdev, &did, None, 0, Some(&mut required), None) };
     if required == 0 {
         return Ok(None);
     }
@@ -128,7 +127,11 @@ fn probe(handle: HANDLE) -> Option<(HIDD_ATTRIBUTES, String, bool, u16)> {
 
     let mut product = [0u16; 128];
     let product = if unsafe {
-        HidD_GetProductString(handle, product.as_mut_ptr() as *mut _, (product.len() * 2) as u32)
+        HidD_GetProductString(
+            handle,
+            product.as_mut_ptr() as *mut _,
+            (product.len() * 2) as u32,
+        )
     } == false
     {
         String::new()

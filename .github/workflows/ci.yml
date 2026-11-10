@@ -25,6 +25,12 @@ jobs:
       - name: 生成锁文件（若仓库里还没有）
         run: |
           if [ ! -f Cargo.lock ]; then cargo generate-lockfile; fi
+      # workspace 里含 gui crate（eframe），链接期要 xkbcommon / wayland / GL
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+              pkg-config libxkbcommon-dev libwayland-dev libgl1-mesa-dev
       - name: cargo test
         run: cargo test --all-targets
       - name: shellcheck 打包脚本

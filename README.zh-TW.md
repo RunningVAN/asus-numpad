@@ -315,6 +315,21 @@ asusctl 側實作同樣的功能，兩條路都歡迎。
 節點選擇（`led_policy.rs`）：一律排除 OMNI 接收器 `0b05:1ace`；ELAN `04f3:*` 且帶 FEATURE
 `0x0d` 優先，其次 ASUS `0b05:*`，最後 i2c（`0x38` / `0x15`）。
 
+### 圖形介面
+
+`gui/` 是一個可選的 egui 視窗，寫的是同一份 FEATURE `0x0d` 報文：介面清單、亮度檔位、跟隨
+NumLock、寫入日誌。Linux 上還會顯示辨識出的機型、佈局、hidraw 通道，以及 `asus-numpad` 使用者
+單元的狀態，可啟動 / 停止 / 重啟、設定登入自啟。守護行程與 CLI 不依賴它。
+
+同一份 crate 在 Windows 上把 hidraw 後端換成 `setupapi` + `hid.dll`，小鍵盤輸入仍交給官方驅動；
+報文由共用的 `led_proto` 產生，兩端送出的位元組完全一致。
+
+```bash
+cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
+```
+
+執行條件、設定檔位置與排錯見 `gui/README.md`。
+
 ### 權限
 
 不需要 root。udev 給 hidraw 與 event 節點標上 `TAG+="uaccess"`，守護行程以 `systemd --user`
@@ -333,6 +348,7 @@ asusctl 側實作同樣的功能，兩條路都歡迎。
 | `src/sku.rs` | 機型表、執行期辨識、手動指定、世代排除 |
 | `src/i18n.rs` | 三種語言，可用外部 `.lang` 檔覆寫 |
 | `src/linux/` | evdev、uinput、hidraw、i2c 後端 |
+| `gui/` | egui 背光介面，Windows 與 Linux 共用 |
 | `lang/` | zh-CN、zh-TW、en 文案 |
 | `site/` | 官網原始碼，發佈到 https://asus-numpad.github.io/ |
 | `tools/` | `push-site.sh`（官網同步）、`repo-gen.sh`（倉庫索引） |
