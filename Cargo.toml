@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "winapp"]
+resolver = "2"
+
 [package]
 name = "asus-numpad"
 version = "1.0.3"
