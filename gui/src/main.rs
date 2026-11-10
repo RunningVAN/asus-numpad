@@ -23,6 +23,7 @@ mod kbdmap;
 mod settings;
 mod shot;
 mod sysinfo;
+mod theme;
 mod ui_font;
 
 #[cfg(target_os = "linux")]

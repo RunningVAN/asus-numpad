@@ -55,6 +55,17 @@ Linux 是全套。灯光页：
 
 底部四个按钮：保存、保存并重启服务、重新读取、恢复默认。写盘目标取决于权限——以 root 跑就写系统路径，否则写用户级路径，界面上会标明当前目标。改这些字段等价于手改 JSON 再 `systemctl --user restart asus-numpad`，只是不用切终端。
 
+## 外观
+
+界面是「卡片 + 单一强调色」：内容按分组装进圆角卡片，卡片之间留白，页签是顶部的分段控件，
+按钮只有主（实心强调色）/ 次（描边）两级，所以同一屏里哪个是可以点的主动作不需要找。
+
+- 深浅色两套调色板都在 `gui/src/theme.rs`，跟随系统主题；`ASUS_NUMPAD_GUI_THEME=dark|light`
+  可强制指定，截图与交稿时用得上。
+- 亮度调节不是滑块而是档位条：一格一档，点哪格就是哪档，能直接看出「一共几档、还能往哪走」。
+- 颜色、圆角、间距、字号只在 `theme.rs` 里定义一次，页面代码只调 `theme::card` /
+  `theme::section` / `theme::primary` 这些工具，避免各页面各写一套。
+
 几个环境变量，方便排障与截图：
 
 | 变量 | 作用 |
@@ -62,6 +73,7 @@ Linux 是全套。灯光页：
 | `ASUS_NUMPAD_GUI_FULL=1/0` | 强制全套 / 仅灯光界面，覆盖按平台推断的结果（Linux 上想看单灯光界面时用） |
 | `ASUS_NUMPAD_GUI_PAGE=light\|driver\|system\|command\|settings` | 启动时直接落在某一页 |
 | `ASUS_NUMPAD_GUI_SHOT=<路径>.ppm` | 渲染几帧后把窗口内容存成 PPM 并退出，无需截图工具 |
+| `ASUS_NUMPAD_GUI_THEME=dark\|light` | 强制深色 / 浅色，默认跟随系统（截图用） |
 
 ## 键盘四档 → 触摸板亮度
 

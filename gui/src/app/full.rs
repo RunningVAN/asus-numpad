@@ -15,6 +15,7 @@ use asus_numpad::layout::{KeyMode, LayoutSupport, LAYOUTS};
 use asus_numpad::sku::{self, SKUS};
 
 use super::{field, small, Action, App, WARN};
+use crate::theme;
 
 /// 机型下拉里「自动识别」的取值（配置里 `sku: null`）。
 const SKU_AUTO: &str = "";
@@ -25,13 +26,21 @@ impl App {
         let before = self.driver.cfg.clone();
 
         self.draw_cfg_header(ui, action);
+        ui.add_space(10.0);
         self.draw_identity(ui);
+        ui.add_space(10.0);
         self.draw_behavior(ui);
+        ui.add_space(10.0);
         self.draw_channel(ui, action);
+        ui.add_space(10.0);
         self.draw_gestures(ui);
+        ui.add_space(10.0);
         self.draw_timing(ui);
+        ui.add_space(10.0);
         self.draw_language(ui);
+        ui.add_space(10.0);
         self.draw_cfg_json(ui);
+        ui.add_space(10.0);
         self.draw_cfg_actions(ui, action);
 
         if self.driver.cfg != before {
@@ -39,47 +48,69 @@ impl App {
         }
     }
 
+    /// 驱动配置页的抬头：写在哪、有没有改动、以及四个落盘动作。
+    ///
+    /// 四个按钮按「动词轻重」排：主按钮是保存并重启（改完参数的常规动作），
+    /// 只保存和重新载入是次级，恢复默认放最后且用次级样式，避免误点。
     fn draw_cfg_header(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
-        ui.separator();
-        ui.horizontal(|ui| {
-            ui.heading("驱动配置");
-            if self.driver.dirty {
-                ui.label(egui::RichText::new("有改动未保存").small().color(WARN));
-            }
-        });
-        ui.label(small(format!("写入：{}", self.driver.write_path.display())));
-        if self.driver.path != self.driver.write_path {
-            ui.label(small(format!("读取自：{}", self.driver.path.display())));
-        }
-        if !self.driver.existed {
-            ui.label(small("磁盘上还没有配置文件，保存后按官方默认值创建。"));
-        }
-        for note in self.driver.notes.clone() {
-            ui.label(egui::RichText::new(note).small().color(WARN));
-        }
+        let p = self.palette;
+        let dirty = self.driver.dirty;
+        let write_path = self.driver.write_path.display().to_string();
+        let read_path = self.driver.path.display().to_string();
+        let same_path = self.driver.path == self.driver.write_path;
+        let existed = self.driver.existed;
+        let notes = self.driver.notes.clone();
 
-        ui.horizontal(|ui| {
-            if ui.button("保存").clicked() {
-                *action = Some(Action::SaveDriver);
+        theme::card(ui, &p, |ui| {
+            ui.horizontal(|ui| {
+                theme::title_row(ui, &p, "驱动配置");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if dirty {
+                        theme::pill(ui, "有改动未保存", p.warn)
+                            .on_hover_text("点「保存」或「保存并重启服务」落盘");
+                    } else {
+                        theme::pill(ui, "已与磁盘一致", p.ok);
+                    }
+                });
+            });
+            ui.add_space(2.0);
+            ui.label(small(format!("写入：{write_path}")));
+            if !same_path {
+                ui.label(small(format!("读取自：{read_path}")));
             }
-            if ui.button("保存并重启服务").clicked() {
-                *action = Some(Action::SaveDriverAndRestart);
+            if !existed {
+                ui.label(small("磁盘上还没有配置文件，保存后按官方默认值创建。"));
             }
-            if ui.button("重新载入").clicked() {
-                *action = Some(Action::ReloadDriver);
+            for note in notes {
+                ui.label(egui::RichText::new(note).small().color(p.warn));
             }
-            if ui.button("恢复默认").clicked() {
-                *action = Some(Action::ResetDriver);
-            }
+
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if theme::primary(ui, &p, "保存并重启服务").clicked() {
+                    *action = Some(Action::SaveDriverAndRestart);
+                }
+                if theme::secondary(ui, &p, "保存").clicked() {
+                    *action = Some(Action::SaveDriver);
+                }
+                if theme::secondary(ui, &p, "重新载入").clicked() {
+                    *action = Some(Action::ReloadDriver);
+                }
+                if theme::secondary(ui, &p, "恢复默认").clicked() {
+                    *action = Some(Action::ResetDriver);
+                }
+            });
+            ui.label(small(
+                "只点保存不会打断正在用的触摸板；改机型/布局/阈值这类参数要点「保存并重启服务」才生效。",
+            ));
         });
-        ui.label(small(
-            "只点保存不会打断正在用的触摸板；改机型/布局/阈值这类参数要点「保存并重启服务」才生效。",
-        ));
     }
 
     /// 机型与布局：这两项决定键位怎么映射，放最前面。
     fn draw_identity(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new("机型与布局")
+        let p = self.palette;
+        theme::card(ui, &p, |ui| {
+            egui::CollapsingHeader::new("机型与布局")
             .default_open(true)
             .show(ui, |ui| {
                 // ---- 机型 ----
@@ -228,10 +259,13 @@ impl App {
                     "keypad 对小键盘层有效；digits 让数字进主键区，某些游戏与输入法只认这一种。",
                 ));
             });
+        });
     }
 
     fn draw_behavior(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new("键盘行为")
+        let p = self.palette;
+        theme::card(ui, &p, |ui| {
+            egui::CollapsingHeader::new("键盘行为")
             .default_open(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -313,11 +347,14 @@ impl App {
                     "独占触摸板（关掉后系统手势也能同时收到事件）",
                 );
             });
+        });
     }
 
     /// 背光通道：灯不亮时第一个要看的地方。
     fn draw_channel(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
-        egui::CollapsingHeader::new("背光通道与跟灯")
+        let p = self.palette;
+        theme::card(ui, &p, |ui| {
+            egui::CollapsingHeader::new("背光通道与跟灯")
             .default_open(true)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -407,6 +444,7 @@ impl App {
                 ui.label("手动档位表");
                 self.draw_manual_levels(ui, action);
             });
+        });
     }
 
     /// `manual_brightness_levels` 的编辑器：每档一个命令字，增删档都直接改表长。
@@ -475,135 +513,150 @@ impl App {
     }
 
     fn draw_gestures(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new("手势与阈值（改错会影响手感）")
-            .default_open(false)
-            .show(ui, |ui| {
-                let rows: [(&str, &mut f64, &str); 5] = [
-                    (
-                        "应用手势触发距离",
-                        &mut self.driver.cfg.app_gesture_trig_um,
-                        "μm",
-                    ),
-                    ("手势触发距离", &mut self.driver.cfg.gesture_trig_um, "μm"),
-                    ("轻触阈值", &mut self.driver.cfg.tap_threshold_mm, "mm"),
-                    (
-                        "双指滚动距离",
-                        &mut self.driver.cfg.scroll_finger_dist_mm,
-                        "mm",
-                    ),
-                    (
-                        "连击最小间隔",
-                        &mut self.driver.cfg.tap_interval_min_ms,
-                        "ms",
-                    ),
-                ];
-                for (label, value, unit) in rows {
+        let p = self.palette;
+        theme::card(ui, &p, |ui| {
+            egui::CollapsingHeader::new("手势与阈值（改错会影响手感）")
+                .default_open(false)
+                .show(ui, |ui| {
+                    let rows: [(&str, &mut f64, &str); 5] = [
+                        (
+                            "应用手势触发距离",
+                            &mut self.driver.cfg.app_gesture_trig_um,
+                            "μm",
+                        ),
+                        ("手势触发距离", &mut self.driver.cfg.gesture_trig_um, "μm"),
+                        ("轻触阈值", &mut self.driver.cfg.tap_threshold_mm, "mm"),
+                        (
+                            "双指滚动距离",
+                            &mut self.driver.cfg.scroll_finger_dist_mm,
+                            "mm",
+                        ),
+                        (
+                            "连击最小间隔",
+                            &mut self.driver.cfg.tap_interval_min_ms,
+                            "ms",
+                        ),
+                    ];
+                    for (label, value, unit) in rows {
+                        ui.horizontal(|ui| {
+                            ui.label(label);
+                            ui.add(egui::DragValue::new(value).speed(1.0));
+                            ui.label(unit);
+                        });
+                    }
                     ui.horizontal(|ui| {
-                        ui.label(label);
-                        ui.add(egui::DragValue::new(value).speed(1.0));
-                        ui.label(unit);
+                        ui.label("触摸板尺寸");
+                        ui.add(egui::DragValue::new(&mut self.driver.cfg.touchpad_width_mm));
+                        ui.label("×");
+                        ui.add(egui::DragValue::new(
+                            &mut self.driver.cfg.touchpad_height_mm,
+                        ));
+                        ui.label("mm");
                     });
-                }
-                ui.horizontal(|ui| {
-                    ui.label("触摸板尺寸");
-                    ui.add(egui::DragValue::new(&mut self.driver.cfg.touchpad_width_mm));
-                    ui.label("×");
-                    ui.add(egui::DragValue::new(
-                        &mut self.driver.cfg.touchpad_height_mm,
-                    ));
-                    ui.label("mm");
                 });
-            });
+        });
     }
 
     fn draw_timing(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new("时序参数（固件帧计数，一般不用动）")
-            .default_open(false)
-            .show(ui, |ui| {
-                let rows: [(&str, &mut u32); 6] = [
-                    ("帧间隔", &mut self.driver.cfg.frame_ms),
-                    (
-                        "NumLock 触发帧",
-                        &mut self.driver.cfg.numlock_trigger_frames,
-                    ),
-                    (
-                        "SENDKEY 连续触发帧",
-                        &mut self.driver.cfg.cont_sendkey_trigger_frames,
-                    ),
-                    ("图标区长按帧", &mut self.driver.cfg.numadv_trigger_frames),
-                    ("按键保持帧", &mut self.driver.cfg.touch_sendkey_frames),
-                    ("最长工作时间", &mut self.driver.cfg.max_work_time_ms),
-                ];
-                for (label, value) in rows {
+        let p = self.palette;
+        theme::card(ui, &p, |ui| {
+            egui::CollapsingHeader::new("时序参数（固件帧计数，一般不用动）")
+                .default_open(false)
+                .show(ui, |ui| {
+                    let rows: [(&str, &mut u32); 6] = [
+                        ("帧间隔", &mut self.driver.cfg.frame_ms),
+                        (
+                            "NumLock 触发帧",
+                            &mut self.driver.cfg.numlock_trigger_frames,
+                        ),
+                        (
+                            "SENDKEY 连续触发帧",
+                            &mut self.driver.cfg.cont_sendkey_trigger_frames,
+                        ),
+                        ("图标区长按帧", &mut self.driver.cfg.numadv_trigger_frames),
+                        ("按键保持帧", &mut self.driver.cfg.touch_sendkey_frames),
+                        ("最长工作时间", &mut self.driver.cfg.max_work_time_ms),
+                    ];
+                    for (label, value) in rows {
+                        ui.horizontal(|ui| {
+                            ui.label(label);
+                            ui.add(egui::DragValue::new(value));
+                        });
+                    }
                     ui.horizontal(|ui| {
-                        ui.label(label);
-                        ui.add(egui::DragValue::new(value));
+                        ui.label("SENDKEY 判定比例");
+                        ui.add(egui::DragValue::new(
+                            &mut self.driver.cfg.touch_sendkey_ratio,
+                        ));
                     });
-                }
-                ui.horizontal(|ui| {
-                    ui.label("SENDKEY 判定比例");
-                    ui.add(egui::DragValue::new(
-                        &mut self.driver.cfg.touch_sendkey_ratio,
-                    ));
                 });
-            });
+        });
     }
 
     fn draw_language(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new("驱动语言")
-            .default_open(false)
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("语言");
-                    egui::ComboBox::from_id_salt("cfg_lang")
-                        .width(240.0)
-                        .selected_text(lang_label(&self.driver.cfg.language))
-                        .show_ui(ui, |ui| {
-                            for code in ["auto", "zh-CN", "zh-TW", "en"] {
-                                ui.selectable_value(
-                                    &mut self.driver.cfg.language,
-                                    code.to_string(),
-                                    lang_label(code),
-                                );
-                            }
-                        });
+        let p = self.palette;
+        theme::card(ui, &p, |ui| {
+            egui::CollapsingHeader::new("驱动语言")
+                .default_open(false)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("语言");
+                        egui::ComboBox::from_id_salt("cfg_lang")
+                            .width(240.0)
+                            .selected_text(lang_label(&self.driver.cfg.language))
+                            .show_ui(ui, |ui| {
+                                for code in ["auto", "zh-CN", "zh-TW", "en"] {
+                                    ui.selectable_value(
+                                        &mut self.driver.cfg.language,
+                                        code.to_string(),
+                                        lang_label(code),
+                                    );
+                                }
+                            });
+                    });
+                    ui.label(small(
+                        "驱动与 CLI 的输出文案跟着这一项走，界面自身语言不受影响。",
+                    ));
                 });
-                ui.label(small(
-                    "驱动与 CLI 的输出文案跟着这一项走，界面自身语言不受影响。",
-                ));
-            });
+        });
     }
 
     fn draw_cfg_json(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new("配置文件内容（JSON）")
-            .default_open(false)
-            .show(ui, |ui| {
-                let text = self.driver.json();
-                ui.horizontal(|ui| {
-                    if ui.button("复制").clicked() {
-                        ui.ctx().copy_text(text.clone());
-                    }
-                    ui.label(small("与 asus-numpad --dump-config 输出一致"));
+        let p = self.palette;
+        theme::card(ui, &p, |ui| {
+            egui::CollapsingHeader::new("配置文件内容（JSON）")
+                .default_open(false)
+                .show(ui, |ui| {
+                    let text = self.driver.json();
+                    ui.horizontal(|ui| {
+                        if ui.button("复制").clicked() {
+                            ui.ctx().copy_text(text.clone());
+                        }
+                        ui.label(small("与 asus-numpad --dump-config 输出一致"));
+                    });
+                    let mut shown = text;
+                    ui.add(
+                        egui::TextEdit::multiline(&mut shown)
+                            .code_editor()
+                            .desired_rows(14)
+                            .desired_width(f32::INFINITY),
+                    );
                 });
-                let mut shown = text;
-                ui.add(
-                    egui::TextEdit::multiline(&mut shown)
-                        .code_editor()
-                        .desired_rows(14)
-                        .desired_width(f32::INFINITY),
-                );
-            });
+        });
     }
 
     fn draw_cfg_actions(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            if ui.button("保存配置").clicked() {
-                *action = Some(Action::SaveDriver);
-            }
-            if ui.button("保存并重启服务").clicked() {
-                *action = Some(Action::SaveDriverAndRestart);
-            }
+        let p = self.palette;
+        theme::card(ui, &p, |ui| {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                if ui.button("保存配置").clicked() {
+                    *action = Some(Action::SaveDriver);
+                }
+                if ui.button("保存并重启服务").clicked() {
+                    *action = Some(Action::SaveDriverAndRestart);
+                }
+            });
         });
     }
 }
