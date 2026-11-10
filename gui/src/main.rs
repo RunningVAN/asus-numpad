@@ -17,6 +17,8 @@
 mod app;
 mod autostart;
 mod backend;
+mod cli_bridge;
+mod cmdform;
 mod settings;
 mod sysinfo;
 mod ui_font;

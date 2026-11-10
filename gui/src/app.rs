@@ -13,6 +13,8 @@ use asus_numpad::led_policy::{RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE};
 use asus_numpad::led_proto;
 
 use crate::backend::Backend;
+use crate::cli_bridge::{self, Completion};
+use crate::cmdform::{BrightAction, CommandForm, LedAction, LevelsAction, SubCmd};
 use crate::settings::{self, Settings};
 use crate::sysinfo::{self, ServiceVerb, Snapshot};
 use crate::{autostart, backend, ui_font};
@@ -40,6 +42,7 @@ enum Action {
     ServiceRun(ServiceVerb),
     ServiceAutostart(bool),
     RefreshState,
+    RunCommand,
 }
 
 pub struct App {
@@ -60,6 +63,13 @@ pub struct App {
     state_at: Instant,
     /// 后台服务是否开机自启；Windows 用注册表那份，Linux 用这一份
     service_enabled: bool,
+    /// 命令面板：与 `asus-numpad` CLI 同一套实现，界面只负责拼参数
+    cmd: CommandForm,
+    cmd_bin: Option<std::path::PathBuf>,
+    cmd_rx: Option<std::sync::mpsc::Receiver<Completion>>,
+    cmd_running: bool,
+    cmd_out: Option<String>,
+    cmd_ok: bool,
 }
 
 impl App {
@@ -88,6 +98,12 @@ impl App {
             state,
             state_at: Instant::now(),
             service_enabled,
+            cmd: CommandForm::default(),
+            cmd_bin: cli_bridge::locate(),
+            cmd_rx: None,
+            cmd_running: false,
+            cmd_out: None,
+            cmd_ok: true,
         };
         app.rescan();
         if app.settings.apply_on_start && app.settings.on {
@@ -111,6 +127,114 @@ impl App {
     fn set_status(&mut self, text: String, bad: bool) {
         self.status = text;
         self.status_bad = bad;
+    }
+
+    /// 把表单拼成 `asus-numpad <args>` 交给后台线程跑。
+    ///
+    /// 不在这里直接 `Command::output()`：读 DMI、等 systemd 重启服务都可能要几百毫秒，
+    /// 同步执行会把界面卡住。
+    fn run_command(&mut self) {
+        if self.cmd_running {
+            return;
+        }
+        let Some(bin) = self.cmd_bin.clone() else {
+            self.set_status(
+                "找不到 asus-numpad 可执行文件：装好驱动包后点「重新查找」，或设置 ASUS_NUMPAD_BIN"
+                    .to_string(),
+                true,
+            );
+            return;
+        };
+        let args = match self.cmd.argv() {
+            Ok(args) => args,
+            Err(err) => {
+                self.set_status(format!("参数有误：{err}"), true);
+                return;
+            }
+        };
+        let label = args.join(" ");
+        let timeout = self.cmd.timeout();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let done = cli_bridge::run(&bin, args, timeout);
+            let _ = tx.send(done);
+        });
+        self.cmd_rx = Some(rx);
+        self.cmd_running = true;
+        let note = match timeout {
+            Some(limit) => format!(
+                "正在执行 asus-numpad {label} ……（{} 秒后自动收工）",
+                limit.as_secs()
+            ),
+            None => format!("正在执行 asus-numpad {label} ……"),
+        };
+        self.set_status(note, false);
+    }
+
+    fn poll_command(&mut self) {
+        use std::sync::mpsc::TryRecvError;
+
+        let Some(rx) = self.cmd_rx.as_ref() else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(done) => {
+                self.cmd_rx = None;
+                self.cmd_running = false;
+                self.finish_command(done);
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => {
+                self.cmd_rx = None;
+                self.cmd_running = false;
+                self.set_status("命令行进程异常中断".to_string(), true);
+            }
+        }
+    }
+
+    fn finish_command(&mut self, done: Completion) {
+        let ok = done.ok();
+        let wrote = self.cmd.writes_config();
+        let summary = done.summary();
+
+        // 日志里放子命令本身与首行结果，完整输出留在输出框
+        let label = if done.argv.len() > 1 {
+            done.argv[1..].join(" ")
+        } else {
+            "asus-numpad".to_string()
+        };
+        let mut note = done
+            .error
+            .clone()
+            .into_iter()
+            .chain(done.stderr.lines().map(str::to_string))
+            .chain(done.stdout.lines().map(str::to_string))
+            .map(|line| line.trim().to_string())
+            .find(|line| !line.is_empty())
+            .unwrap_or_else(|| match done.code {
+                Some(code) => format!("退出码 {code}"),
+                None => "被信号终止".to_string(),
+            });
+        if note.chars().count() > 60 {
+            note = note.chars().take(60).collect::<String>() + "…";
+        }
+        self.push_log(format!("cli {label}"), note.clone(), ok);
+
+        self.cmd_ok = ok;
+        self.cmd_out = Some(summary);
+        let verdict = if ok {
+            "完成".to_string()
+        } else if done.timed_out {
+            "已按时间上限终止，输出见下方".to_string()
+        } else {
+            note.clone()
+        };
+        self.set_status(format!("asus-numpad {label}：{verdict}"), !ok);
+
+        // 写配置的子命令会改机型 / 布局 / 档位 / 语言，界面上的状态跟着重读一次
+        if ok && wrote {
+            self.refresh_state();
+        }
     }
 
     fn rescan(&mut self) {
@@ -551,6 +675,325 @@ impl App {
         ));
     }
 
+    /// 命令面板：把 CLI 的全部子命令接到界面上。
+    ///
+    /// 做法是拼参数、调 `asus-numpad` 本身，而不是在界面里重写一遍：`check` 要读 DMI，
+    /// `levels` / `sku` / `lang` 要改配置文件，输出文案又跟着语言文件走，重写必然与
+    /// CLI 漂移。界面上显示的命令行与终端里敲下的完全一致，可直接复制过去复现。
+    fn draw_commands(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
+        ui.separator();
+        // 默认展开：这张面板就是给人「不去终端也能把所有子命令跑一遍」用的，收起来
+        // 等于把功能藏起来；真嫌长的人点一下标题就收。
+        egui::CollapsingHeader::new("命令行（asus-numpad 全部子命令）")
+            .default_open(true)
+            .show(ui, |ui| {
+                self.draw_command_target(ui);
+                ui.add_space(4.0);
+
+                ui.horizontal(|ui| {
+                    ui.label("子命令");
+                    egui::ComboBox::from_id_salt("cmd_sub")
+                        .width(130.0)
+                        .selected_text(self.cmd.sub.name())
+                        .show_ui(ui, |ui| {
+                            for sub in SubCmd::ALL {
+                                ui.selectable_value(&mut self.cmd.sub, sub, sub.name());
+                            }
+                        });
+                    ui.label(small(self.cmd.sub.about()));
+                });
+
+                ui.add_space(2.0);
+                self.draw_command_args(ui);
+                self.draw_command_advanced(ui);
+                ui.add_space(4.0);
+                self.draw_command_launcher(ui, action);
+                self.draw_command_output(ui);
+            });
+    }
+
+    fn draw_command_target(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            match &self.cmd_bin {
+                Some(path) => {
+                    ui.label(small(format!("可执行文件：{}", path.display())));
+                }
+                None => {
+                    ui.label(
+                        egui::RichText::new("没找到 asus-numpad 可执行文件，命令面板暂不可用")
+                            .small()
+                            .color(WARN),
+                    );
+                }
+            }
+            if ui.button("重新查找").clicked() {
+                self.cmd_bin = cli_bridge::locate();
+            }
+        });
+        if self.cmd_bin.is_none() {
+            ui.label(small(
+                "装好驱动包后再点「重新查找」；或用环境变量 ASUS_NUMPAD_BIN 指向可执行文件。",
+            ));
+        }
+        ui.label(small(
+            "这里调的就是同一个 asus-numpad 二进制，输出与终端一致。`run` 是前台常驻引擎，界面上对应的入口在「系统状态」区的服务启停。",
+        ));
+    }
+
+    fn draw_command_args(&mut self, ui: &mut egui::Ui) {
+        match self.cmd.sub {
+            SubCmd::Check => {
+                ui.label(small("这条子命令不需要参数。"));
+            }
+            SubCmd::Dump => {
+                ui.label(small(
+                    "打印原始触摸板事件，本该一直跑到 Ctrl+C。这里只跑 5 秒就收工，把这段时间里的事件贴到下面。",
+                ));
+            }
+            SubCmd::Bright => {
+                let items: Vec<_> = BrightAction::ALL.iter().map(|a| (*a, a.label())).collect();
+                ui.horizontal(|ui| {
+                    ui.label("动作");
+                    combo(ui, "cmd_bright_action", &mut self.cmd.bright_action, &items);
+                });
+                match self.cmd.bright_action {
+                    BrightAction::Step => {
+                        field(ui, "档位", &mut self.cmd.bright_step, "1 起，取决于档位数");
+                    }
+                    BrightAction::Follow => {
+                        ui.checkbox(&mut self.cmd.bright_follow_on, "开启跟随（不勾＝关闭跟随）");
+                        ui.label(small("会写入配置并重启后台服务。"));
+                    }
+                    BrightAction::Status => {
+                        ui.label(small("只打印当前档位与跟随状态，不改配置。"));
+                    }
+                    BrightAction::Cycle | BrightAction::Up | BrightAction::Down => {
+                        ui.label(small("按当前档位表挪一档，并重启后台服务。"));
+                    }
+                }
+            }
+            SubCmd::Levels => {
+                let items: Vec<_> = LevelsAction::ALL.iter().map(|a| (*a, a.label())).collect();
+                ui.horizontal(|ui| {
+                    ui.label("动作");
+                    combo(ui, "cmd_levels_action", &mut self.cmd.levels_action, &items);
+                });
+                match self.cmd.levels_action {
+                    LevelsAction::Table => {
+                        ui.label(small("打印每档对应的命令字。"));
+                    }
+                    LevelsAction::Reset => {
+                        ui.label(small("把档位表恢复成默认，并重启后台服务。"));
+                    }
+                    LevelsAction::Set => {
+                        field(ui, "档位", &mut self.cmd.levels_step, "从 1 开始");
+                        field(
+                            ui,
+                            "命令字",
+                            &mut self.cmd.levels_value,
+                            "0x41 到 0x48，或十进制",
+                        );
+                        ui.label(small("相邻档必须单调，写反了 CLI 会拒绝并保持原配置。"));
+                    }
+                }
+            }
+            SubCmd::Led => {
+                let items: Vec<_> = LedAction::ALL.iter().map(|a| (*a, a.label())).collect();
+                ui.horizontal(|ui| {
+                    ui.label("动作");
+                    combo(ui, "cmd_led_action", &mut self.cmd.led_action, &items);
+                });
+                match self.cmd.led_action {
+                    LedAction::Status => {
+                        ui.label(small(
+                            "CLI 的 led 没有状态查询，不带值只会打印用法。当前命令字看「灯光」区或 check。",
+                        ));
+                    }
+                    LedAction::Raw => {
+                        field(ui, "命令字", &mut self.cmd.led_raw, "如 0x41");
+                        ui.label(small(
+                            "绕开状态机直接下发：led on 亮而 led 0x41 不亮，就说明这台机器只吃两态。",
+                        ));
+                    }
+                    LedAction::On | LedAction::Off => {
+                        ui.label(small("直接从当前选中的接口下发一帧，不改配置。"));
+                    }
+                }
+            }
+            SubCmd::Layout => {
+                field(
+                    ui,
+                    "布局名",
+                    &mut self.cmd.layout_name,
+                    "留空＝只查看，如 g614",
+                );
+                ui.checkbox(
+                    &mut self.cmd.layout_ids,
+                    "同时打印 HID 号 → 布局对照表（--ids）",
+                );
+                if !self.cmd.layout_name.trim().is_empty() {
+                    ui.label(small("填了布局名就会写配置并重启后台服务。"));
+                }
+            }
+            SubCmd::Sku => {
+                field(
+                    ui,
+                    "机型",
+                    &mut self.cmd.sku_id,
+                    "留空＝查看；list＝列全部；auto＝恢复自动识别",
+                );
+                ui.label(small("指定具体机型 ID 会写配置，覆盖自动识别结果。"));
+            }
+            SubCmd::Lang => {
+                field(
+                    ui,
+                    "语言",
+                    &mut self.cmd.lang_code,
+                    "留空＝查看；auto / en / zh_CN / zh_TW",
+                );
+            }
+        }
+    }
+
+    fn draw_command_advanced(&mut self, ui: &mut egui::Ui) {
+        egui::CollapsingHeader::new("高级选项（全局参数）")
+            .default_open(false)
+            .show(ui, |ui| {
+                let adv = &mut self.cmd.advanced;
+                egui::Grid::new("cmd_adv")
+                    .num_columns(2)
+                    .spacing([12.0, 4.0])
+                    .show(ui, |ui| {
+                        let rows: [(&str, &mut String, &str); 12] = [
+                            ("--config", &mut adv.config, "配置文件路径"),
+                            ("--device", &mut adv.device, "指定触摸板设备"),
+                            ("--keyboard", &mut adv.keyboard, "键盘设备（读背光状态用）"),
+                            ("--led", &mut adv.led, "LED 设备"),
+                            ("--hidraw", &mut adv.hidraw, "hidraw 节点名，如 hidraw3"),
+                            ("--i2c-bus", &mut adv.i2c_bus, "整数"),
+                            ("--i2c-addr", &mut adv.i2c_addr, "如 0x15"),
+                            ("--i2c-transfer", &mut adv.i2c_transfer, "i2c 传输方式"),
+                            ("--key-mode", &mut adv.key_mode, "键盘扫描码模式"),
+                            ("--layout", &mut adv.layout, "覆盖布局名"),
+                            ("--sku", &mut adv.sku, "覆盖机型 ID"),
+                            ("--numlock", &mut adv.numlock, "覆盖 NumLock 状态来源"),
+                        ];
+                        for (flag, value, hint) in rows {
+                            ui.monospace(flag);
+                            ui.add(
+                                egui::TextEdit::singleline(value)
+                                    .hint_text(hint)
+                                    .desired_width(240.0),
+                            );
+                            ui.end_row();
+                        }
+                        ui.monospace("--mixed-mode");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut adv.mixed_mode)
+                                .hint_text("混排模式")
+                                .desired_width(240.0),
+                        );
+                        ui.end_row();
+                        ui.monospace("--pressure-min");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut adv.pressure_min)
+                                .hint_text("整数")
+                                .desired_width(240.0),
+                        );
+                        ui.end_row();
+                    });
+
+                ui.add_space(2.0);
+                ui.checkbox(&mut adv.verbose, "--verbose  打印识别与通道细节");
+                ui.checkbox(&mut adv.dump_config, "--dump-config  打印解析前的原始配置");
+                ui.checkbox(
+                    &mut adv.no_follow_brightness,
+                    "--no-follow-brightness  不跟随键盘背光",
+                );
+                ui.checkbox(
+                    &mut adv.allow_unverified,
+                    "--allow-unverified  允许未验证机型 / 布局",
+                );
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut adv.grab, "--grab  独占抓取输入设备");
+                    ui.checkbox(&mut adv.no_grab, "--no-grab");
+                });
+                ui.label(small(
+                    "留空的项不会出现在命令行里；--grab 与 --no-grab 只能勾一个。",
+                ));
+            });
+    }
+
+    fn draw_command_launcher(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
+        let bin_name = self
+            .cmd_bin
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "asus-numpad".to_string());
+        let preview = self.cmd.preview(&bin_name);
+        let writes = self.cmd.writes_config();
+
+        ui.label(egui::RichText::new(preview.clone()).monospace().small());
+        ui.horizontal(|ui| {
+            let can_run = self.cmd_bin.is_some() && !self.cmd_running;
+            let text = if self.cmd_running {
+                "执行中……"
+            } else {
+                "执行"
+            };
+            if ui.add_enabled(can_run, egui::Button::new(text)).clicked() {
+                *action = Some(Action::RunCommand);
+            }
+            if ui.button("复制命令").clicked() {
+                ui.ctx().copy_text(preview.clone());
+            }
+            if writes {
+                ui.label(egui::RichText::new("会写入配置文件").small().color(WARN));
+            }
+        });
+    }
+
+    fn draw_command_output(&mut self, ui: &mut egui::Ui) {
+        if self.cmd_running {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(small("等待进程返回……"));
+            });
+        }
+
+        let Some(output) = self.cmd_out.clone() else {
+            return;
+        };
+        ui.horizontal(|ui| {
+            ui.label("输出");
+            if ui.button("复制").clicked() {
+                ui.ctx().copy_text(output.clone());
+            }
+            if ui.button("清空").clicked() {
+                self.cmd_out = None;
+            }
+        });
+        if self.cmd_out.is_none() {
+            return;
+        }
+
+        let color = if self.cmd_ok {
+            ui.visuals().text_color()
+        } else {
+            egui::Color32::from_rgb(210, 90, 90)
+        };
+        egui::ScrollArea::vertical()
+            .id_salt("cmd_output")
+            .max_height(240.0)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                ui.add(
+                    egui::Label::new(egui::RichText::new(output).monospace().small().color(color))
+                        .wrap(),
+                );
+            });
+    }
+
     fn draw_settings(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
         ui.separator();
         egui::CollapsingHeader::new("设置")
@@ -680,6 +1123,7 @@ impl App {
                 self.refresh_state();
             }
             Action::RefreshState => self.refresh_state(),
+            Action::RunCommand => self.run_command(),
         }
     }
 }
@@ -690,6 +1134,7 @@ impl eframe::App for App {
         let mut action: Option<Action> = None;
 
         self.poll_numlock();
+        self.poll_command();
 
         // 机型 / 服务状态在会话里会变（插拔、systemctl 被别处调用），定期重读一次
         if self.state_at.elapsed() > STATE_REFRESH {
@@ -707,6 +1152,7 @@ impl eframe::App for App {
                     self.draw_lighting(ui, &mut action);
                     self.draw_follow(ui);
                     self.draw_system(ui, &mut action);
+                    self.draw_commands(ui, &mut action);
                     self.draw_log(ui);
                     self.draw_settings(ui, &mut action);
                 });
@@ -731,6 +1177,43 @@ impl eframe::App for App {
 
 fn small(text: impl Into<String>) -> egui::RichText {
     egui::RichText::new(text.into()).small().weak()
+}
+
+/// 「会写配置」「没找到可执行文件」这类提示色，和系统状态区的告警保持一致。
+const WARN: egui::Color32 = egui::Color32::from_rgb(200, 150, 40);
+
+/// 下拉框：`items` 里第一项通常就是默认值，找不到匹配时显示空串而不是 panic。
+fn combo<T: PartialEq + Copy>(
+    ui: &mut egui::Ui,
+    id: &str,
+    value: &mut T,
+    items: &[(T, &'static str)],
+) {
+    let current = items
+        .iter()
+        .find(|(candidate, _)| candidate == value)
+        .map(|(_, label)| *label)
+        .unwrap_or("");
+    egui::ComboBox::from_id_salt(id)
+        .width(230.0)
+        .selected_text(current)
+        .show_ui(ui, |ui| {
+            for (candidate, label) in items {
+                ui.selectable_value(value, *candidate, *label);
+            }
+        });
+}
+
+/// 一行「标签 + 输入框」。空串一律视为「不传这个参数」，由 cmdform 判空。
+fn field(ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        ui.add(
+            egui::TextEdit::singleline(value)
+                .hint_text(hint)
+                .desired_width(220.0),
+        );
+    });
 }
 
 /// 日志时间戳（UTC，`HH:MM:SS`）。只用于看报文先后，不做展示级时区换算。

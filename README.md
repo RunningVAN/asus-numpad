@@ -360,6 +360,13 @@ The Windows build of the same crate replaces the hidraw backend with `setupapi` 
 leaves numpad input to the vendor driver; the report bytes are produced by the shared `led_proto`
 layer, so both platforms send identical traffic.
 
+The window also carries a **command panel**: every `asus-numpad` subcommand (`check`, `dump`,
+`bright`, `levels`, `led`, `layout`, `sku`, `lang`) becomes a form. Running it spawns the same
+executable in the background and pastes its output back, so the GUI never re-implements what the
+CLI does or drifts from it. `run` stays out of the panel — the foreground engine is equivalent to
+start / stop on the `asus-numpad` unit in the system section. The binary is looked up via
+`ASUS_NUMPAD_BIN`, then the program's own directory, then `PATH`.
+
 ```bash
 cargo run -p asus-numpad-gui      # or: cargo build --release -p asus-numpad-gui
 ```

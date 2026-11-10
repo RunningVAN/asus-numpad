@@ -323,6 +323,12 @@ NumLock、写入日志。Linux 上还显示识别出的机型、布局、hidraw 
 同一份 crate 在 Windows 上把 hidraw 后端换成 `setupapi` + `hid.dll`，小键盘输入仍交给官方驱动；
 报文由共用的 `led_proto` 生成，两端发出去的字节完全一致。
 
+窗口里还有一张「命令行」面板，把 `asus-numpad` 的每个子命令（`check`、`dump`、`bright`、
+`levels`、`led`、`layout`、`sku`、`lang`）连同各自的参数做成了表单。点执行就是在后台跑同一个
+可执行文件，输出原样贴回来——界面不重写一遍逻辑，也就不存在与 CLI 漂移的问题。`run` 不进面板，
+前台常驻引擎对应「系统状态」区的服务启停。可执行文件按 `ASUS_NUMPAD_BIN` → 程序同目录 →
+`PATH` 的顺序查找。
+
 ```bash
 cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
 ```
