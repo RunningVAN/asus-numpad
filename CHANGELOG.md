@@ -147,6 +147,17 @@
   `layout` / `check`、`--lang` 切换、坏值是否被拒并留提示），全程用临时配置，不碰 `~/.config`
   与任何 hidraw 设备；需要手指按触摸板的三项只打印命令。
 
+### 交叉构建 Windows / Linux 二进制
+
+- 新增 `tools/build-cross.sh`：一条命令产出 `asus-numpad.exe`（PE32+ x86-64）与
+  `asus-numpad`（ELF x86-64，glibc ≥ 2.17）。用 zig 里自带的 MinGW 与 glibc 当链接器
+  （`cargo-zigbuild`），不必按 mingw-w64，也不必起容器；脚本自己下 zig 并在缺
+  `cargo-zigbuild` 时装上。
+- 两个产物都在本机实测构建通过：exe 1.2 MB、ELF 1.34 MB，字符串里能查到
+  `custom_layouts` / `led_proto` / `pressure_switch` / `hotkeys` 与 `check.ext_*`
+  一键，确认扩展功能真进了二进制，不是被 `cfg` 切掉。
+- 三语 README 的构建一节补这一节。GUI crate 不跨构（要吃目标平台的合成器）。
+
 ### 扩展页的保存按钮挪到页首
 
 - 「落盘」卡原来压在最底下：四张配置卡一铺开就是一屏多，改完参数得滚到页尾才找得到

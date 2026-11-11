@@ -544,6 +544,19 @@ No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs
 
 ## Building
 
+### Cross-building the two other targets
+
+```bash
+./tools/build-cross.sh            # both
+./tools/build-cross.sh windows    # target/x86_64-pc-windows-gnu/release/asus-numpad.exe
+./tools/build-cross.sh linux      # target/x86_64-unknown-linux-gnu/release/asus-numpad
+```
+
+The script fetches zig (which ships the MinGW and glibc pieces `windows-gnu` / `linux-gnu`
+need, so no mingw-w64 install and no container) and installs `cargo-zigbuild` if missing.
+The Linux binary is pinned to glibc 2.17, so it runs on anything from Ubuntu 18.04 up.
+The GUI crate is not cross-built - it needs the platform's compositor stack.
+
 ```bash
 ./packaging/build.sh                        # current distribution
 ./packaging/build.sh deb rpm tarball        # explicit targets (deb/rpm/arch/alpine/tarball)

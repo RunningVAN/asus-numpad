@@ -492,6 +492,18 @@ cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
 
 ## 构建
 
+### 交叉构建另外两个平台
+
+```bash
+./tools/build-cross.sh            # 两个都建
+./tools/build-cross.sh windows    # target/x86_64-pc-windows-gnu/release/asus-numpad.exe
+./tools/build-cross.sh linux      # target/x86_64-unknown-linux-gnu/release/asus-numpad
+```
+
+脚本会自己下 zig（它自带 `windows-gnu` / `linux-gnu` 要用的 MinGW 与 glibc，不用装
+mingw-w64、也不用起容器），缺 `cargo-zigbuild` 就装。Linux 目标固定 glibc 2.17 下限，
+Ubuntu 18.04 之后都能直接跑。GUI 那个 crate 不做交叉构建——它要吃目标平台的合成器。
+
 ```bash
 ./packaging/build.sh                        # 当前发行版
 ./packaging/build.sh deb rpm tarball        # 指定目标（deb/rpm/arch/alpine/tarball）
