@@ -103,6 +103,15 @@ check.b_bright_cmd = Dim command       asus-numpad bright 1..4 (0=off, {steps} s
 check.lang_line = UI language       {name} ({code})
 check.lang_source = Language source   {source}
 check.lang_file = Language file     {path}
+check.ext_title = Extension switches:
+check.ext_layouts = Custom layouts      {n} installed ({names})
+check.ext_layouts_none = Custom layouts      none (built-in tables only)
+check.ext_led = Backlight report    {proto}
+check.ext_led_proto = {hex} ({n} bytes)
+check.ext_pressure = Hard press switch   {text}
+check.ext_press_on = on, {percent}% / {frames} frames / {ms}ms cooldown
+check.ext_hotkeys = Hotkeys             {text}
+check.ext_none = none
 check.tests = Offline cases: see `cargo test` (runs on Windows / Linux, no hardware needed)
 check.conclusion = Conclusion: config and geometry agree.
 common.enabled = enabled
@@ -248,6 +257,8 @@ cli.cmd.sku.id = Model id, or auto / list
 layout.current = Layout: configured {layout}, effective {resolved} ({support})
 layout.list_title = Layouts recorded in the official AsusNUMPADFilter.inf (* verified / ~ family, parameters from the INF, not checked on hardware / - no key-position reference):
 layout.legend = * verified   ~ same family, unverified (needs --allow-unverified)   - unsupported
+layout.custom_title = Custom layouts installed from the config (custom_layouts):
+layout.custom_line = + {name} cols={cols} hids={hids}
 layout.ids_title = Touchpad HID hardware ID -> layout (models sharing an ID are interchangeable):
 layout.usage = Usage: asus-numpad layout                 show current layout and the table
       asus-numpad layout --ids           also print the HID hardware ID table

@@ -815,6 +815,72 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
         ),
         None => println!("  {}", i18n::t("lang.file_builtin")),
     }
+    // 扩展开关：真机排障时最先要确认的就是"我配的东西到底读进去了没有"。
+    println!();
+    println!("{}", i18n::t("check.ext_title"));
+    let custom_all = asus_numpad::custom::list_custom();
+    if custom_all.is_empty() {
+        println!("  {}", i18n::t("check.ext_layouts_none"));
+    } else {
+        let names: Vec<&str> = custom_all.iter().map(|(n, _, _)| n.as_str()).collect();
+        println!(
+            "  {}",
+            i18n::tf(
+                "check.ext_layouts",
+                &[
+                    ("n", &custom_all.len().to_string()),
+                    ("names", &names.join(", ")),
+                ]
+            )
+        );
+    }
+    let proto_text = if cfg.led_proto.is_builtin() {
+        i18n::t("check.ext_none")
+    } else {
+        i18n::tf(
+            "check.ext_led_proto",
+            &[
+                (
+                    "hex",
+                    &cfg.led_proto
+                        .template
+                        .iter()
+                        .map(|b| format!("{b:02X}"))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                ),
+                ("n", &cfg.led_proto.template.len().to_string()),
+            ],
+        )
+    };
+    println!("  {}", i18n::tf("check.ext_led", &[("proto", &proto_text)]));
+    let press_text = if cfg.pressure_switch.enabled {
+        i18n::tf(
+            "check.ext_press_on",
+            &[
+                ("percent", &cfg.pressure_switch.percent.to_string()),
+                ("frames", &cfg.pressure_switch.frames.to_string()),
+                ("ms", &(cfg.pressure_switch.cooldown_ms as i64).to_string()),
+            ],
+        )
+    } else {
+        i18n::t("check.ext_none")
+    };
+    println!(
+        "  {}",
+        i18n::tf("check.ext_pressure", &[("text", &press_text)])
+    );
+    let (bind, _hot_notes) = asus_numpad::custom::HotkeyState::new(&cfg.hotkeys);
+    let hot_text = if bind.is_empty() {
+        i18n::t("check.ext_none")
+    } else {
+        bind.describe().join("; ")
+    };
+    println!(
+        "  {}",
+        i18n::tf("check.ext_hotkeys", &[("text", &hot_text)])
+    );
+
     println!();
     println!("{}", i18n::t("check.tests"));
     println!("{}", i18n::t("check.conclusion"));
@@ -1539,6 +1605,41 @@ fn cmd_layout(cfg: &Config, cfg_path: &Path, name: Option<&str>, ids: bool) -> R
     println!();
     println!("{}", i18n::t("layout.legend"));
 
+    // 配置里装上的自定义布局也要列出来：否则用户配完 `custom_layouts` 在
+    // `layout list` 里看不到任何痕迹，只能靠猜是否生效。
+    let custom = asus_numpad::custom::list_custom();
+    if !custom.is_empty() {
+        println!();
+        println!("{}", i18n::t("layout.custom_title"));
+        for (cname, hids, rows) in &custom {
+            println!(
+                "  {}",
+                i18n::tf(
+                    "layout.custom_line",
+                    &[
+                        ("name", cname),
+                        (
+                            "cols",
+                            &rows
+                                .first()
+                                .map(|r| r.split_whitespace().count())
+                                .unwrap_or(0)
+                                .to_string()
+                        ),
+                        (
+                            "hids",
+                            &if hids.is_empty() {
+                                i18n::t("common.auto_detect")
+                            } else {
+                                hids.join("/")
+                            }
+                        ),
+                    ]
+                )
+            );
+        }
+    }
+
     if ids {
         println!();
         println!("{}", i18n::t("layout.ids_title"));
@@ -1553,6 +1654,12 @@ fn cmd_layout(cfg: &Config, cfg_path: &Path, name: Option<&str>, ids: bool) -> R
         return Ok(0);
     };
     let raw = raw.trim();
+    // `layout list` 是很多人的肌肉记忆，直接当"只看不改"，别回一句 Unknown layout name。
+    if raw.eq_ignore_ascii_case("list") || raw.eq_ignore_ascii_case("show") {
+        println!();
+        println!("{}", i18n::t("layout.usage"));
+        return Ok(0);
+    }
     if raw.eq_ignore_ascii_case("auto") {
         let backup = persist_config_keys(cfg_path, &[("layout_name", serde_json::json!("auto"))])?;
         println!();

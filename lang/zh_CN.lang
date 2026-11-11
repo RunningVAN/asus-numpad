@@ -103,6 +103,15 @@ check.b_bright_cmd = 调光命令          asus-numpad bright 1..4（0=灭，共
 check.lang_line = 界面语言          {name}（{code}）
 check.lang_source = 语言来源          {source}
 check.lang_file = 语言文件          {path}
+check.ext_title = 扩展开关：
+check.ext_layouts = 自定义布局        {n} 套（{names}）
+check.ext_layouts_none = 自定义布局        无（只用官方表）
+check.ext_led = 点亮报文          {proto}
+check.ext_led_proto = {hex}（{n} 字节）
+check.ext_pressure = 用力按切换        {text}
+check.ext_press_on = 开，{percent}% / 连续 {frames} 帧 / 冷却 {ms}ms
+check.ext_hotkeys = 全局热键          {text}
+check.ext_none = 无
 check.tests = 离线用例：见 `cargo test`（Windows / Linux 均可运行，不依赖硬件）
 check.conclusion = 自检结论：配置与几何换算一致。
 common.enabled = 启用
@@ -247,6 +256,8 @@ cli.cmd.sku.id = 机型 id，或 auto / list
 layout.current = 当前布局：配置 {layout}，实际生效 {resolved}（{support}）
 layout.list_title = 官方 AsusNUMPADFilter.inf 收录的布局（* 已验证 / ~ 同族、参数照录但未上真机 / - 无键位依据）：
 layout.legend = * 已验证   ~ 同族未验证（需 --allow-unverified）   - 不支持
+layout.custom_title = 配置里已装上的自定义布局（custom_layouts）：
+layout.custom_line = + {name} 列数={cols} HID={hids}
 layout.ids_title = 触摸板 HID 硬件 ID → 布局（同 ID 的机型可直接通用）：
 layout.usage = 用法：asus-numpad layout                 查看当前布局与布局表
 layout.wrote = 已写入 {path}：layout_name = {value}（备份 {backup}）
