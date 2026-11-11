@@ -373,6 +373,8 @@ of silently applied. It works on a `mktemp` config - nothing under `~/.config` o
 hidraw device is touched. Items that need fingers on the touchpad (hard-press toggle,
 hotkey, custom report) are printed as commands to paste, not executed.
 
+![Extension page: custom layouts, LED report, pressure toggle, global hotkeys](site/assets/screenshots/gui-extend.png)
+
 ### How this relates to model detection and layout validation
 
 The two gates are separate: the model (DMI / `sku`) decides whether the driver may run at all, the

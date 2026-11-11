@@ -264,6 +264,15 @@ fn run_gui() -> Result<()> {
     } else {
         ([980.0, 780.0], [820.0, 620.0])
     };
+    // `ASUS_NUMPAD_GUI_SIZE=1180x1400` 覆盖初始窗口尺寸：文档截图要把整页拍全，
+    // 而窗口一旦被系统记住大小（eframe 的持久化），改代码里的默认值就没用了。
+    let size = std::env::var("ASUS_NUMPAD_GUI_SIZE")
+        .ok()
+        .and_then(|v| {
+            let (w, h) = v.split_once('x')?;
+            Some([w.trim().parse().ok()?, h.trim().parse().ok()?])
+        })
+        .unwrap_or(size);
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size(size)

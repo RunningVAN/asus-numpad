@@ -339,6 +339,8 @@ tools/verify-extend.sh
 `~/.config`，也不寫任何 hidraw 裝置。需要手指按觸控板的三項（壓感切換、熱鍵、
 自訂報文）只印出指令，不代你執行。
 
+![擴充頁：自訂佈局、點亮報文、壓感切換、全域熱鍵](site/assets/screenshots/gui-extend.png)
+
 ### 與機型表、佈局校驗的關係
 
 兩層閘門是分開的：機型（DMI / `sku`）決定「這台機器允不允許跑」，鍵表（`HID_LAYOUTS`）決定

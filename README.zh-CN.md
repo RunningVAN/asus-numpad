@@ -338,6 +338,8 @@ tools/verify-extend.sh
 hidraw 设备。需要手指按触摸板的三项（压感切换、热键、自定义报文）只打印命令，
 不代替你执行。
 
+![扩展页：自定义布局、点亮报文、压感切换、全局热键](site/assets/screenshots/gui-extend.png)
+
 ### 与机型表、布局校验的关系
 
 两层闸门是分开的：机型（DMI / `sku`）决定「这台机器允不允许跑」，键表（`HID_LAYOUTS`）决定

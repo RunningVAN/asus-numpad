@@ -26,8 +26,9 @@ impl App {
     /// 画完统一比对一次配置，有差异就标脏——与驱动配置页同一套「改了没保存」提示。
     pub(super) fn draw_extension(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
         let before = self.driver.cfg.clone();
-        let p = self.palette;
 
+        self.draw_ext_header(ui, action);
+        ui.add_space(10.0);
         self.draw_ext_layouts(ui);
         ui.add_space(10.0);
         self.draw_ext_proto(ui);
@@ -35,38 +36,86 @@ impl App {
         self.draw_ext_pressure(ui);
         ui.add_space(10.0);
         self.draw_ext_hotkeys(ui);
-        ui.add_space(10.0);
+
+        if self.driver.cfg != before {
+            self.driver.dirty = true;
+        }
+    }
+
+    /// 扩展页抬头：写完存哪、有没有改动、落盘与自检动作。
+    ///
+    /// 与驱动配置页同一套排法——保存类动作常驻页首。原来这张卡压在最底下，四张配置卡
+    /// 一铺满就得滚到页尾才找得到「保存」，改完参数的人以为没地方存。
+    fn draw_ext_header(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
+        let p = self.palette;
+        let dirty = self.driver.dirty;
+        let write_path = self.driver.write_path.display().to_string();
 
         theme::card(ui, &p, |ui| {
-            theme::title_row_help(
+            ui.horizontal(|ui| {
+                theme::title_row_help(
+                    ui,
+                    &p,
+                    "扩展",
+                    Some(
+                        "四项扩展与驱动共用同一个配置文件；改完要保存，键表与新报文还要重启后台服务才生效。",
+                    ),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if dirty {
+                        theme::pill(ui, "有改动未保存", p.warn)
+                            .on_hover_text("点「保存」或「保存并重启服务」落盘");
+                    } else {
+                        theme::pill(ui, "已与磁盘一致", p.ok);
+                    }
+                });
+            });
+            ui.add_space(2.0);
+            theme::note(ui, &p, format!("写入：{write_path}"));
+
+            ui.add_space(8.0);
+            let picked = theme::action_row(
                 ui,
                 &p,
-                "落盘",
-                Some(
-                    "四项扩展与驱动共用同一个配置文件；保存后后台服务重启才会读到新键表与新报文。",
-                ),
+                "写入",
+                Some("保存＝只落盘；保存并重启＝写回配置后 systemctl --user restart。"),
+                &[
+                    (
+                        "保存并重启服务",
+                        true,
+                        "写回配置文件并 systemctl --user restart；换键表、换点亮报文后必须走这个。",
+                    ),
+                    (
+                        "保存",
+                        false,
+                        "只落盘，不重启后台服务；正在用的触摸板不中断。",
+                    ),
+                    (
+                        "校验扩展项",
+                        false,
+                        "在副本上跑一遍解析：布局能不能装、HID 有没有和内置表打架、报文模板合不合法、压感阈值会不会被夹、热键解析得出来吗。不动磁盘也不动设备。",
+                    ),
+                ],
             );
-            ui.add_space(4.0);
-            action_row(ui, |ui| {
-                if theme::primary(ui, &p, "保存并重启服务").clicked() {
-                    *action = Some(Action::SaveDriverAndRestart);
-                }
-                if theme::secondary(ui, &p, "保存").clicked() {
-                    *action = Some(Action::SaveDriver);
-                }
-                if theme::secondary(ui, &p, "校验扩展项").clicked() {
-                    // 就地跑一次解析：布局能不能装、HID 有没有和内置表打架、
-                    // 报文模板合不合法，全在这一步给出，不必先存盘再等报错。
-                    let notes = self.driver.cfg.install_custom();
+            match picked {
+                Some(0) => *action = Some(Action::SaveDriverAndRestart),
+                Some(1) => *action = Some(Action::SaveDriver),
+                Some(2) => {
+                    // 在副本上跑一遍真正的 sanitize，而不是只装布局：CLI `check` 能看到
+                    // 的东西，在这里一次给全，不用先存盘再去命令行对账。
+                    let mut probe = self.driver.cfg.clone();
+                    let notes = probe.sanitize();
                     self.ext_notes = if notes.is_empty() {
-                        vec!["全部通过：布局、HID 绑定与报文模板都没有问题。".to_string()]
+                        vec!["全部通过：布局、HID 绑定、报文模板、压感与热键都没有问题。"
+                            .to_string()]
                     } else {
                         notes
                     };
                 }
-            });
+                _ => {}
+            }
             if !self.ext_notes.is_empty() {
-                ui.add_space(4.0);
+                ui.add_space(6.0);
                 for note in self.ext_notes.clone() {
                     theme::row(ui, &p, "", None, |ui| {
                         ui.add(egui::Label::new(small(note.clone())).wrap());
@@ -74,10 +123,6 @@ impl App {
                 }
             }
         });
-
-        if self.driver.cfg != before {
-            self.driver.dirty = true;
-        }
     }
 
     /// 卡一：自定义布局（键表 + HID 绑定）。
