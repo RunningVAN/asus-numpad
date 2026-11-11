@@ -327,6 +327,18 @@ asus-numpad --allow-unverified run    # 或在設定中設 allow_unverified_layo
 - `action` 三個值：`toggle` 翻轉、`on` 只開、`off` 只關。
 - 只旁聽實體鍵盤事件、不 grab 鍵盤，正常打字不受影響；寫錯的組合鍵會在介面上提示並跳過。
 
+### 配完先自檢
+
+```sh
+tools/verify-extend.sh
+```
+
+22 項唯讀檢查：二進位檔、擴充相關單元測試逐一具名執行、`custom_layouts` /
+`led_proto` / `pressure_switch` / `hotkeys` 是否真的進了 `layout` 與 `check`、
+`--lang` 切換語言、壞值是否被拒並留下提示。全程用 `mktemp` 暫存設定，不碰
+`~/.config`，也不寫任何 hidraw 裝置。需要手指按觸控板的三項（壓感切換、熱鍵、
+自訂報文）只印出指令，不代你執行。
+
 ### 與機型表、佈局校驗的關係
 
 兩層閘門是分開的：機型（DMI / `sku`）決定「這台機器允不允許跑」，鍵表（`HID_LAYOUTS`）決定

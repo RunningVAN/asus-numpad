@@ -206,3 +206,23 @@ DMI 写坏、写成占位串的机器靠这一层仍能认出机型。机型表�
 - 自定义布局优先于官方 `HID_LAYOUTS` 映射；绑到表里已有的模组会把官方映射覆盖掉，启动提示里
   会写明。
 - 真机验证通过后，欢迎把模组 ID 与键表提上来补进 `HID_LAYOUTS`，这样同型号的人不用自己配。
+
+### 配完先自检：`tools/verify-extend.sh`
+
+```sh
+cargo build --release
+tools/verify-extend.sh          # 结果同时写进 verify-extend.txt
+```
+
+22 项自动检查，全程用 `mktemp` 临时配置，**不写 hidraw、不动
+`~/.config/asus-numpad/asus-numpad.json`**，纯读：
+
+| 组 | 检查内容 |
+| --- | --- |
+| 1 | 二进制存在、能跑 |
+| 2 | `cargo test --lib`，外加 8 个扩展相关用例逐个点名跑 |
+| 3 | 临时配置里的 `custom_layouts` / `led_proto` / `pressure_switch` / `hotkeys` 是否真的进了 `layout` 与 `check` 的输出；`--lang zh-CN` / `zh-TW` 是否生效 |
+| 4 | 坏值（非法键名、模板缺 `255`、`percent=0`、`frames=0`、`hyper+q`）是否被拒且留提示；同一句提示只出现一次 |
+
+需要真机手感的三项（压感切换、全局热键、自定义报文点亮）脚本**不自动跑**，
+只把可直接粘贴的命令打出来，避免在你不知情的时候改设备状态。

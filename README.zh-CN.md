@@ -326,6 +326,18 @@ asus-numpad --allow-unverified run    # 或在配置中设 allow_unverified_layo
 - `action` 三个值：`toggle` 翻转、`on` 只开、`off` 只关。
 - 只旁听物理键盘事件、不 grab 键盘，正常打字不受影响；写错的组合键会在界面上提示并跳过。
 
+### 配完先自检
+
+```sh
+tools/verify-extend.sh
+```
+
+22 项只读检查：二进制、扩展相关单测逐个点名跑、`custom_layouts` / `led_proto` /
+`pressure_switch` / `hotkeys` 是否真的进了 `layout` 与 `check`、`--lang` 切语言、
+坏值是否被拒并留提示。全程用 `mktemp` 临时配置，不碰 `~/.config`，也不写任何
+hidraw 设备。需要手指按触摸板的三项（压感切换、热键、自定义报文）只打印命令，
+不代替你执行。
+
 ### 与机型表、布局校验的关系
 
 两层闸门是分开的：机型（DMI / `sku`）决定「这台机器允不允许跑」，键表（`HID_LAYOUTS`）决定

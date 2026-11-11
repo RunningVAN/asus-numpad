@@ -360,6 +360,19 @@ off right after an edit.
 - The keyboard is only observed, never grabbed, so normal typing is unaffected. Combos that fail to
   parse are reported in the GUI and skipped.
 
+### Checking an extension config
+
+```sh
+tools/verify-extend.sh
+```
+
+22 read-only checks: the binary, the extension unit tests by name, whether
+`custom_layouts` / `led_proto` / `pressure_switch` / `hotkeys` actually reach `layout`
+and `check`, `--lang` switching, and that bad values are rejected with a note instead
+of silently applied. It works on a `mktemp` config - nothing under `~/.config` or any
+hidraw device is touched. Items that need fingers on the touchpad (hard-press toggle,
+hotkey, custom report) are printed as commands to paste, not executed.
+
 ### How this relates to model detection and layout validation
 
 The two gates are separate: the model (DMI / `sku`) decides whether the driver may run at all, the
