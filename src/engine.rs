@@ -1609,6 +1609,124 @@ mod tests {
         engine_with(mixed, now, Rc::new(RefCell::new(Vec::new())))
     }
 
+    /// 用力按触摸板 = 切换小键盘：从真实事件入口喂压力，而不是直接调压力闸。
+    #[test]
+    fn hard_press_toggles_through_event_path() {
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let cfg = Config {
+            pressure_switch: crate::custom::PressureSwitch {
+                enabled: true,
+                percent: 50,
+                frames: 2,
+                cooldown_ms: 600.0,
+            },
+            ..Config::default()
+        };
+        let (mut e, _p) = engine_raw(cfg, now.clone(), Rc::new(RefCell::new(Vec::new())));
+        e.set_pressure_max(255);
+        e.enable();
+        assert!(e.lit);
+        // 有触点才认压力：没有触点时压力再大也不算「按」
+        e.handle_event(&Event::abs(kc::ABS_PRESSURE, 250));
+        assert!(e.lit, "没有触点时不该触发");
+
+        e.primary = Some(0);
+        e.handle_event(&Event::abs(kc::ABS_PRESSURE, 250));
+        e.handle_event(&Event::abs(kc::ABS_PRESSURE, 250));
+        assert!(!e.lit, "按住两帧后应切到触控板态");
+        assert_eq!(e.pressure.fired(), 1);
+
+        // 一直按着不放：冷却内不许连续翻转
+        now.set(400.0);
+        for _ in 0..4 {
+            e.handle_event(&Event::abs(kc::ABS_PRESSURE, 250));
+        }
+        assert!(!e.lit, "冷却内不该翻转");
+        // 抬起触点再按一次可以重新触发
+        e.primary = None;
+        e.handle_event(&Event::abs(kc::ABS_PRESSURE, 0));
+        now.set(700.0);
+        e.primary = Some(0);
+        e.handle_event(&Event::abs(kc::ABS_PRESSURE, 250));
+        e.handle_event(&Event::abs(kc::ABS_PRESSURE, 250));
+        assert!(e.lit, "冷却结束后再按应切回小键盘态");
+        assert_eq!(e.pressure.fired(), 2);
+    }
+
+    /// 压感关掉时，同样的事件序列必须完全没反应（默认配置不能有副作用）。
+    #[test]
+    fn pressure_switch_off_ignores_hard_press() {
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let (mut e, _p) = engine_raw(Config::default(), now, Rc::new(RefCell::new(Vec::new())));
+        e.set_pressure_max(255);
+        e.enable();
+        e.primary = Some(0);
+        for _ in 0..10 {
+            e.handle_event(&Event::abs(kc::ABS_PRESSURE, 255));
+        }
+        assert!(e.lit, "压感关着就不该被压力事件切换");
+        assert_eq!(e.pressure.fired(), 0);
+    }
+
+    /// 全局热键：ctrl+alt+n 切换，键盘事件从 handle_hotkey_event 进来。
+    #[test]
+    fn hotkey_ctrl_alt_n_toggles_through_event_path() {
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let cfg = Config {
+            hotkeys: vec![crate::custom::HotkeySpec {
+                gesture: "ctrl+alt+n".to_string(),
+                action: "toggle".to_string(),
+            }],
+            ..Config::default()
+        };
+        let (mut e, _p) = engine_raw(cfg, now, Rc::new(RefCell::new(Vec::new())));
+        e.enable();
+        assert!(e.lit);
+
+        // 没按修饰键时单独按 n 不触发
+        assert!(!e.handle_hotkey_event(&Event::key(kc::KEY_N, 1)));
+        assert!(e.lit);
+
+        // ctrl + alt + n
+        assert!(!e.handle_hotkey_event(&Event::key(kc::KEY_LEFTCTRL, 1)));
+        assert!(!e.handle_hotkey_event(&Event::key(kc::KEY_LEFTALT, 1)));
+        assert!(e.handle_hotkey_event(&Event::key(kc::KEY_N, 1)));
+        assert!(!e.lit, "组合键应切到触控板态");
+
+        // 按住产生的重复事件（value=2）不该重复触发
+        assert!(!e.handle_hotkey_event(&Event::key(kc::KEY_N, 2)));
+        assert!(!e.lit);
+        // 松开再按一次切回去
+        e.handle_hotkey_event(&Event::key(kc::KEY_N, 0));
+        assert!(e.handle_hotkey_event(&Event::key(kc::KEY_N, 1)));
+        assert!(e.lit);
+        assert_eq!(e.hotkey_last, Some("toggle"));
+    }
+
+    /// `action = "on"` 的热键只开不翻：已经是开的时候再按也不能关掉。
+    #[test]
+    fn hotkey_action_on_is_idempotent() {
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let cfg = Config {
+            hotkeys: vec![crate::custom::HotkeySpec {
+                gesture: "ctrl+shift+o".to_string(),
+                action: "on".to_string(),
+            }],
+            ..Config::default()
+        };
+        let (mut e, _p) = engine_raw(cfg, now, Rc::new(RefCell::new(Vec::new())));
+        e.enable();
+        for kind in [1, 0, 1] {
+            e.handle_hotkey_event(&Event::key(kc::KEY_LEFTCTRL, kind));
+            e.handle_hotkey_event(&Event::key(kc::KEY_LEFTSHIFT, kind));
+            let fired = e.handle_hotkey_event(&Event::key(kc::KEY_O, kind));
+            if kind == 1 {
+                assert!(fired, "按下应触发（第 {kind} 次）");
+                assert!(e.lit, "on 只能开，不能关");
+            }
+        }
+    }
+
     /// 数字键盘点亮时，从触摸板边缘起步的单指滑动不该把光标拖走。
     #[test]
     fn edge_slide_does_not_move_pointer_in_digit_mode() {
