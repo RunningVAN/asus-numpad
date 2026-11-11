@@ -57,4 +57,9 @@ pub(crate) mod test_lock {
     pub fn registry() -> MutexGuard<'static, ()> {
         lock().lock().unwrap_or_else(|e| e.into_inner())
     }
+
+    /// 语言表也是进程级全局态，改它的测试同样要互斥。
+    pub fn i18n() -> MutexGuard<'static, ()> {
+        lock().lock().unwrap_or_else(|e| e.into_inner())
+    }
 }

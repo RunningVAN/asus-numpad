@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, RwLock};
 
 /// 内置语言文件（与安装到 `/usr/share/asus-numpad/lang/` 的是同一份）
 pub const EMBED_ZH_CN: &str = include_str!("../lang/zh_CN.lang");
@@ -280,17 +280,29 @@ impl Catalog {
     }
 }
 
-static GLOBAL: OnceLock<Catalog> = OnceLock::new();
+///
+/// 用 `RwLock` 而不是 `OnceLock`：`main` 必须先把配置读出来才知道配置里写了什么
+/// 语言（`Config::load` 自身会调用 `t()` 生成提示），而那次调用会把默认语言钉死，
+/// 之后 `init` 就再也改不动了——`--lang` 与配置里的 `language` 全被吞掉。
+/// 允许重复 `init` 覆盖，才能保证"语言最后一定听用户的"。
+static GLOBAL: RwLock<Option<Arc<Catalog>>> = RwLock::new(None);
 
-/// 设定生效语言（进程内只生效一次，重复调用被忽略）。
+/// 设定生效语言；后调用的覆盖先调用的。
 pub fn init(lang: Lang) {
-    let _ = GLOBAL.set(Catalog::load(lang));
+    let loaded = Arc::new(Catalog::load(lang));
+    if let Ok(mut slot) = GLOBAL.write() {
+        *slot = Some(loaded);
+    }
 }
 
 /// 当前语言；未初始化时按系统 locale 现算（保证 `t()` 随时可用）。
 pub fn current() -> Lang {
-    match GLOBAL.get() {
-        Some(c) => c.lang(),
+    match GLOBAL
+        .read()
+        .ok()
+        .and_then(|g| g.as_ref().map(|c| c.lang()))
+    {
+        Some(lang) => lang,
         None => detect_system(),
     }
 }
@@ -298,12 +310,28 @@ pub fn current() -> Lang {
 /// 当前语言文件来自哪个路径（None = 用内置文案）。
 pub fn current_source() -> Option<PathBuf> {
     GLOBAL
-        .get()
-        .and_then(|c| c.source().map(|p| p.to_path_buf()))
+        .read()
+        .ok()
+        .and_then(|g| g.as_ref().and_then(|c| c.source().map(|p| p.to_path_buf())))
 }
 
-fn catalog() -> &'static Catalog {
-    GLOBAL.get_or_init(|| Catalog::load(detect_system()))
+/// 取一份目录快照（`Arc` 拷出去后立刻放锁：`t()` 会被 `tf()` 重入调用，
+/// 持锁回调自己会死锁）。
+fn catalog() -> Arc<Catalog> {
+    if let Ok(g) = GLOBAL.read() {
+        if let Some(c) = g.as_ref() {
+            return Arc::clone(c);
+        }
+    }
+    let loaded = Arc::new(Catalog::load(detect_system()));
+    if let Ok(mut g) = GLOBAL.write() {
+        if g.is_none() {
+            *g = Some(Arc::clone(&loaded));
+        } else if let Some(existing) = g.as_ref() {
+            return Arc::clone(existing);
+        }
+    }
+    loaded
 }
 
 /// 取文案（缺失回落英文，再回落键名）。
@@ -317,7 +345,8 @@ pub fn t(key: &str) -> String {
 /// 例如机型展示名与判定依据，中文原文写在 `sku.rs` 的表里，
 /// `lang/*.lang` 只补译文；某份语言文件没翻译时应当显示原文，而不是裸键名。
 pub fn t_or(key: &str, fallback: &str) -> String {
-    let v = catalog().get(key);
+    let cat = catalog();
+    let v = cat.get(key);
     if v == key {
         fallback.to_string()
     } else {
@@ -387,6 +416,25 @@ pub fn resolve(cfg_lang: &str, cli_lang: Option<&str>) -> (Lang, LangSource) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 语言必须能被后一次 `init` 覆盖：`main` 是「先读配置、才知道配置里写了什么语言」，
+    /// 读配置的过程中 `t()` 已经把默认语言钉死了；若 `init` 只生效一次，
+    /// `--lang zh-CN` 与配置文件里的 `language` 就全部失效（实测就是全英文输出）。
+    #[test]
+    fn re_init_switches_language() {
+        let _guard = crate::test_lock::i18n();
+        init(Lang::ZhCn);
+        assert_eq!(current(), Lang::ZhCn);
+        let zh = t("layout.legend");
+        init(Lang::En);
+        assert_eq!(current(), Lang::En);
+        let en = t("layout.legend");
+        assert_ne!(zh, en, "切换语言后文案应当跟着变");
+        init(Lang::ZhTw);
+        assert_eq!(current(), Lang::ZhTw);
+        // 复原，别影响同进程其它用例
+        init(Lang::En);
+    }
 
     #[test]
     fn parse_accepts_common_spellings() {
