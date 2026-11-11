@@ -180,7 +180,7 @@ impl App {
                             "当前判定：{}（来源 {}）",
                             resolved.id(),
                             source_label(resolved.source)
-                        ));;
+                        ));
                         if let Some(detail) = &resolved.detail {
                             theme::note(ui, &p, format!("依据：{detail}"));
                         }
@@ -246,7 +246,7 @@ impl App {
                         "{} 列 × 4 行，{} 项官方参数",
                         entry.layout.columns,
                         15
-                    ));;
+                    ));
                     if entry.support.needs_confirm() {
                         ui.label(
                             egui::RichText::new(format!(
@@ -365,7 +365,7 @@ impl App {
                             }
                         });
                 });
-                theme::note(ui, &p, "关闭混合模式后触摸板只出数字、没有光标，等同官方 dwSupport_MixedMode = 0。",);;
+                theme::note(ui, &p, "关闭混合模式后触摸板只出数字、没有光标，等同官方 dwSupport_MixedMode = 0。",);
 
                 ui.add_space(4.0);
                 theme::check_row(
@@ -477,7 +477,11 @@ impl App {
                         let manual_bus = !auto_bus;
                         let (auto_resp, bus_resp) = theme::pair(
                             ui,
-                            |ui| ui.checkbox(&mut auto_bus, "自动"),
+                            |ui| {
+                                let resp = theme::switch(ui, &p, &mut auto_bus);
+                                ui.label(egui::RichText::new("自动").size(12.5).color(p.text_weak));
+                                resp
+                            },
                             |ui| {
                                 ui.add_enabled_ui(manual_bus, |ui| {
                                     theme::pair_num(ui, &mut bus, 0..=99)
@@ -504,7 +508,11 @@ impl App {
                         let manual_addr = !auto_addr;
                         let (auto_resp, addr_resp) = theme::pair(
                             ui,
-                            |ui| ui.checkbox(&mut auto_addr, "自动"),
+                            |ui| {
+                                let resp = theme::switch(ui, &p, &mut auto_addr);
+                                ui.label(egui::RichText::new("自动").size(12.5).color(p.text_weak));
+                                resp
+                            },
                             |ui| {
                                 ui.add_enabled_ui(manual_addr, |ui| {
                                     ui.add_sized(

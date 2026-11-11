@@ -23,6 +23,12 @@ pub struct Palette {
     pub card: Color32,
     /// 卡片内的凹陷区 / 悬停底色
     pub sunk: Color32,
+    /// 输入框、下拉框、次级按钮的底色。
+    ///
+    /// 和 `sunk` 分开是有原因的：凹陷色是「往里凹」的灰面，用在白卡片上的输入框会
+    /// 变成一块块灰方块；输入框要的是「白底 + 一圈细线」，所以浅色下它等于卡片色，
+    /// 深色下比卡片亮一档。
+    pub field: Color32,
     /// 分割线、卡片描边
     pub stroke: Color32,
     /// 正文
@@ -41,43 +47,45 @@ pub struct Palette {
     pub bad: Color32,
 }
 
-/// 深色：背景近黑的蓝灰，强调色偏冷的蓝紫，长时间看不刺眼。
+/// 深色：近黑的中性灰，强调色是偏冷的蓝，长时间看不刺眼。
 pub const DARK: Palette = Palette {
-    bg: Color32::from_rgb(13, 16, 21),
-    panel: Color32::from_rgb(18, 22, 29),
-    card: Color32::from_rgb(23, 28, 37),
-    sunk: Color32::from_rgb(30, 36, 47),
-    stroke: Color32::from_rgb(40, 47, 60),
-    text: Color32::from_rgb(231, 235, 242),
-    text_weak: Color32::from_rgb(147, 160, 180),
+    bg: Color32::from_rgb(11, 13, 17),
+    panel: Color32::from_rgb(16, 19, 25),
+    card: Color32::from_rgb(21, 24, 31),
+    sunk: Color32::from_rgb(30, 34, 43),
+    field: Color32::from_rgb(27, 31, 39),
+    stroke: Color32::from_rgb(38, 43, 53),
+    text: Color32::from_rgb(232, 235, 240),
+    text_weak: Color32::from_rgb(154, 163, 178),
     accent: Color32::from_rgb(124, 156, 255),
-    // 14% 透明度的强调色，已按预乘写好（egui 用预乘 alpha）
-    accent_soft: Color32::from_rgba_premultiplied(21, 27, 44, 44),
+    // 17% 透明度的强调色，已按预乘写好（egui 用预乘 alpha）
+    accent_soft: Color32::from_rgba_premultiplied(21, 26, 44, 44),
     ok: Color32::from_rgb(74, 202, 138),
     warn: Color32::from_rgb(233, 176, 78),
     bad: Color32::from_rgb(240, 110, 110),
 };
 
-/// 浅色：白卡片浮在浅灰底上，强调色用更深的蓝，保证在浅底上也有足够对比。
+/// 浅色：白卡片浮在中性浅灰底上，强调色用偏深的蓝，保证在浅底上也有足够对比。
 pub const LIGHT: Palette = Palette {
-    bg: Color32::from_rgb(242, 245, 250),
+    bg: Color32::from_rgb(244, 245, 247),
     panel: Color32::from_rgb(255, 255, 255),
     card: Color32::from_rgb(255, 255, 255),
-    sunk: Color32::from_rgb(237, 241, 248),
-    stroke: Color32::from_rgb(219, 226, 236),
-    text: Color32::from_rgb(26, 33, 46),
-    text_weak: Color32::from_rgb(108, 120, 138),
-    accent: Color32::from_rgb(46, 104, 232),
-    accent_soft: Color32::from_rgba_premultiplied(5, 12, 27, 30),
-    ok: Color32::from_rgb(21, 145, 90),
-    warn: Color32::from_rgb(176, 112, 16),
-    bad: Color32::from_rgb(200, 62, 62),
+    sunk: Color32::from_rgb(241, 243, 246),
+    field: Color32::from_rgb(255, 255, 255),
+    stroke: Color32::from_rgb(227, 229, 233),
+    text: Color32::from_rgb(22, 24, 29),
+    text_weak: Color32::from_rgb(107, 114, 128),
+    accent: Color32::from_rgb(37, 99, 235),
+    accent_soft: Color32::from_rgba_premultiplied(4, 11, 26, 28),
+    ok: Color32::from_rgb(18, 133, 90),
+    warn: Color32::from_rgb(180, 83, 9),
+    bad: Color32::from_rgb(220, 38, 38),
 };
 
 /// 卡片圆角，比控件大一档，视觉上才能把里面的控件「装」住。
-const CARD_RADIUS: u8 = 14;
+const CARD_RADIUS: u8 = 16;
 /// 控件圆角。
-const WIDGET_RADIUS: u8 = 9;
+const WIDGET_RADIUS: u8 = 8;
 
 /// 装上主题，返回当前生效的调色板。
 pub fn install(ctx: &egui::Context) -> Palette {
@@ -104,16 +112,16 @@ fn style_for(p: Palette, dark: bool) -> egui::Style {
     let mut v = style.visuals;
     v.dark_mode = dark;
 
-    // 字号：正文略大于 egui 默认的 14，说明文字压到 12，标题 19 拉开层级
+    // 字号：正文 14，说明文字压到 12，标题 19 拉开层级
     style.text_styles = [
         (
             TextStyle::Small,
             FontId::new(12.0, FontFamily::Proportional),
         ),
-        (TextStyle::Body, FontId::new(14.5, FontFamily::Proportional)),
+        (TextStyle::Body, FontId::new(14.0, FontFamily::Proportional)),
         (
             TextStyle::Button,
-            FontId::new(14.0, FontFamily::Proportional),
+            FontId::new(13.5, FontFamily::Proportional),
         ),
         (
             TextStyle::Heading,
@@ -121,23 +129,36 @@ fn style_for(p: Palette, dark: bool) -> egui::Style {
         ),
         (
             TextStyle::Monospace,
-            FontId::new(13.0, FontFamily::Monospace),
+            FontId::new(12.5, FontFamily::Monospace),
         ),
     ]
     .into();
 
     // 间距：默认值偏挤，卡片式布局要留出呼吸感
     style.spacing.item_spacing = Vec2::new(10.0, 8.0);
-    style.spacing.button_padding = Vec2::new(14.0, 7.0);
+    style.spacing.button_padding = Vec2::new(16.0, 8.0);
     style.spacing.interact_size = Vec2::new(44.0, 28.0);
     style.spacing.slider_width = 190.0;
     style.spacing.combo_width = 220.0;
     style.spacing.indent = 22.0;
     style.spacing.menu_margin = Margin::same(8);
+    // 滚动条：macOS 那种浮起的窄条——平时几乎看不见，鼠标进到滚动区才浮出来，
+    // 且不占内容宽度。非浮动模式下滚动条会从卡片右边啃掉 10px，卡片宽度跟着抖。
+    style.spacing.scroll = egui::style::ScrollStyle::floating();
+    style.spacing.scroll.bar_width = 8.0;
+    style.spacing.scroll.floating_width = 6.0;
+    style.spacing.scroll.floating_allocated_width = 0.0;
+    style.spacing.scroll.foreground_color = true;
+    style.spacing.scroll.dormant_handle_opacity = 0.0;
+    style.spacing.scroll.active_handle_opacity = 0.35;
+    style.spacing.scroll.interact_handle_opacity = 0.7;
+    style.spacing.scroll.dormant_background_opacity = 0.0;
+    style.spacing.scroll.active_background_opacity = 0.0;
+    style.spacing.scroll.interact_background_opacity = 0.15;
 
     v.panel_fill = p.bg;
     v.window_fill = p.card;
-    v.extreme_bg_color = if dark { p.bg } else { p.sunk };
+    v.extreme_bg_color = p.field;
     v.faint_bg_color = p.sunk;
     v.hyperlink_color = p.accent;
     v.weak_text_color = Some(p.text_weak);
@@ -146,21 +167,22 @@ fn style_for(p: Palette, dark: bool) -> egui::Style {
     v.menu_corner_radius = CornerRadius::same(12);
     v.window_stroke = Stroke::new(1.0, p.stroke);
     v.window_shadow = egui::epaint::Shadow {
-        offset: [0, 10],
-        blur: 28,
+        offset: [0, 12],
+        blur: 32,
         spread: 0,
-        color: Color32::from_black_alpha(if dark { 120 } else { 40 }),
+        color: Color32::from_black_alpha(if dark { 120 } else { 36 }),
     };
     v.popup_shadow = egui::epaint::Shadow {
-        offset: [0, 4],
-        blur: 16,
+        offset: [0, 6],
+        blur: 20,
         spread: 0,
-        color: Color32::from_black_alpha(if dark { 100 } else { 32 }),
+        color: Color32::from_black_alpha(if dark { 100 } else { 28 }),
     };
     v.selection.bg_fill = p.accent_soft;
     v.selection.stroke = Stroke::new(1.0, p.accent);
 
-    // 控件四态：静默=卡片底的浅一档，悬停=提亮并描一圈强调色，按下=强调色淡底
+    // 控件四态：静默=白底细描边（输入框该有的样子），悬停=描边转强调色，
+    // 按下/展开=强调色描边 + 淡底。灰底只留给凹陷区，不再拿来当输入框底色。
     let widgets = &mut v.widgets;
     widgets.noninteractive.bg_fill = p.card;
     widgets.noninteractive.weak_bg_fill = p.card;
@@ -168,15 +190,15 @@ fn style_for(p: Palette, dark: bool) -> egui::Style {
     widgets.noninteractive.fg_stroke = Stroke::new(1.0, p.text);
     widgets.noninteractive.corner_radius = CornerRadius::same(WIDGET_RADIUS);
 
-    widgets.inactive.bg_fill = p.sunk;
-    widgets.inactive.weak_bg_fill = p.sunk;
+    widgets.inactive.bg_fill = p.field;
+    widgets.inactive.weak_bg_fill = p.field;
     widgets.inactive.bg_stroke = Stroke::new(1.0, p.stroke);
     widgets.inactive.fg_stroke = Stroke::new(1.0, p.text);
     widgets.inactive.corner_radius = CornerRadius::same(WIDGET_RADIUS);
 
-    widgets.hovered.bg_fill = p.sunk;
-    widgets.hovered.weak_bg_fill = p.sunk;
-    widgets.hovered.bg_stroke = Stroke::new(1.0, p.accent);
+    widgets.hovered.bg_fill = p.field;
+    widgets.hovered.weak_bg_fill = p.field;
+    widgets.hovered.bg_stroke = Stroke::new(1.0, p.accent.gamma_multiply(0.7));
     widgets.hovered.fg_stroke = Stroke::new(1.0, p.text);
     widgets.hovered.corner_radius = CornerRadius::same(WIDGET_RADIUS);
 
@@ -186,9 +208,9 @@ fn style_for(p: Palette, dark: bool) -> egui::Style {
     widgets.active.fg_stroke = Stroke::new(1.0, p.accent);
     widgets.active.corner_radius = CornerRadius::same(WIDGET_RADIUS);
 
-    widgets.open.bg_fill = p.sunk;
-    widgets.open.weak_bg_fill = p.sunk;
-    widgets.open.bg_stroke = Stroke::new(1.0, p.stroke);
+    widgets.open.bg_fill = p.field;
+    widgets.open.weak_bg_fill = p.field;
+    widgets.open.bg_stroke = Stroke::new(1.0, p.accent.gamma_multiply(0.7));
     widgets.open.fg_stroke = Stroke::new(1.0, p.text);
     widgets.open.corner_radius = CornerRadius::same(WIDGET_RADIUS);
 
@@ -196,23 +218,34 @@ fn style_for(p: Palette, dark: bool) -> egui::Style {
     style
 }
 
-/// 一张卡片：圆角、细描边、内留白，外加一层几乎看不见的投影。
+/// 一张卡片：大圆角、宽留白，浅色下靠投影和底色分层，深色下再补一圈极淡描边。
 ///
-/// 投影不是为了「拟物」，而是让白卡片压在浅灰底上有个边界——只靠 1px 描边时，
-/// 高分屏上卡片和背景会糊成一片。
+/// 浅色卡片**不画描边**：白卡 + 1px 灰线是上一版的观感问题来源——线在缩放和高分屏上
+/// 一半糊一半锐，看着像表格线；改用一层柔和大半径投影（`blur 18`）后边界由明度差交代，
+/// 干净得多。深色底上投影几乎不可见，所以那一套保留 1px 描边来托边界。
 pub fn card<R>(ui: &mut egui::Ui, p: &Palette, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let dark = p.bg.to_array()[0] < 128;
-    egui::Frame::new()
+    let frame = egui::Frame::new()
         .fill(p.card)
-        .stroke(Stroke::new(1.0, p.stroke))
         .corner_radius(CornerRadius::same(CARD_RADIUS))
-        .inner_margin(Margin::symmetric(16, 14))
+        .inner_margin(Margin {
+            left: 20,
+            right: 20,
+            top: 18,
+            bottom: 18,
+        })
         .shadow(egui::epaint::Shadow {
             offset: [0, 2],
-            blur: 6,
+            blur: if dark { 12 } else { 22 },
             spread: 0,
-            color: Color32::from_black_alpha(if dark { 70 } else { 16 }),
-        })
+            color: Color32::from_black_alpha(if dark { 90 } else { 26 }),
+        });
+    let frame = if dark {
+        frame.stroke(Stroke::new(1.0, p.stroke))
+    } else {
+        frame.stroke(Stroke::new(0.0, Color32::TRANSPARENT))
+    };
+    frame
         .show(ui, |ui| {
             // 卡片里不缩进：折叠头、列表这些默认会按 indent 往右推，一推控件列就跟着
             // 偏移，同一份表单在「折叠卡片」和「带标题卡片」里就错开十几像素。
@@ -222,7 +255,7 @@ pub fn card<R>(ui: &mut egui::Ui, p: &Palette, add: impl FnOnce(&mut egui::Ui) -
         .inner
 }
 
-/// 带标题的卡片：标题前一小条强调色，代替原来的 `heading + separator`。
+/// 带标题的卡片。
 pub fn section<R>(
     ui: &mut egui::Ui,
     p: &Palette,
@@ -231,62 +264,127 @@ pub fn section<R>(
 ) -> R {
     card(ui, p, |ui| {
         title_row(ui, p, title);
-        ui.add_space(2.0);
+        ui.add_space(4.0);
         add(ui)
     })
 }
 
-/// 卡片内的小标题。标题字重加粗，前面一条 3×16 的强调色竖条。
+/// 卡片标题：一行粗体标题，下面一条**横贯整张卡片**的细线。
+///
+/// 上一版是「标题 + 拖到右缘的尾线」，十几个卡片排下来，右侧全是长短不一的横线，
+/// 反而显得琐碎。改成标题独立成行、分隔线走满卡片宽度（左右各伸出内边距，
+/// 直接贴到卡片边缘），层次更像系统设置面板：标题区与内容区一刀切开，读者不会
+/// 把标题误当成第一行内容。
 pub fn title_row(ui: &mut egui::Ui, p: &Palette, title: &str) {
-    ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(Vec2::new(3.0, 16.0), Sense::hover());
-        ui.painter()
-            .rect_filled(rect, CornerRadius::same(2), p.accent);
-        ui.add_space(2.0);
-        ui.label(RichText::new(title).size(15.5).strong().color(p.text));
-    });
+    ui.label(RichText::new(title).size(14.5).strong().color(p.text));
+    let r = ui.max_rect();
+    let y = ui.cursor().top() - ui.spacing().item_spacing.y * 0.5;
+    ui.painter().hline(
+        egui::Rangef::new(r.left() - CARD_PAD_X, r.right() + CARD_PAD_X),
+        y,
+        Stroke::new(1.0, p.stroke),
+    );
+}
+
+/// 悬停时在控件上盖一层极淡的中性色。
+///
+/// 按钮的底色是定制的（白底/实心强调色），egui 的 hovered 样式不会生效，而「整块换色」
+/// 会让一排按钮的明度互相跳。盖一层几乎看不见的浮色，鼠标扫过去有反应、静止时又不变。
+fn wash(ui: &egui::Ui, resp: &Response, p: &Palette, radius: CornerRadius) {
+    if !resp.hovered() {
+        return;
+    }
+    let dark = p.bg.to_array()[0] < 128;
+    let tint = if dark {
+        Color32::from_white_alpha(12)
+    } else {
+        Color32::from_black_alpha(8)
+    };
+    ui.painter().rect_filled(resp.rect, radius, tint);
 }
 
 /// 主按钮：实心强调色，用于「点亮」这类主动作。
 pub fn primary(ui: &mut egui::Ui, p: &Palette, text: &str) -> Response {
     // 两套调色板的强调色都足够深，白字始终是安全的
-    ui.add(
+    let resp = ui.add(
         egui::Button::new(RichText::new(text).color(Color32::WHITE).strong())
             .fill(p.accent)
             .stroke(Stroke::new(0.0, Color32::TRANSPARENT))
             .corner_radius(CornerRadius::same(WIDGET_RADIUS))
             .min_size(Vec2::new(BTN_W, CTRL_H)),
-    )
+    );
+    wash(ui, &resp, p, CornerRadius::same(WIDGET_RADIUS));
+    resp
 }
 
-/// 次级按钮：卡片底色 + 描边，和主按钮并排时不抢注意力。
+/// 次级按钮：白底 + 细描边，和主按钮并排时不抢注意力。
+///
+/// 底色从「凹陷灰」改成「输入框同款的白底」，一排按钮旁边就是下拉框和输入框，
+/// 底色一致之后它们看起来才是一套控件，而不是两种材质。
 pub fn secondary(ui: &mut egui::Ui, p: &Palette, text: &str) -> Response {
-    ui.add(
+    let resp = ui.add(
         egui::Button::new(RichText::new(text).color(p.text))
-            .fill(p.sunk)
+            .fill(p.field)
             .stroke(Stroke::new(1.0, p.stroke))
             .corner_radius(CornerRadius::same(WIDGET_RADIUS))
             .min_size(Vec2::new(BTN_W, CTRL_H)),
-    )
+    );
+    wash(ui, &resp, p, CornerRadius::same(WIDGET_RADIUS));
+    resp
+}
+
+/// 开关：自绘的 34×20 胶囊，开时滑到右侧并染成强调色。
+///
+/// 复选框那一格小白框在卡片式界面里存在感太弱，「开 / 关」这类二元项用开关更符合
+/// 现在的阅读习惯；顺带省掉了勾选框里那圈看不清的描边。
+pub fn switch(ui: &mut egui::Ui, p: &Palette, on: &mut bool) -> Response {
+    let size = Vec2::new(36.0, 20.0);
+    let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click());
+    if resp.clicked() {
+        *on = !*on;
+        resp.mark_changed();
+    }
+    // 位置按时间插值：点击瞬间滑块滑过去，而不是硬跳
+    let t = ui.ctx().animate_bool_responsive(resp.id, *on);
+    let track = if *on {
+        p.accent.gamma_multiply(0.35 + 0.65 * t)
+    } else {
+        p.stroke
+    };
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same((size.y / 2.0) as u8), track);
+    let pad = 3.0;
+    let travel = size.x - size.y;
+    let knob_x = rect.left() + pad + travel * t;
+    let knob = egui::Rect::from_center_size(
+        egui::pos2(knob_x + size.y / 2.0 - pad, rect.center().y),
+        Vec2::splat(size.y - pad * 2.0),
+    );
+    ui.painter().rect_filled(
+        knob,
+        CornerRadius::same((knob.height() / 2.0) as u8),
+        Color32::WHITE,
+    );
+    resp
 }
 
 /// 状态胶囊：圆角小标签，用来显示「真实硬件 / 模拟后端」这类一眼要看到的状态。
 pub fn pill(ui: &mut egui::Ui, text: &str, color: Color32) -> Response {
-    let font = FontId::proportional(12.0);
+    let font = FontId::proportional(11.5);
     let galley = ui.painter().layout_no_wrap(text.to_owned(), font, color);
     let size = Vec2::new(galley.size().x + 18.0, galley.size().y + 8.0);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
     let bg = Color32::from_rgba_premultiplied(
-        (color.r() as u16 * 44 / 255) as u8,
-        (color.g() as u16 * 44 / 255) as u8,
-        (color.b() as u16 * 44 / 255) as u8,
-        44,
+        (color.r() as u16 * 32 / 255) as u8,
+        (color.g() as u16 * 32 / 255) as u8,
+        (color.b() as u16 * 32 / 255) as u8,
+        32,
     );
     ui.painter().rect(
         rect,
         CornerRadius::same((size.y / 2.0) as u8),
         bg,
-        Stroke::new(1.0, color.gamma_multiply(0.45)),
+        Stroke::new(1.0, color.gamma_multiply(0.35)),
         egui::StrokeKind::Inside,
     );
     ui.painter()
@@ -294,10 +392,12 @@ pub fn pill(ui: &mut egui::Ui, text: &str, color: Color32) -> Response {
     resp
 }
 
-/// 分段控件（页签）：一条圆角轨道，选中的那格用强调色淡底托起。
+/// 页签：文字 + 底部指示条，整条基线横贯控件区。
 ///
-/// 用自绘而不是 `selectable_label`：默认的选中态只有一点点底色，五个页签横排时
-/// 分不清「当前在哪」，分段控件一眼就能看出来。
+/// 上一版是 iOS 那种分段胶囊：一条灰轨道，选中格用实心强调色托起。功能没错，
+/// 但深色实心块在桌面工具里太抢眼——一屏十几处强调色之后，页签变成最重的一块，
+/// 反而压过内容。改成下划线页签：未选中只有灰字，当前页靠加粗的黑字 + 2px 强调色
+/// 短条表达，视线重心回到内容上。
 pub fn segmented<T: PartialEq + Copy>(
     ui: &mut egui::Ui,
     p: &Palette,
@@ -305,8 +405,8 @@ pub fn segmented<T: PartialEq + Copy>(
     current: T,
     items: &[(T, &str, &str)],
 ) -> Option<T> {
-    let font = FontId::proportional(14.0);
-    let pad = Vec2::new(16.0, 7.0);
+    let font = FontId::proportional(13.5);
+    let pad = Vec2::new(14.0, 8.0);
     let widths: Vec<f32> = items
         .iter()
         .map(|(_, text, _)| {
@@ -317,53 +417,59 @@ pub fn segmented<T: PartialEq + Copy>(
                 + pad.x * 2.0
         })
         .collect();
-    // 铺满控件列：两格按文字宽度成比例分配，右边缘于是和下拉框、按钮组落在同一条线上
-    let total = ui.available_width().min(ctrl_width()).max(120.0);
-    let natural = widths.iter().sum::<f32>() + 8.0;
-    let scale = if natural > 0.0 {
-        (total - 8.0) / (natural - 8.0)
-    } else {
-        1.0
-    };
-    let widths: Vec<f32> = widths.iter().map(|w| w * scale).collect();
-    let height = pad.y * 2.0 + 16.0;
+    let total = ui.available_width();
+    let height = pad.y * 2.0 + 18.0;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(total, height), Sense::hover());
 
-    ui.painter()
-        .rect_filled(rect, CornerRadius::same((height / 2.0) as u8), p.sunk);
+    // 基线：一条压在所有页签下面的细线，让「一排页签」自己成为一条控件，
+    // 而不是几个散落的文字。
+    ui.painter().hline(
+        rect.x_range(),
+        rect.bottom() - 0.5,
+        Stroke::new(1.0, p.stroke),
+    );
 
     let mut picked = None;
-    let mut x = rect.left() + 4.0;
+    let mut x = rect.left();
     for ((value, text, help), width) in items.iter().zip(&widths) {
-        let item = egui::Rect::from_min_size(
-            egui::pos2(x, rect.top() + 4.0),
-            Vec2::new(*width, height - 8.0),
-        );
+        let item =
+            egui::Rect::from_min_size(egui::pos2(x, rect.top()), Vec2::new(*width, height - 1.0));
         let selected = *value == current;
         let resp = ui.interact(item, ui.scope_id().with((id, text)), Sense::click());
-        if selected || resp.hovered() {
+        if resp.hovered() && !selected {
             ui.painter().rect_filled(
-                item,
-                CornerRadius::same(((height - 8.0) / 2.0) as u8),
-                if selected {
-                    ui.visuals().window_fill
-                } else {
-                    p.stroke.gamma_multiply(0.5)
-                },
+                item.shrink2(Vec2::new(4.0, 6.0)),
+                CornerRadius::same(WIDGET_RADIUS),
+                p.stroke.gamma_multiply(0.5),
             );
         }
-        let color = if selected { p.accent } else { p.text_weak };
-        ui.painter().text(
-            item.center(),
-            egui::Align2::CENTER_CENTER,
-            *text,
-            font.clone(),
-            if resp.hovered() && !selected {
-                p.text
-            } else {
-                color
-            },
+        let color = match (selected, resp.hovered()) {
+            (true, _) => p.text,
+            (false, true) => p.text,
+            (false, false) => p.text_weak,
+        };
+        let label = ui
+            .painter()
+            .layout_no_wrap((*text).to_owned(), font.clone(), color);
+        let center = item.center();
+        ui.painter().galley(
+            egui::pos2(
+                center.x - label.size().x / 2.0,
+                center.y - label.size().y / 2.0,
+            ),
+            label.clone(),
+            color,
         );
+        if selected {
+            // 指示条只覆盖文字宽度，两端留出内边距，看起来像「贴在词下面」而不是「铺满格子」
+            let bar_w = (label.size().x + 8.0).min(item.width() - 8.0);
+            let bar = egui::Rect::from_min_size(
+                egui::pos2(center.x - bar_w / 2.0, item.bottom() - 3.0),
+                Vec2::new(bar_w, 2.5),
+            );
+            ui.painter()
+                .rect_filled(bar, CornerRadius::same(2), p.accent);
+        }
         if resp.hovered() && !help.is_empty() {
             tip(resp.clone(), *help);
         }
@@ -467,10 +573,10 @@ fn lerp_color(from: Color32, to: Color32, t: f32) -> Color32 {
 pub const LABEL_W: f32 = 132.0;
 
 /// 卡片内容到卡片边缘的左右留白（[`card`] 的 `inner_margin`）。
-pub const CARD_PAD_X: f32 = 16.0;
+pub const CARD_PAD_X: f32 = 20.0;
 
 /// 标签列与控件列之间的间距，与全局 `item_spacing.x` 取同一个值。
-pub const ROW_GAP: f32 = 10.0;
+pub const ROW_GAP: f32 = 12.0;
 
 /// 控件列宽度下限：窄窗口下也不能窄到把下拉框里的档位名切掉。
 pub const CTRL_MIN_W: f32 = 280.0;
@@ -483,7 +589,7 @@ pub const CTRL_MIN_W: f32 = 280.0;
 pub const CTRL_MAX_W: f32 = 4.0 * BTN_W + 3.0 * 8.0;
 
 /// 控件行高。输入框、下拉框、数字框、按钮都取这个高度，一行里高矮一致。
-pub const CTRL_H: f32 = 30.0;
+pub const CTRL_H: f32 = 32.0;
 
 /// 一格并排两个控件时左边那个（勾选框、小序号）的宽度；右边那个补齐到
 /// 控件列剩下的宽度，于是「两个小控件一行」与「一个大控件」的右边缘仍然齐平。
@@ -535,31 +641,23 @@ pub fn tip(resp: Response, text: impl Into<String>) -> Response {
 /// 参数面板里每一项都值得解释一句，但全铺成正文会把界面撑散，所以统一做法是
 /// 标签右侧留一个图标，想看的人停一下鼠标。
 pub fn info_dot(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(15.0), Sense::hover());
     let hot = resp.hovered();
-    // 常态就用主题色描边 + 淡底：灰描边的 1px 圆在浅色卡片上几乎看不见，
-    // 用户根本不知道这里能悬浮，所以底色与描边都取主色，只在悬浮时加深。
-    let stroke = if hot {
-        p.accent
-    } else {
-        p.accent.gamma_multiply(0.75)
-    };
+    // 常态是一枚安静的细描边圆圈：整页几十个 i 图标全都染色会变成一堆蓝色噪点，
+    // 只有鼠标停上去才转成强调色。
+    let line = if hot { p.accent } else { p.stroke };
     ui.painter().circle(
         rect.center(),
-        7.0,
-        if hot {
-            p.accent_soft
-        } else {
-            p.accent_soft.gamma_multiply(0.7)
-        },
-        Stroke::new(1.2, stroke),
+        6.5,
+        Color32::TRANSPARENT,
+        Stroke::new(1.0, line),
     );
     ui.painter().text(
         rect.center() + Vec2::new(0.0, 0.5),
         egui::Align2::CENTER_CENTER,
         "i",
-        FontId::proportional(10.5),
-        stroke,
+        FontId::proportional(9.5),
+        if hot { p.accent } else { p.text_weak },
     );
     tip(resp, text)
 }
@@ -820,7 +918,7 @@ pub fn actions(ui: &mut egui::Ui, p: &Palette, items: &[(&str, bool, &str)]) -> 
                     .min_size(Vec2::new(btn_w, CTRL_H))
             } else {
                 egui::Button::new(RichText::new(*text).color(p.text))
-                    .fill(p.sunk)
+                    .fill(p.field)
                     .stroke(Stroke::new(1.0, p.stroke))
                     .corner_radius(CornerRadius::same(WIDGET_RADIUS))
                     .min_size(Vec2::new(btn_w, CTRL_H))
@@ -828,6 +926,7 @@ pub fn actions(ui: &mut egui::Ui, p: &Palette, items: &[(&str, bool, &str)]) -> 
             // 用 add_sized 给死宽高：`min_size` 只是下限，文字一长按钮就自己长胖，
             // 一排里几颗按钮于是宽窄不一、还把右边那颗顶出控件列。
             let resp = ui.add_sized(Vec2::new(btn_w, CTRL_H), button);
+            wash(ui, &resp, p, CornerRadius::same(WIDGET_RADIUS));
             let resp = if help.is_empty() {
                 resp
             } else {
@@ -889,7 +988,7 @@ pub fn label_cell(ui: &mut egui::Ui, p: &Palette, text: &str, help: Option<&str>
     );
 }
 
-/// 复选框行：勾选框挪到控件列，和下拉框、输入框对齐，不再各自缩进。
+/// 开关行：开关挪到控件列，和下拉框、输入框对齐，不再各自缩进。
 pub fn check_row(
     ui: &mut egui::Ui,
     p: &Palette,
@@ -898,7 +997,7 @@ pub fn check_row(
     help: Option<&str>,
 ) -> Response {
     row(ui, p, label, help, |ui| {
-        let mut resp = ui.checkbox(checked, "");
+        let mut resp = switch(ui, p, checked);
         if let Some(text) = help {
             resp = tip(resp, text);
         }
@@ -906,7 +1005,8 @@ pub fn check_row(
     })
 }
 
-/// 只读行：左边标签、右边值。值过长先截断，悬浮看全文（路径类基本都超宽）。
+/// 只读行：左边标签、右边值。值右对齐到控件列右缘——一串路径、一个版本号，右对齐之后
+/// 上下几行能对齐成一条线，读起来像一张表；过长先截断，悬浮看全文。
 pub fn read_row(
     ui: &mut egui::Ui,
     p: &Palette,
@@ -914,10 +1014,15 @@ pub fn read_row(
     value: &str,
     help: Option<&str>,
 ) -> Response {
-    let text = RichText::new(value).size(12.5).color(p.text_weak);
+    let text = RichText::new(value)
+        .size(12.0)
+        .monospace()
+        .color(p.text_weak);
     row(ui, p, label, help, |ui| {
-        let resp = ui.add(egui::Label::new(text).truncate());
-        tip(resp, value.to_owned())
+        let resp = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add(egui::Label::new(text).truncate())
+        });
+        tip(resp.inner, value.to_owned())
     })
 }
 

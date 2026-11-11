@@ -512,26 +512,26 @@ impl App {
         let p = self.palette;
         let real = self.backend.is_real();
         let backend_name = self.backend.name().to_string();
-        egui::Panel::top("header")
+        let bar = egui::Panel::top("header")
             .frame(
                 egui::Frame::new()
                     .fill(p.panel)
-                    .inner_margin(egui::Margin::symmetric(20, 14)),
+                    .inner_margin(egui::Margin::symmetric(20, 12)),
             )
             .show(root, |ui| {
                 ui.horizontal(|ui| {
                     brand_mark(ui, &p);
-                    ui.add_space(4.0);
+                    ui.add_space(6.0);
                     ui.vertical(|ui| {
                         ui.label(
                             egui::RichText::new(self.window_title())
-                                .size(19.0)
+                                .size(18.0)
                                 .strong()
                                 .color(p.text),
                         );
                         ui.label(
                             egui::RichText::new(self.state.subtitle.clone())
-                                .size(12.0)
+                                .size(11.5)
                                 .color(p.text_weak),
                         );
                     });
@@ -558,6 +558,11 @@ impl App {
                     });
                 });
             });
+        // 顶栏与内容区之间只放一条极淡的分隔线：比给面板加描边更轻，
+        // 但足以让白色顶栏和灰色内容底分属两层。
+        let r = bar.response.rect;
+        root.painter()
+            .hline(r.x_range(), r.bottom(), egui::Stroke::new(1.0, p.stroke));
     }
 
     /// 左侧接口列表：每个接口一张小卡，选中态用强调色淡底 + 描边。
@@ -611,26 +616,42 @@ impl App {
                                 d.product.clone()
                             };
                             let card = egui::Frame::new()
-                                .fill(if selected { p.accent_soft } else { p.card })
-                                .stroke(egui::Stroke::new(
-                                    1.0,
-                                    if selected {
-                                        p.accent.gamma_multiply(0.65)
-                                    } else {
-                                        p.stroke
-                                    },
-                                ))
-                                .corner_radius(egui::CornerRadius::same(11))
-                                .inner_margin(egui::Margin::symmetric(12, 10))
+                                // 选中态不再画整圈描边：侧栏条目改用「淡底 + 左侧色条」表达选中，
+                                // 像系统设置的侧边栏，条目之间也就不需要边框来分隔
+                                .fill(if selected {
+                                    p.accent_soft
+                                } else {
+                                    egui::Color32::TRANSPARENT
+                                })
+                                .corner_radius(egui::CornerRadius::same(10))
+                                .inner_margin(egui::Margin::symmetric(12, 9))
                                 .show(ui, |ui| {
                                     ui.set_width(ui.available_width());
+                                    if selected {
+                                        // 色条先画、文字后画，色条只占左侧 2.5px，不会压到内容
+                                        let bar = egui::Rect::from_min_size(
+                                            egui::pos2(
+                                                ui.max_rect().left() - 9.0,
+                                                ui.max_rect().top() + 2.0,
+                                            ),
+                                            egui::Vec2::new(
+                                                2.5,
+                                                (ui.available_height() - 4.0).max(18.0),
+                                            ),
+                                        );
+                                        ui.painter().rect_filled(
+                                            bar,
+                                            egui::CornerRadius::same(2),
+                                            p.accent,
+                                        );
+                                    }
                                     ui.label(
                                         egui::RichText::new(format!(
                                             "{} · {}",
                                             d.vid_pid(),
                                             d.vendor()
                                         ))
-                                        .size(13.5)
+                                        .size(13.0)
                                         .strong()
                                         .color(p.text),
                                     );
@@ -1325,6 +1346,10 @@ impl App {
             );
 
             ui.add_space(2.0);
+            // 子命令自己带一句说明（CmdForm::about），直接摆在下拉框下面：
+            // 名字叫 markers / levels 的子命令，光看名字猜不出它是读还是写。
+            theme::note(ui, &p, self.cmd.sub.about());
+            ui.add_space(6.0);
             self.draw_command_args(ui);
             self.draw_command_advanced(ui);
             ui.add_space(4.0);
@@ -1954,7 +1979,7 @@ impl App {
 
     fn draw_status(&mut self, root: &mut egui::Ui) {
         let p = self.palette;
-        egui::Panel::bottom("status")
+        let bar = egui::Panel::bottom("status")
             .frame(
                 egui::Frame::new()
                     .fill(p.panel)
@@ -1992,6 +2017,9 @@ impl App {
                     });
                 });
             });
+        let r = bar.response.rect;
+        root.painter()
+            .hline(r.x_range(), r.top(), egui::Stroke::new(1.0, p.stroke));
     }
 
     fn run_action(&mut self, action: Action) {
@@ -2154,6 +2182,15 @@ impl eframe::App for App {
                     if let Some(page) = theme::segmented(ui, &p, "tabs", self.tab, &pages) {
                         self.tab = page;
                     }
+                    // 页签下面补一行当前页的说明：页签只有两个字，光靠它进来会不知道
+                    // 这一页在管什么，又不该用大标题再重复一遍页签名，所以只留小字副题。
+                    if let Some((_, _, help)) = pages.iter().find(|(page, _, _)| *page == self.tab)
+                    {
+                        if let Some((_, lead)) = help.split_once('：') {
+                            ui.add_space(8.0);
+                            ui.label(egui::RichText::new(lead).size(12.5).color(p.text_weak));
+                        }
+                    }
                     ui.add_space(12.0);
                 }
                 egui::ScrollArea::vertical()
@@ -2257,14 +2294,30 @@ pub fn window_title() -> &'static str {
 ///
 /// 纯色块比放一张位图省事，深浅色主题下都成立，也不占资源。
 fn brand_mark(ui: &mut egui::Ui, p: &Palette) {
-    let (rect, _) = ui.allocate_exact_size(egui::Vec2::splat(36.0), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(egui::Vec2::splat(34.0), egui::Sense::hover());
     let painter = ui.painter();
-    painter.rect_filled(rect, egui::CornerRadius::same(11), p.accent);
+    painter.rect_filled(rect, egui::CornerRadius::same(10), p.accent);
+    // 顶部压一道极淡的白色内高光：单色圆角方块看起来是贴上去的色块，
+    // 有高光之后更像一枚有厚度的图标，成本只有一次圆角矩形填充。
+    let sheen = egui::Rect::from_min_max(
+        rect.shrink(1.0).left_top(),
+        egui::pos2(rect.right() - 1.0, rect.top() + 15.0),
+    );
+    painter.rect_filled(
+        sheen,
+        egui::CornerRadius {
+            nw: 9,
+            ne: 9,
+            sw: 0,
+            se: 0,
+        },
+        egui::Color32::from_white_alpha(26),
+    );
     painter.text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
         "NP",
-        egui::FontId::proportional(15.0),
+        egui::FontId::proportional(14.5),
         egui::Color32::WHITE,
     );
 }
