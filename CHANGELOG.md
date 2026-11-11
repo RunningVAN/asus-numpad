@@ -147,6 +147,17 @@
   `layout` / `check`、`--lang` 切换、坏值是否被拒并留提示），全程用临时配置，不碰 `~/.config`
   与任何 hidraw 设备；需要手指按触摸板的三项只打印命令。
 
+### 悬浮说明气泡拍得到图了（截图工具链补漏）
+
+- 以前离屏截图没有指针，`on_hover_ui` 的气泡永远拍不到，只能看到小 i 圆点；现在
+  `ASUS_NUMPAD_GUI_HOVER=1` 会往 `RawInput` 塞一个静止的指针，并按 0.1 s/帧推虚拟时间，
+  跨过 egui 的 0.5 s 停留阈值，气泡随帧渲染出来。
+- 实测四张卡的气泡都能拍：浅色/深色各出一张放进 `site/assets/screenshots/`
+  （`gui-extend-hover-light.png` / `-dark.png`），三语 README 的扩展节引用。
+- `HOVER_TEXT` / `HOVER_INDEX` 单独给也算开悬停（以前必须再补 `HOVER=1`，否则静默拍一张
+  没有气泡的静态图——四张图 md5 一模一样才发现），缺那一半会往 stderr 提示一次。
+- `gui/README.md` 的环境变量表补齐截图相关四个变量与一条可复制的拍摄命令。
+
 ### 交叉构建 Windows / Linux 二进制
 
 - 新增 `tools/build-cross.sh`：一条命令产出 `asus-numpad.exe`（PE32+ x86-64）与

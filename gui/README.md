@@ -74,6 +74,20 @@ Linux 是全套。灯光页：
 | `ASUS_NUMPAD_GUI_PAGE=light\|driver\|system\|command\|settings` | 启动时直接落在某一页 |
 | `ASUS_NUMPAD_GUI_SHOT=<路径>.ppm` | 渲染几帧后把窗口内容存成 PPM 并退出，无需截图工具 |
 | `ASUS_NUMPAD_GUI_THEME=dark\|light` | 强制深色 / 浅色，默认跟随系统（截图用） |
+| `ASUS_NUMPAD_GUI_SIZE=1180x1500` | 覆盖初始窗口尺寸（截整页时用） |
+| `ASUS_NUMPAD_GUI_HOVER=1` | 离屏截图时给 `RawInput` 塞一个不动的指针，把悬浮说明气泡一起拍下来 |
+| `ASUS_NUMPAD_GUI_HOVER_TEXT=<正文片段>` | 按说明正文挑控件停靠（比序号稳，段落改一个字也不至于移位） |
+| `ASUS_NUMPAD_GUI_HOVER_INDEX=<n>` | 按本帧绘制顺序停在第 n 个挂了说明的控件上 |
+
+悬浮气泡那张图这么拍（气泡有 0.5 s 停留延迟，`shot.rs` 会自己推虚拟时间）：
+
+```bash
+ASUS_NUMPAD_GUI_FULL=1 ASUS_NUMPAD_GUI_PAGE=extend ASUS_NUMPAD_GUI_SIZE=1180x1500 \
+ASUS_NUMPAD_GUI_HOVER=1 ASUS_NUMPAD_GUI_HOVER_TEXT=贴一张小键盘贴纸 \
+ASUS_NUMPAD_GUI_THEME=light ASUS_NUMPAD_GUI_SHOT=hover.ppm ./target/release/asus-numpad-gui
+```
+
+`HOVER_TEXT` / `HOVER_INDEX` 单独给也会自动开悬停，不用再补 `HOVER=1`。"
 
 ## 键盘四档 → 触摸板亮度
 

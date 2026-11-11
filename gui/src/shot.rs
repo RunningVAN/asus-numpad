@@ -32,6 +32,8 @@ static FRAMES: AtomicU32 = AtomicU32::new(0);
 static REQUESTED: AtomicBool = AtomicBool::new(false);
 /// 本帧已经画过多少个挂说明的控件（每帧开头清零，见 [`tick`]）
 static TIPS_SEEN: AtomicU32 = AtomicU32::new(0);
+/// 「只给了 HOVER_TEXT / HOVER_INDEX」的提示只打一次
+static WARNED_HOVER_SWAP: AtomicBool = AtomicBool::new(false);
 /// 停靠点：`tip` 命中目标序号时记下控件中心，之后每帧注入到 `RawInput`
 static HOVER_AT: OnceLock<Mutex<Option<egui::Pos2>>> = OnceLock::new();
 
@@ -40,16 +42,12 @@ fn hover_at() -> &'static Mutex<Option<egui::Pos2>> {
 }
 
 /// 截图模式下的悬停设置：`None` = 不注入指针（默认，纯静态图）。
+///
+/// 只给 `HOVER_TEXT` / `HOVER_INDEX` 也算开——初期一定要写成
+/// `ASUS_NUMPAD_GUI_HOVER=1 ASUS_NUMPAD_GUI_HOVER_TEXT=…`，少写前一半就静默拍一张
+/// 没有气泡的静态图，图看着「正常」，其实白渲染一轮（踩过）。现在缺那一半会在这里
+/// 补上并往 stderr 说一声，几轮跑下来四张图的 md5 一模一样就是这种情况。
 fn hover_setting() -> Option<HoverSetting> {
-    let raw = std::env::var("ASUS_NUMPAD_GUI_HOVER").ok()?;
-    let raw = raw.trim();
-    if raw.is_empty() {
-        return None;
-    }
-    // `640,320` 这种写法直接指定坐标；其余非空值一律当作「自动停在第一个说明控件上」
-    let explicit = raw
-        .split_once(',')
-        .and_then(|(x, y)| Some(egui::pos2(x.trim().parse().ok()?, y.trim().parse().ok()?)));
     let index = std::env::var("ASUS_NUMPAD_GUI_HOVER_INDEX")
         .ok()
         .and_then(|v| v.trim().parse().ok())
@@ -57,6 +55,22 @@ fn hover_setting() -> Option<HoverSetting> {
     let text = std::env::var("ASUS_NUMPAD_GUI_HOVER_TEXT")
         .ok()
         .filter(|v| !v.trim().is_empty());
+    let raw = match std::env::var("ASUS_NUMPAD_GUI_HOVER") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ if index != 0 || text.is_some() => {
+            // 只提示一次：这函数每帧都会被问一遍
+            if !WARNED_HOVER_SWAP.swap(true, Ordering::Relaxed) {
+                eprintln!("提示：没设 ASUS_NUMPAD_GUI_HOVER，按已开启悬停处理");
+            }
+            String::from("1")
+        }
+        _ => return None,
+    };
+    let raw = raw.trim();
+    // `640,320` 这种写法直接指定坐标；其余非空值一律当作「自动停在第一个说明控件上」
+    let explicit = raw
+        .split_once(',')
+        .and_then(|(x, y)| Some(egui::pos2(x.trim().parse().ok()?, y.trim().parse().ok()?)));
     Some(HoverSetting {
         explicit,
         index,

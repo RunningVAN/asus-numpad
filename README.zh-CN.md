@@ -340,6 +340,11 @@ hidraw 设备。需要手指按触摸板的三项（压感切换、热键、自�
 
 ![扩展页：自定义布局、点亮报文、压感切换、全局热键](site/assets/screenshots/gui-extend.png)
 
+每一行参数、每个区块标题和按钮都挂了悬浮说明，不用把 README 摊在旁边：
+
+![扩展页的悬浮说明（浅色）](site/assets/screenshots/gui-extend-hover-light.png)
+![扩展页的悬浮说明（深色）](site/assets/screenshots/gui-extend-hover-dark.png)
+
 ### 与机型表、布局校验的关系
 
 两层闸门是分开的：机型（DMI / `sku`）决定「这台机器允不允许跑」，键表（`HID_LAYOUTS`）决定

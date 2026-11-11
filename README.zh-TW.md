@@ -341,6 +341,11 @@ tools/verify-extend.sh
 
 ![擴充頁：自訂佈局、點亮報文、壓感切換、全域熱鍵](site/assets/screenshots/gui-extend.png)
 
+每一行參數、每個區塊標題和按鈕都掛了懸浮說明，不用把 README 攤在旁邊：
+
+![擴充頁的懸浮說明（淺色）](site/assets/screenshots/gui-extend-hover-light.png)
+![擴充頁的懸浮說明（深色）](site/assets/screenshots/gui-extend-hover-dark.png)
+
 ### 與機型表、佈局校驗的關係
 
 兩層閘門是分開的：機型（DMI / `sku`）決定「這台機器允不允許跑」，鍵表（`HID_LAYOUTS`）決定

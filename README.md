@@ -375,6 +375,12 @@ hotkey, custom report) are printed as commands to paste, not executed.
 
 ![Extension page: custom layouts, LED report, pressure toggle, global hotkeys](site/assets/screenshots/gui-extend.png)
 
+Every field, block title and button carries a hover explanation, so the page is usable
+without the README open:
+
+![Hover explanation on the extension page (light)](site/assets/screenshots/gui-extend-hover-light.png)
+![Hover explanation on the extension page (dark)](site/assets/screenshots/gui-extend-hover-dark.png)
+
 ### How this relates to model detection and layout validation
 
 The two gates are separate: the model (DMI / `sku`) decides whether the driver may run at all, the
