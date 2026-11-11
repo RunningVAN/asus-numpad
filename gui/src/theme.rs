@@ -245,7 +245,8 @@ pub fn card<R>(ui: &mut egui::Ui, p: &Palette, add: impl FnOnce(&mut egui::Ui) -
     } else {
         frame.stroke(Stroke::new(0.0, Color32::TRANSPARENT))
     };
-    frame
+    let mut prev_column = 0_u32;
+    let out = frame
         .show(ui, |ui| {
             // 卡片宽度一律吃满内容列，不按内容收缩：`Frame` 默认是「有多大内容就多宽」，
             // 于是「机型与布局」这种窄卡片右边缘停在 1030，「命令行」那种宽内容撑到
@@ -254,12 +255,17 @@ pub fn card<R>(ui: &mut egui::Ui, p: &Palette, add: impl FnOnce(&mut egui::Ui) -
             if w.is_finite() {
                 ui.set_width(w);
             }
+            // 卡内所有表单行都照本卡内宽排，控件右端因此压在卡片右内边距这条线上，
+            // 与卡片宽度同源，不会再出现「卡片 800、里面控件只到 720」。
+            prev_column = enter_card(w);
             // 卡片里不缩进：折叠头、列表这些默认会按 indent 往右推，一推控件列就跟着
             // 偏移，同一份表单在「折叠卡片」和「带标题卡片」里就错开十几像素。
             ui.spacing_mut().indent = 0.0;
             add(ui)
         })
-        .inner
+        .inner;
+    leave_card(prev_column);
+    out
 }
 
 /// 带标题的卡片。
@@ -495,7 +501,9 @@ pub fn segmented<T: PartialEq + Copy>(
 pub fn level_meter(ui: &mut egui::Ui, p: &Palette, id: &str, step: u8, steps: u8) -> Option<u8> {
     let steps = steps.max(1);
     let gaps = (steps - 1) as f32 * 6.0;
-    let width = ui.available_width().min(520.0);
+    // 档位格铺满控件列：之前封顶 520，4 档只排到控件列一半（485 对 615），
+    // 同一张卡片里上面是满宽输入框、下面是半截的档位条，白色块一长一短最扎眼。
+    let width = ui.available_width().min(ctrl_width()).max(CTRL_MIN_W);
     let cell = ((width - gaps) / steps as f32).max(18.0);
     let height = 30.0;
     let (rect, _) = ui.allocate_exact_size(
@@ -616,6 +624,28 @@ pub fn begin_page(ui: &mut egui::Ui) {
     let content = ui.available_width() - CARD_PAD_X * 2.0;
     let width = (content - LABEL_W - ROW_GAP).max(CTRL_MIN_W);
     COLUMN_W_MILLI.store((width * 1000.0).round() as u32, Ordering::Relaxed);
+}
+
+/// 进卡时按本卡内宽换上控件列宽度，返回上一份以便出卡还原。
+///
+/// 控件右端必须落在**本卡**的右内边距上：页面级 [`begin_page`] 量的是滚动区宽度，
+/// 与 `Frame` 扣完留白后的实宽能差几十像素，控件于是停在卡片右边之前一截，
+/// 一页里输入框、下拉框、按钮组的右缘就长短不齐。这里进卡换值、出卡还原，
+/// 并列卡片各页一致，嵌套卡片也不会把外层顶宽。
+fn enter_card(card_inner_w: f32) -> u32 {
+    use std::sync::atomic::Ordering;
+    let prev = COLUMN_W_MILLI.load(Ordering::Relaxed);
+    if card_inner_w.is_finite() && card_inner_w > 0.0 {
+        let width = (card_inner_w - LABEL_W - ROW_GAP).max(CTRL_MIN_W);
+        COLUMN_W_MILLI.store((width * 1000.0).round() as u32, Ordering::Relaxed);
+    }
+    prev
+}
+
+/// 出卡时把页面级控件列宽度换回去。
+fn leave_card(prev: u32) {
+    use std::sync::atomic::Ordering;
+    COLUMN_W_MILLI.store(prev, Ordering::Relaxed);
 }
 
 /// 本页控件列宽度。
@@ -893,21 +923,16 @@ pub fn slot_grid(ui: &mut egui::Ui, p: &Palette, values: &mut [u8], low: u8, hig
     let _ = p;
 }
 
-/// 一排按钮：每颗都正好 [`BTN_W`] 宽、从当前行首依次排开，**永远不缩**。
+/// 一排按钮：整组铺满控件列，几颗就几等分，右端压在卡片的内右边缘上。
 ///
-/// 之前按「总数平分」算宽度，于是同一页里出现 123 / 104 / 91 三种按钮宽——一排三颗
-/// 的被压窄、一排两颗的又被拉宽，整页看上去宽度乱七八糟。这里定死一颗按钮的尺寸：
-/// 同一行几颗就几颗排过去，多出的宽度不够就让它往右伸，宁可伸进空白，也不改按钮宽。
+/// 早先定死一颗 [`BTN_W`]，一排三颗只占列宽一半，同一张卡片里输入框 636 宽、
+/// 按钮组 328 宽，白色块「有长有短」正是这么来的。现在按钮组与输入框、下拉框同宽，
+/// 一排内各颗按钮彼此等宽，右缘与整页控件列同一条竖线。
 pub fn actions(ui: &mut egui::Ui, p: &Palette, items: &[(&str, bool, &str)]) -> Option<usize> {
     let gap = ui.spacing().item_spacing.x;
-    // 一排按钮的总宽不能超过控件列：四颗 104 的按钮加上间距是 446，比控件列多出几像素，
-    // 最后一颗就会顶出卡片右边。按钮多于「控件列放得下」时按控件列等分，右边缘永远齐平。
     let count = items.len().max(1) as f32;
-    let btn_w = if count > 1.0 {
-        ((ctrl_width() - gap * (count - 1.0)) / count).min(BTN_W)
-    } else {
-        BTN_W
-    };
+    // 单颗宽度不低于 [`BTN_W`]：数量少时不至于把按钮拉成一条长条，数量多时保证铺满。
+    let btn_w = ((ctrl_width() - gap * (count - 1.0)) / count).max(BTN_W);
     let mut clicked = None;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = gap;
@@ -942,10 +967,7 @@ pub fn actions(ui: &mut egui::Ui, p: &Palette, items: &[(&str, bool, &str)]) -> 
     clicked
 }
 
-/// 「标签 + 一排按钮」：按钮组左边缘与下拉框、输入框同一条竖线起。
-///
-/// 这一行是整页唯一允许往右伸过控件列的布局——三颗按钮就是 3×[`BTN_W`] 加两道间距，
-/// 硬塞进控件列只能靠压窄按钮，那正是界面看着不齐的根源。
+/// 「标签 + 一排按钮」：按钮组与下拉框、输入框同宽，右缘压在同一条竖线上。
 pub fn action_row(
     ui: &mut egui::Ui,
     p: &Palette,
@@ -955,8 +977,7 @@ pub fn action_row(
 ) -> Option<usize> {
     ui.horizontal(|ui| {
         label_cell(ui, p, label, help);
-        ctrl_spacing(ui);
-        actions(ui, p, items)
+        ctrl_cell(ui, |ui| actions(ui, p, items))
     })
     .inner
 }
