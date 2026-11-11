@@ -289,7 +289,20 @@ pub fn section<R>(
 /// 直接贴到卡片边缘），层次更像系统设置面板：标题区与内容区一刀切开，读者不会
 /// 把标题误当成第一行内容。
 pub fn title_row(ui: &mut egui::Ui, p: &Palette, title: &str) {
-    ui.label(RichText::new(title).size(14.5).strong().color(p.text));
+    title_row_help(ui, p, title, None);
+}
+
+/// 同上，但标题右边还能挂一个 `i`。
+///
+/// 区块级的说明（这一栏是什么、为什么会有好几个条目）塞不进任何一行参数里，
+/// 挂在标题上最省地方，也不会和参数行的 `i` 挤在同一列。
+pub fn title_row_help(ui: &mut egui::Ui, p: &Palette, title: &str, help: Option<&str>) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(title).size(14.5).strong().color(p.text));
+        if let Some(help) = help {
+            info_dot(ui, p, help);
+        }
+    });
     let r = ui.max_rect();
     let y = ui.cursor().top() - ui.spacing().item_spacing.y * 0.5;
     ui.painter().hline(
@@ -660,12 +673,32 @@ pub fn pair_b() -> f32 {
 }
 
 /// 给任意控件挂一段悬浮说明：统一宽度与字号，各页 tooltip 不会长短不一。
+///
+/// 内容分两层：一行灰色小字「说明」交代这是什么，下面是正文。原先只有一句 12.5 号
+/// 文字浮在控件旁，长句子跑到两三行时会被误读成界面正文；补一行标签后，凡是浮出来的
+/// 方块都能一眼认出是解释。宽度压到 300 像素（约 25 个汉字一行），再长也读得下去。
 pub fn tip(resp: Response, text: impl Into<String>) -> Response {
     let text = text.into();
-    resp.on_hover_ui(move |ui| {
-        ui.set_max_width(320.0);
-        ui.label(RichText::new(text).size(12.5));
-    })
+    // 挂说明的控件统一换成问号光标，用户能先看出「这里有东西可停」再停上去。
+    resp.on_hover_cursor(egui::CursorIcon::Help)
+        .on_hover_ui(move |ui| {
+            ui.set_max_width(300.0);
+            ui.spacing_mut().item_spacing.y = 4.0;
+            let v = ui.visuals();
+            let accent = v.hyperlink_color;
+            let body = v.override_text_color.unwrap_or(v.text_color());
+            ui.label(
+                RichText::new("说明")
+                    .size(10.0)
+                    .color(accent.gamma_multiply(0.9)),
+            );
+            ui.label(
+                RichText::new(text.as_str())
+                    .size(12.5)
+                    .line_height(Some(19.0))
+                    .color(body),
+            );
+        })
 }
 
 /// 标签后面那个小圆圈 `i`：鼠标停上去出说明。
@@ -675,21 +708,34 @@ pub fn tip(resp: Response, text: impl Into<String>) -> Response {
 pub fn info_dot(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) -> Response {
     let (rect, resp) = ui.allocate_exact_size(Vec2::splat(15.0), Sense::hover());
     let hot = resp.hovered();
-    // 常态是一枚安静的细描边圆圈：整页几十个 i 图标全都染色会变成一堆蓝色噪点，
-    // 只有鼠标停上去才转成强调色。
-    let line = if hot { p.accent } else { p.stroke };
-    ui.painter().circle(
-        rect.center(),
-        6.5,
-        Color32::TRANSPARENT,
-        Stroke::new(1.0, line),
-    );
+    // 常态是「淡底 + 淡描边」的圆圈：整页几十个 i 全染成实心强调色会变成一堆蓝噪点，
+    // 但只画一圈卡片描边色又几乎看不见（浅色卡片尤其如此），折中方案是强调色淡底 +
+    // 半透明描边——安静，又能被扫到。鼠标停上去才反过来变成实心强调色。
+    //
+    // 深色底要单独提一档：同样的半透明描边压在近黑卡片上会糊掉，10 号小字跟着一起
+    // 看不清，所以描边和底色都加浓。
+    let dark = p.bg.to_array()[0] < 128;
+    let fill = if hot {
+        p.accent
+    } else if dark {
+        p.accent.gamma_multiply(0.22)
+    } else {
+        p.accent_soft
+    };
+    let line = if hot {
+        p.accent
+    } else {
+        p.accent.gamma_multiply(if dark { 0.8 } else { 0.45 })
+    };
+    let glyph = if hot { p.card } else { p.accent };
+    ui.painter()
+        .circle(rect.center(), 6.5, fill, Stroke::new(1.0, line));
     ui.painter().text(
         rect.center() + Vec2::new(0.0, 0.5),
         egui::Align2::CENTER_CENTER,
         "i",
         FontId::proportional(9.5),
-        if hot { p.accent } else { p.text_weak },
+        glyph,
     );
     tip(resp, text)
 }
@@ -1063,3 +1109,4 @@ pub fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
         });
     });
 }
+

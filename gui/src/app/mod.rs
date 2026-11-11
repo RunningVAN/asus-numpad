@@ -536,7 +536,11 @@ impl App {
                         );
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if theme::secondary(ui, &p, "重新扫描").clicked() {
+                        let rescan = theme::tip(
+                            theme::secondary(ui, &p, "重新扫描"),
+                            "重新枚举 HID 接口：热插拔设备、或刚装上官方驱动之后点它。",
+                        );
+                        if rescan.clicked() {
                             *action = Some(Action::Rescan);
                         }
                         let (dot, tint) = if real {
@@ -581,7 +585,12 @@ impl App {
                     .inner_margin(egui::Margin::symmetric(16, 14)),
             )
             .show(root, |ui| {
-                theme::title_row(ui, &p, "HID 接口");
+                theme::title_row_help(
+                    ui,
+                    &p,
+                    "HID 接口",
+                    Some("驱动通过 FEATURE 0x0d 控制的那一路 HID 接口；同一台机器上出现多个时，选带 NumberPad 小键盘的那个。"),
+                );
                 theme::note(
                     ui,
                     &p,
@@ -1046,7 +1055,13 @@ impl App {
                         );
                     },
                 );
-                theme::read_row(ui, &p, "当前状态", &self.numlock_text(), None);
+                theme::read_row(
+                    ui,
+                    &p,
+                    "当前状态",
+                    &self.numlock_text(),
+                    Some("NumLock 的实时状态，取自驱动上报；与键盘指示灯应当一致。"),
+                );
                 if self.sent_numlock.is_none() {
                     theme::note(ui, &p, "等待第一次状态读取……")
                 }
@@ -1138,7 +1153,12 @@ impl App {
             }
 
             for hint in &self.state.hints {
-                theme::row(ui, &p, "提示", None, |ui| {
+                theme::row(
+                    ui,
+                    &p,
+                    "提示",
+                    Some("驱动运行时给出的即时提示，出现这行黄字说明某项配置需要留意。"),
+                    |ui| {
                     ui.label(
                         egui::RichText::new(hint.clone())
                             .small()
@@ -1174,7 +1194,12 @@ impl App {
                         );
                     },
                 );
-                let picked = theme::row(ui, &p, "服务控制", None, |ui| {
+                let picked = theme::row(
+                    ui,
+                    &p,
+                    "服务控制",
+                    Some("systemd 用户单元 asus-numpad.service 的启停与重启；重启用于让刚写入的驱动配置生效。"),
+                    |ui| {
                     theme::actions(
                         ui,
                         &p,
@@ -1773,7 +1798,12 @@ impl App {
     fn draw_command_output(&mut self, ui: &mut egui::Ui) {
         let p = self.palette;
         if self.cmd_running {
-            theme::row(ui, &p, "状态", None, |ui| {
+            theme::row(
+                ui,
+                &p,
+                "状态",
+                Some("命令已提交，正在等 asus-numpad 进程退出并回传输出。"),
+                |ui| {
                 ui.horizontal(|ui| {
                     ui.spinner();
                     ui.label(small("等待进程返回……"));
@@ -1784,7 +1814,12 @@ impl App {
         let Some(output) = self.cmd_out.clone() else {
             return;
         };
-        let picked = theme::row(ui, &p, "输出", None, |ui| {
+        let picked = theme::row(
+            ui,
+            &p,
+            "输出",
+            Some("上一条命令的输出，标准输出与标准错误合并显示；只是界面上的文本，不影响配置。"),
+            |ui| {
             theme::actions(
                 ui,
                 &p,
@@ -1944,7 +1979,12 @@ impl App {
             );
 
             ui.add_space(6.0);
-            let picked = theme::row(ui, &p, "打开目录", None, |ui| {
+            let picked = theme::row(
+                ui,
+                &p,
+                "打开目录",
+                Some("在系统文件管理器里定位配置所在目录，方便直接改配置文件。"),
+                |ui| {
                 theme::actions(
                     ui,
                     &p,
