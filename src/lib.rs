@@ -42,3 +42,19 @@ pub use layout::{Geometry, KeyMode, Layout, GH3XLNDZ};
 pub fn banner() -> String {
     i18n::tf("app.banner", &[("version", VERSION)])
 }
+
+/// 测试专用：自定义布局注册表是进程级全局状态，多个测试并发读写会互相清空。
+#[cfg(test)]
+pub(crate) mod test_lock {
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    fn lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    /// 拿住这把锁的测试之间互斥，直到 guard 离开作用域。
+    pub fn registry() -> MutexGuard<'static, ()> {
+        lock().lock().unwrap_or_else(|e| e.into_inner())
+    }
+}

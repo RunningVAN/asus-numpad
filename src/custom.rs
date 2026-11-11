@@ -537,6 +537,14 @@ impl Default for CustomLayoutSpec {
     }
 }
 
+/// 键表是否「留空 = 沿用基准布局的键表」。
+///
+/// 配置里 `keys = []`（或全是空白行）时不报错：贴纸/镭雕只改了行列几何、键位照抄
+/// 基准机型的场景很常见，逼用户把整张表抄一遍既啰嗦又容易抄错。
+pub fn keys_inherit_base(keys: &[String]) -> bool {
+    keys.iter().all(|line| line.trim().is_empty())
+}
+
 /// 已注册的自定义布局：Leaked 成 `'static`，好让 `Geometry` / `LayoutEntry` 的
 /// 现有 `&'static str` 接口原样复用。
 pub struct CustomLayout {
@@ -597,18 +605,30 @@ pub fn install_layouts(specs: &[CustomLayoutSpec]) -> Vec<String> {
             continue;
         };
         let mut patch = spec.patch;
-        let table = match KeyTable::parse(&spec.keys) {
-            Ok(t) => {
-                // 列数以键表为准：贴纸方案天然由贴纸的列数决定
-                patch.columns = Some(t.cols() as i32);
-                t
+        let inherited = keys_inherit_base(&spec.keys);
+        let table = if inherited {
+            // 沿用它继承的那张表：先看前面已解析的自定义布局，再看内置表
+            match pending
+                .iter()
+                .find(|c| c.entry.name.eq_ignore_ascii_case(spec.base.trim()))
+            {
+                Some(base) => base.table.clone(),
+                None => builtin_table().clone(),
             }
-            Err(err) => {
-                notes.push(crate::i18n::tf(
-                    "note.custom_layout_bad_keys",
-                    &[("name", name), ("err", &err)],
-                ));
-                continue;
+        } else {
+            match KeyTable::parse(&spec.keys) {
+                Ok(t) => {
+                    // 列数以键表为准：贴纸方案天然由贴纸的列数决定
+                    patch.columns = Some(t.cols() as i32);
+                    t
+                }
+                Err(err) => {
+                    notes.push(crate::i18n::tf(
+                        "note.custom_layout_bad_keys",
+                        &[("name", name), ("err", &err)],
+                    ));
+                    continue;
+                }
             }
         };
         let layout = patch.apply(base.layout);
@@ -1125,6 +1145,11 @@ mod tests {
     use super::*;
     use crate::layout::GH3XLNDZ;
 
+    /// 自定义布局注册表是进程级全局状态，测试并行跑会互相清空，必须串行。
+    fn registry_lock() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_lock::registry()
+    }
+
     #[test]
     fn key_code_aliases() {
         assert_eq!(key_code("7"), Some(kc::KEY_7));
@@ -1249,6 +1274,7 @@ mod tests {
 
     #[test]
     fn custom_layout_registers_and_resolves() {
+        let _guard = registry_lock();
         let spec = CustomLayoutSpec {
             name: "PASTE40".to_string(),
             hid_ids: vec!["asue9999".to_string()],
@@ -1279,6 +1305,7 @@ mod tests {
 
     #[test]
     fn custom_layout_rejects_builtin_name() {
+        let _guard = registry_lock();
         let notes = install_layouts(&[CustomLayoutSpec {
             name: "GH3XLNDZ".to_string(),
             keys: vec!["1 2 3 4 5".to_string()],
@@ -1392,5 +1419,250 @@ mod tests {
         }]);
         assert!(state.is_empty());
         assert_eq!(notes.len(), 1);
+    }
+
+    #[test]
+    fn custom_layout_inherits_base_keys() {
+        let _guard = registry_lock();
+        // 只改几何、键位照抄：keys 留空必须合法，且沿用基准那张表
+        let spec = CustomLayoutSpec {
+            name: "STICKER-3X4".to_string(),
+            base: crate::layout::DEFAULT_LAYOUT_NAME.to_string(),
+            hid_ids: vec![" asue9999 ".to_string(), String::new()],
+            keys: Vec::new(),
+            ..Default::default()
+        };
+        let notes = install_layouts(&[spec]);
+        assert!(notes.is_empty(), "{notes:?}");
+
+        let entry = entry_by_name("STICKER-3X4").expect("应当注册成功");
+        assert_eq!(entry.layout.columns as usize, builtin_table().cols());
+        let table = table_for("STICKER-3X4");
+        assert_eq!(table.describe(), builtin_table().describe());
+        // HID 绑定的空白项被丢掉，其余转大写
+        assert_eq!(
+            entry_by_hid("ASUE9999").map(|e| e.name),
+            Some("STICKER-3X4")
+        );
+        assert!(entry_by_hid("").is_none());
+
+        // 全是空白行也算留空
+        assert!(keys_inherit_base(&["".to_string(), "   ".to_string()]));
+        assert!(!keys_inherit_base(&["7 8 9".to_string()]));
+        install_layouts(&[]);
+    }
+
+    #[test]
+    fn custom_layout_chain_inherits_previous_custom_table() {
+        let _guard = registry_lock();
+        let first = CustomLayoutSpec {
+            name: "CHAIN-A".to_string(),
+            base: crate::layout::DEFAULT_LAYOUT_NAME.to_string(),
+            keys: vec!["kp7 kp8 kp9".to_string(), "kp4 kp5 kp6".to_string()],
+            ..Default::default()
+        };
+        let second = CustomLayoutSpec {
+            name: "CHAIN-B".to_string(),
+            base: "CHAIN-A".to_string(),
+            keys: Vec::new(),
+            ..Default::default()
+        };
+        let notes = install_layouts(&[first, second]);
+        assert!(notes.is_empty(), "{notes:?}");
+        assert_eq!(
+            table_for("CHAIN-B").describe(),
+            table_for("CHAIN-A").describe()
+        );
+        assert_eq!(table_for("CHAIN-B").cols(), 3);
+        install_layouts(&[]);
+    }
+
+    #[test]
+    fn custom_layout_notes_bad_shapes() {
+        let _guard = registry_lock();
+        let ragged = CustomLayoutSpec {
+            name: "RAGGED".to_string(),
+            base: crate::layout::DEFAULT_LAYOUT_NAME.to_string(),
+            keys: vec!["7 8 9".to_string(), "4 5".to_string()],
+            ..Default::default()
+        };
+        let too_wide = CustomLayoutSpec {
+            name: "WIDE".to_string(),
+            base: crate::layout::DEFAULT_LAYOUT_NAME.to_string(),
+            keys: vec!["7 8 9 4 5 6 1 2 3".to_string()],
+            ..Default::default()
+        };
+        let no_base = CustomLayoutSpec {
+            name: "ORPHAN".to_string(),
+            base: "NOPE".to_string(),
+            ..Default::default()
+        };
+        let notes = install_layouts(&[ragged, too_wide, no_base]);
+        assert_eq!(notes.len(), 3, "{notes:?}");
+        assert!(entry_by_name("RAGGED").is_none());
+        assert!(entry_by_name("WIDE").is_none());
+        assert!(entry_by_name("ORPHAN").is_none());
+        install_layouts(&[]);
+    }
+
+    #[test]
+    fn proto_validate_bounds() {
+        // 空模板 / 超长模板 / 缺占位 / 占位落在首字节（report id）
+        assert!(LedProtoSpec { template: vec![] }.validate().is_err());
+        assert!(LedProtoSpec {
+            template: vec![0x0d; 65]
+        }
+        .validate()
+        .is_err());
+        assert!(LedProtoSpec {
+            template: vec![0x0d, 0x14, 0x03, 0xad]
+        }
+        .validate()
+        .is_err());
+        assert!(LedProtoSpec {
+            template: vec![LEVEL_MARK, 0x14, 0x03, LEVEL_MARK]
+        }
+        .validate()
+        .is_err());
+        // 恰好 64 字节是上限，可以过
+        let mut max = vec![0x0d; 64];
+        max[63] = LEVEL_MARK;
+        assert!(LedProtoSpec { template: max }.validate().is_ok());
+        // 内置模板的 is_builtin 只在完全一致时为真
+        let mut tweaked = LedProtoSpec::default().template;
+        tweaked[4] = 0x00;
+        assert!(!LedProtoSpec { template: tweaked }.is_builtin());
+    }
+
+    #[test]
+    fn proto_encode_covers_every_step() {
+        let spec = LedProtoSpec {
+            template: vec![0x0a, 0x01, LEVEL_MARK, 0x00],
+        };
+        let mut seen = std::collections::HashSet::new();
+        for value in 0x40..=0x4f {
+            let Some(bytes) = spec.encode(value) else {
+                continue;
+            };
+            assert_eq!(bytes[2], crate::led_proto::level_byte(value).unwrap());
+            seen.insert(bytes[2]);
+        }
+        assert!(seen.len() >= 8, "亮度档位没有真正写进占位符：{seen:?}");
+    }
+
+    #[test]
+    fn pressure_switch_sanitizes_bounds() {
+        let low = PressureSwitch {
+            enabled: true,
+            percent: 0,
+            frames: 0,
+            cooldown_ms: f64::NAN,
+        }
+        .sanitized();
+        assert_eq!(low.percent, 1);
+        assert_eq!(low.frames, 1);
+        assert_eq!(low.cooldown_ms, 600.0);
+
+        let high = PressureSwitch {
+            enabled: true,
+            percent: 250,
+            frames: 9999,
+            cooldown_ms: -5.0,
+        }
+        .sanitized();
+        assert_eq!(high.percent, 100);
+        assert_eq!(high.frames, 200);
+        assert_eq!(high.cooldown_ms, 600.0);
+    }
+
+    #[test]
+    fn pressure_gate_cooldown_and_contact() {
+        let mut gate = PressureGate::new(PressureSwitch {
+            enabled: true,
+            percent: 50,
+            frames: 1,
+            cooldown_ms: 300.0,
+        });
+        assert!(gate.feed(600, 1000, true, 0.0));
+        // 抬起压力重新武装，但冷却期未过 → 不触发
+        assert!(!gate.feed(0, 1000, true, 100.0));
+        assert!(!gate.feed(600, 1000, true, 100.0));
+        // 触点离开也会重新武装
+        assert!(!gate.feed(0, 1000, false, 200.0));
+        assert!(!gate.feed(600, 1000, true, 250.0));
+        assert!(gate.feed(600, 1000, true, 300.0));
+        assert_eq!(gate.fired(), 2);
+    }
+
+    #[test]
+    fn hotkey_modifier_order_is_irrelevant() {
+        let a = Hotkey::parse("alt+ctrl+n").unwrap();
+        let b = Hotkey::parse("ctrl+alt+n").unwrap();
+        let c = Hotkey::parse("N+CTRL+ALT").unwrap();
+        assert_eq!(a, b);
+        assert_eq!(b, c);
+        assert_eq!(a.label(), "ctrl+alt+n");
+        // 重复写同一个主键不算错，也不改变结果
+        assert_eq!(Hotkey::parse("ctrl+n+n").unwrap().code, kc::KEY_N);
+        assert_eq!(Hotkey::parse("n").unwrap().mods, 0);
+    }
+
+    #[test]
+    fn hotkey_action_aliases() {
+        assert_eq!(HotkeyAction::parse("").unwrap(), HotkeyAction::Toggle);
+        assert_eq!(HotkeyAction::parse(" ON ").unwrap(), HotkeyAction::On);
+        assert_eq!(HotkeyAction::parse("enable").unwrap(), HotkeyAction::On);
+        assert_eq!(HotkeyAction::parse("off").unwrap(), HotkeyAction::Off);
+        assert_eq!(HotkeyAction::parse("disable").unwrap(), HotkeyAction::Off);
+        assert!(HotkeyAction::parse("reboot").is_err());
+        assert_eq!(HotkeyAction::On.as_str(), "on");
+    }
+
+    #[test]
+    fn hotkey_state_reset_and_unknown_action_note() {
+        let (mut state, notes) = HotkeyState::new(&[
+            HotkeySpec {
+                gesture: "ctrl+alt+n".to_string(),
+                action: "toggle".to_string(),
+            },
+            HotkeySpec {
+                gesture: "ctrl+alt+m".to_string(),
+                action: "reboot".to_string(),
+            },
+            HotkeySpec {
+                gesture: "  ".to_string(),
+                action: "toggle".to_string(),
+            },
+        ]);
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert_eq!(state.describe().len(), 1);
+        // 切 tty 后残留的按下态必须能被清掉，否则第一次按键会误触发
+        state.feed(kc::KEY_LEFTCTRL, 1);
+        state.feed(kc::KEY_LEFTALT, 1);
+        state.clear();
+        assert_eq!(state.feed(kc::KEY_N, 1), None);
+        state.feed(kc::KEY_N, 0);
+        state.feed(kc::KEY_LEFTCTRL, 1);
+        state.feed(kc::KEY_LEFTALT, 1);
+        assert_eq!(state.feed(kc::KEY_N, 1), Some(HotkeyAction::Toggle));
+    }
+
+    #[test]
+    fn hotkey_ignores_repeat_and_release() {
+        let (mut state, _) = HotkeyState::new(&[HotkeySpec {
+            gesture: "ctrl+shift+k".to_string(),
+            action: "on".to_string(),
+        }]);
+        state.feed(kc::KEY_LEFTCTRL, 1);
+        state.feed(kc::KEY_LEFTSHIFT, 1);
+        assert_eq!(state.feed(kc::KEY_K, 1), Some(HotkeyAction::On));
+        // 长按重复事件不重复触发
+        for _ in 0..5 {
+            assert_eq!(state.feed(kc::KEY_K, 2), None);
+        }
+        // 抬起主键后可以再次触发
+        state.feed(kc::KEY_K, 0);
+        assert_eq!(state.feed(kc::KEY_K, 1), Some(HotkeyAction::On));
+        assert_eq!(state.feed(kc::KEY_K, 0), None);
     }
 }

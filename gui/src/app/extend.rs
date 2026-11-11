@@ -158,6 +158,9 @@ impl App {
                 .custom_layouts
                 .iter()
                 .filter_map(|spec| {
+                    if custom::keys_inherit_base(&spec.keys) {
+                        return None;
+                    }
                     custom::KeyTable::parse(&spec.keys).err().map(|err| {
                         format!(
                             "{}：{err}",
@@ -482,6 +485,23 @@ fn draw_one_layout(
     );
 
     // 实时解析结果：不用点保存就能知道这行键表能不能认
+    if custom::keys_inherit_base(&spec.keys) {
+        theme::read_row(
+            ui,
+            p,
+            "键表解析",
+            &format!(
+                "留空，沿用 {} 的键表",
+                if spec.base.trim().is_empty() {
+                    "默认布局"
+                } else {
+                    spec.base.trim()
+                }
+            ),
+            Some("键位照抄基准机型、只改行列几何时，把这一栏清空即可。"),
+        );
+        return;
+    }
     match custom::KeyTable::parse(&spec.keys) {
         Ok(table) => {
             theme::read_row(

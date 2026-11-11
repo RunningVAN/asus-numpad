@@ -1226,6 +1226,7 @@ mod tests {
 
     #[test]
     fn custom_levels_may_start_from_off() {
+        let _registry_guard = crate::test_lock::registry();
         // 「从 0 到最大线性四档」：0 是熄灭，其余三档线性铺到最亮
         let mut c = Config {
             manual_brightness_levels: Some(vec![0x00, 0x43, 0x46, 0x48]),
@@ -1245,6 +1246,7 @@ mod tests {
 
     #[test]
     fn custom_levels_must_be_increasing() {
+        let _registry_guard = crate::test_lock::registry();
         let mut c = Config {
             manual_brightness_levels: Some(vec![0x48, 0x46, 0x43, 0x41]),
             ..Config::default()
@@ -1340,6 +1342,7 @@ mod tests {
 
     #[test]
     fn custom_levels_still_drop_out_of_range() {
+        let _registry_guard = crate::test_lock::registry();
         let mut c = Config {
             manual_brightness_levels: Some(vec![0x00, 0x30, 0x43, 0x48]),
             ..Config::default()
@@ -1392,6 +1395,7 @@ mod tests {
 
     #[test]
     fn manual_step_clamped_on_load() {
+        let _registry_guard = crate::test_lock::registry();
         let mut c: Config = serde_json::from_str(r#"{"manual_brightness_step":9}"#).unwrap();
         let notes = c.sanitize();
         assert_eq!(c.manual_brightness_step, MANUAL_BRIGHTNESS_STEPS);
@@ -1400,6 +1404,7 @@ mod tests {
 
     #[test]
     fn manual_levels_use_custom_table() {
+        let _registry_guard = crate::test_lock::registry();
         let mut c = Config {
             // 自定义档表：档数由长度决定（这里 3 档），亮度逐档照写，不做等分
             manual_brightness_levels: Some(vec![0x41, 0x44, 0x48]),
@@ -1420,6 +1425,7 @@ mod tests {
 
     #[test]
     fn custom_levels_are_sanitized() {
+        let _registry_guard = crate::test_lock::registry();
         // 越界值剔除 → 表变短，档数跟着变（0 是合法值，代表熄灭）
         let mut c: Config =
             serde_json::from_str(r#"{"manual_brightness_levels":["0x41","0x30","0x46","0x48"]}"#)
@@ -1461,6 +1467,7 @@ mod tests {
 
     #[test]
     fn custom_table_len_drives_step_clamp() {
+        let _registry_guard = crate::test_lock::registry();
         let mut c: Config = serde_json::from_str(
             r#"{"manual_brightness_levels":[65,68],"manual_brightness_step":4}"#,
         )
@@ -1506,6 +1513,7 @@ mod tests {
 
     #[test]
     fn legacy_fields_are_ignored_not_fatal() {
+        let _registry_guard = crate::test_lock::registry();
         // `numlock_zone` / `hidraw_prefix` 已从实现里移除，读到就当没写：
         // 不能因为一份老配置让整份设置退回默认值。
         let mut c =
@@ -1567,6 +1575,104 @@ mod tests {
     }
 
     #[test]
+    fn extension_config_roundtrips_through_disk() {
+        // 四项扩展必须能写出去再读回来：GUI 里改完保存、后台服务重启，
+        // 少一个字段就等于界面上的设置被静默丢弃。
+        let _registry_guard = crate::test_lock::registry();
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("asus-numpad-ext-{}.json", std::process::id()));
+        let c = Config {
+            custom_layouts: vec![crate::custom::CustomLayoutSpec {
+                name: "STICKER-4X4".to_string(),
+                base: "GH3XLNDZ".to_string(),
+                hid_ids: vec!["ASUE1416".to_string()],
+                keys: vec![
+                    "kp7 kp8 kp9 slash".to_string(),
+                    "kp4 kp5 kp6 asterisk".to_string(),
+                    "kp1 kp2 kp3 minus".to_string(),
+                    "kp0 period plus enter".to_string(),
+                ],
+                patch: crate::custom::LayoutPatch {
+                    columns: Some(4),
+                    left: Some(20),
+                    ..Default::default()
+                },
+            }],
+            led_proto: crate::custom::LedProtoSpec {
+                template: vec![0x0a, 0x01, crate::custom::LEVEL_MARK, 0x00],
+            },
+            pressure_switch: crate::custom::PressureSwitch {
+                enabled: true,
+                percent: 65,
+                frames: 4,
+                cooldown_ms: 250.0,
+            },
+            hotkeys: vec![crate::custom::HotkeySpec {
+                gesture: "ctrl+alt+n".to_string(),
+                action: "on".to_string(),
+            }],
+            ..Config::default()
+        };
+        std::fs::write(&path, c.to_json()).unwrap();
+        let (back, notes) = Config::load(&path);
+        let _ = std::fs::remove_file(&path);
+        // 读回时允许「已生效」类提示（抢占内置 HID、压感开启），但不许有任何回落
+        assert!(
+            notes
+                .iter()
+                .all(|n| !n.contains("ignored") && !n.contains("falling back")),
+            "notes={notes:?}"
+        );
+
+        assert_eq!(back.custom_layouts, c.custom_layouts);
+        assert_eq!(back.led_proto, c.led_proto);
+        assert_eq!(back.pressure_switch, c.pressure_switch);
+        assert_eq!(back.hotkeys, c.hotkeys);
+        // 布局真的装上了，而且键表按自定义的四列走
+        assert!(crate::custom::entry_by_name("STICKER-4X4").is_some());
+        assert_eq!(crate::custom::table_for("STICKER-4X4").cols(), 4);
+        crate::custom::install_layouts(&[]);
+    }
+
+    #[test]
+    fn extension_defaults_are_inert() {
+        // 默认配置不能有任何副作用：不开压感、报文就是内置报文、没有热键
+        let c = Config::default();
+        assert!(c.custom_layouts.is_empty());
+        assert!(c.hotkeys.is_empty());
+        assert!(!c.pressure_switch.enabled);
+        assert!(c.led_proto.is_builtin());
+        assert!(c.led_proto.validate().is_ok());
+        // 空的扩展段不该写进配置文件，免得用户看不出哪些是默认
+        let json = c.to_json();
+        assert!(!json.contains("STICKER"));
+        assert!(serde_json::from_str::<Config>(&json).is_ok());
+    }
+
+    #[test]
+    fn bad_extension_values_fall_back_with_notes() {
+        let _registry_guard = crate::test_lock::registry();
+        let mut c: Config = serde_json::from_str(
+            r#"{
+                "led_proto": { "template": [1, 2, 3] },
+                "pressure_switch": { "enabled": true, "percent": 0, "frames": 0 },
+                "hotkeys": [ { "gesture": "ctrl+alt+n", "action": "toggle" } ],
+                "custom_layouts": [ { "name": "GH3XLNDZ", "keys": [] } ]
+            }"#,
+        )
+        .expect("坏报文不该让整份配置读不出来");
+        let notes = c.sanitize();
+        // 报文没有占位符 → 回落内置并说明；布局撞了内置名 → 跳过并说明
+        assert!(c.led_proto.is_builtin());
+        assert!(notes.iter().any(|n| n.contains("placeholder")), "{notes:?}");
+        assert!(notes.iter().any(|n| n.contains("GH3XLNDZ")), "{notes:?}");
+        // 压感阈值被夹到合法区间，而不是让状态机拿到 0
+        assert_eq!(c.pressure_switch.percent, 1);
+        assert_eq!(c.pressure_switch.frames, 1);
+        crate::custom::install_layouts(&[]);
+    }
+
+    #[test]
     fn bad_brightness_levels_reports_index() {
         let err =
             serde_json::from_str::<Config>(r#"{"brightness_levels":[65,"oops"]}"#).unwrap_err();
@@ -1575,6 +1681,7 @@ mod tests {
 
     #[test]
     fn zero_frame_ms_is_clamped() {
+        let _registry_guard = crate::test_lock::registry();
         let mut c: Config =
             serde_json::from_str(r#"{"frame_ms":0,"numlock_trigger_frames":0}"#).unwrap();
         c.sanitize();

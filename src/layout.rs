@@ -1173,6 +1173,15 @@ pub fn for_device_name(device_name: &str) -> Option<&'static LayoutEntry> {
     for_hid_id(&hid)
 }
 
+/// 与 [`for_device_name`] 同源，但只查官方表，不认配置里的自定义布局。
+///
+/// 用于「内置表应该是什么」这类断言和判重名——注册了自定义布局的进程里，
+/// 这两件事都必须看官方原表，不能被自定义项顶掉。
+pub fn builtin_for_device_name(device_name: &str) -> Option<&'static LayoutEntry> {
+    let hid = hid_id_of(device_name)?;
+    builtin_for_hid_id(&hid)
+}
+
 /// 全部受支持 HID 硬件 ID（`layout` 子命令展示对应机型布局用）。
 pub fn hid_list() -> &'static [(&'static str, &'static str)] {
     HID_LAYOUTS
@@ -1191,21 +1200,21 @@ mod tests {
             Some("ASUE1416")
         );
         assert_eq!(
-            for_device_name("ASUE1416:00 04F3:3275 Touchpad").map(|e| e.name),
+            builtin_for_device_name("ASUE1416:00 04F3:3275 Touchpad").map(|e| e.name),
             Some("GH3XLNDZ")
         );
         // 同族不同机型
         assert_eq!(
-            for_device_name("ASUE1403:00 04F3:3288 Touchpad").map(|e| e.name),
+            builtin_for_device_name("ASUE1403:00 04F3:3288 Touchpad").map(|e| e.name),
             Some("GH2XLNDZ")
         );
         assert_eq!(
-            for_device_name("ASCP1400:00 28A9:0100 Touchpad").map(|e| e.name),
+            builtin_for_device_name("ASCP1400:00 28A9:0100 Touchpad").map(|e| e.name),
             Some("GH4XLNDZ")
         );
         // 老式 NH 系列
         assert_eq!(
-            for_device_name("ASUE1400:00 04F3:3083 Touchpad").map(|e| e.name),
+            builtin_for_device_name("ASUE1400:00 04F3:3083 Touchpad").map(|e| e.name),
             Some("NHL")
         );
         // 无线接收器 / 键盘不应被当成触摸板，也解析不出 HID
@@ -1217,35 +1226,50 @@ mod tests {
     #[test]
     fn support_levels_are_conservative() {
         assert_eq!(
-            by_name("GH3XLNDZ").unwrap().support,
+            builtin_by_name("GH3XLNDZ").unwrap().support,
             LayoutSupport::Verified
         );
-        assert_eq!(by_name("GH2XLNDZ").unwrap().support, LayoutSupport::Family);
-        assert_eq!(by_name("GH4XLNDZ").unwrap().support, LayoutSupport::Family);
-        assert_eq!(by_name("NHL").unwrap().support, LayoutSupport::Unsupported);
+        assert_eq!(
+            builtin_by_name("GH2XLNDZ").unwrap().support,
+            LayoutSupport::Family
+        );
+        assert_eq!(
+            builtin_by_name("GH4XLNDZ").unwrap().support,
+            LayoutSupport::Family
+        );
+        assert_eq!(
+            builtin_by_name("NHL").unwrap().support,
+            LayoutSupport::Unsupported
+        );
         // 双屏机的三张键表：官方参数已照录、列数同为 5，归同族；但没上过真机，仍需显式放行
         for name in ["GVM", "GVM_A", "NVM"] {
-            let e = by_name(name).expect("双屏键表必须在表内");
+            let e = builtin_by_name(name).expect("双屏键表必须在表内");
             assert_eq!(e.support, LayoutSupport::Family, "{name} 应为同族");
             assert_eq!(e.layout.columns, 5, "{name} 应为 5 列");
             assert!(e.support.needs_confirm(), "{name} 不能免确认直接跑");
         }
         // GVM_A 用 GVM 那组参数（NUMPADLAYOUT_GVM_05/_06 注为 for GVMA），不再借 GH3XLNDZ 占位
-        assert_eq!(by_name("GVM_A").unwrap().layout, GVM);
-        assert_ne!(by_name("GVM_A").unwrap().layout, GH3XLNDZ);
-        assert_eq!(for_hid_id("ASUE1408").map(|e| e.name), Some("GVM_A"));
-        assert_eq!(for_hid_id("ASUE1404").map(|e| e.name), Some("GVM"));
-        assert_eq!(for_hid_id("ASUE1406").map(|e| e.name), Some("NVM"));
+        assert_eq!(builtin_by_name("GVM_A").unwrap().layout, GVM);
+        assert_ne!(builtin_by_name("GVM_A").unwrap().layout, GH3XLNDZ);
+        assert_eq!(
+            builtin_for_hid_id("ASUE1408").map(|e| e.name),
+            Some("GVM_A")
+        );
+        assert_eq!(builtin_for_hid_id("ASUE1404").map(|e| e.name), Some("GVM"));
+        assert_eq!(builtin_for_hid_id("ASUE1406").map(|e| e.name), Some("NVM"));
         // G634（SCAR 16/18 2023）用的两个模组 ID 都必须解析到已验证的 GH3XLNDZ
         for hid in ["ASUE1416", "ASUF1416"] {
-            let e = for_hid_id(hid).expect("G634 模组 ID 必须在表内");
+            let e = builtin_for_hid_id(hid).expect("G634 模组 ID 必须在表内");
             assert_eq!(e.name, "GH3XLNDZ", "{hid} 应解析为 GH3XLNDZ");
             assert_eq!(e.support, LayoutSupport::Verified);
         }
         // 非 G634 的模组（CH3XLNDZ）保持不可用，不能被误当成 G634
         for hid in ["ASUE1415", "ASUE1418"] {
-            assert_eq!(for_hid_id(hid).map(|e| e.name), Some("CH3XLNDZ"));
-            assert_eq!(for_hid_id(hid).unwrap().support, LayoutSupport::Unsupported);
+            assert_eq!(builtin_for_hid_id(hid).map(|e| e.name), Some("CH3XLNDZ"));
+            assert_eq!(
+                builtin_for_hid_id(hid).unwrap().support,
+                LayoutSupport::Unsupported
+            );
         }
     }
 
@@ -1254,7 +1278,7 @@ mod tests {
     fn every_hid_entry_resolves() {
         for (hid, name) in HID_LAYOUTS {
             assert!(
-                by_name(name).is_some(),
+                builtin_by_name(name).is_some(),
                 "{hid} -> {name} 未在 LAYOUTS 中定义"
             );
         }
@@ -1312,7 +1336,7 @@ mod tests {
     fn wider_layout_than_key_grid_yields_no_key() {
         let ux = 45.0 / 1000.0;
         let uy = 42.0 / 1000.0;
-        let mut l = by_name("GH3XLNDZ").unwrap().layout;
+        let mut l = builtin_by_name("GH3XLNDZ").unwrap().layout;
         l.columns = COLS as i32 + 1;
         let g = Geometry::new(0, 4752, 0, 3008, ux, uy, l);
         // 第 2 行最后一列（键表里不存在）
@@ -1327,9 +1351,9 @@ mod tests {
     /// 15 参数的 GH2/GH3/GH4 三套布局必须结构一致（都是 5 列 5x4 键表）。
     #[test]
     fn gh_family_shares_structure() {
-        let g3 = by_name("GH3XLNDZ").unwrap().layout;
+        let g3 = builtin_by_name("GH3XLNDZ").unwrap().layout;
         for name in ["GH2XLNDZ", "GH4XLNDZ"] {
-            let l = by_name(name).unwrap().layout;
+            let l = builtin_by_name(name).unwrap().layout;
             assert_eq!(l.columns, g3.columns, "{name} 列数不同");
             // 同族布局的键表几何必须落在同一量级（0.1mm 单位，误差不超过 1 格）
             assert!((l.index0 - g3.index0).abs() <= 10, "{name} index0 差异过大");
@@ -1357,7 +1381,7 @@ mod tests {
 
         let missing: Vec<&String> = official
             .iter()
-            .filter(|hid| for_hid_id(hid).is_none())
+            .filter(|hid| builtin_for_hid_id(hid).is_none())
             .collect();
         assert!(
             missing.is_empty(),
