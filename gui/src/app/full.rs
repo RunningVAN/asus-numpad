@@ -11,6 +11,7 @@
 use eframe::egui;
 
 use asus_numpad::config::{CalcMode, MixedMode, NumLockMode};
+use asus_numpad::custom;
 use asus_numpad::layout::{KeyMode, LayoutSupport, LAYOUTS};
 use asus_numpad::sku::{self, SKUS};
 
@@ -232,13 +233,39 @@ impl App {
                                     ),
                                 );
                             }
+                            // 自定义布局排在官方表之后：贴纸 / 镭雕方案的键表都在这里
+                            for (name, hids, rows) in custom::list_custom() {
+                                let bind = if hids.is_empty() {
+                                    "自定义".to_string()
+                                } else {
+                                    format!("自定义 · {}", hids.join(" "))
+                                };
+                                ui.selectable_value(
+                                    &mut layout,
+                                    name.clone(),
+                                    format!("{name} · {} 列 · {bind}", rows.len()),
+                                );
+                            }
                         });
                 });
                 if layout != self.driver.cfg.layout_name {
                     self.driver.cfg.layout_name = layout;
                 }
 
-                if let Some(entry) = LAYOUTS
+                if let Some((name, hids, _rows)) = custom::list_custom()
+                    .into_iter()
+                    .find(|(name, _, _)| *name == self.driver.cfg.layout_name)
+                {
+                    let cols = custom::table_for(&self.driver.cfg.layout_name).cols();
+                    theme::note(ui, &p, format!(
+                        "{name} 是自定义布局：{cols} 列 × 4 行{}。键表在「扩展」页里编辑。",
+                        if hids.is_empty() {
+                            String::new()
+                        } else {
+                            format!("，绑定 HID {}", hids.join(" "))
+                        }
+                    ));
+                } else if let Some(entry) = LAYOUTS
                     .iter()
                     .find(|e| e.name == self.driver.cfg.layout_name)
                 {

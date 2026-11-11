@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use asus_numpad::config::{self, CalcMode, Config, MixedMode, NumLockMode, VAL_OFF};
 use asus_numpad::i18n::{self, Lang, LangSource};
 use asus_numpad::keycodes as kc;
-use asus_numpad::layout::{Geometry, KeyMode, COLS, KEY_GRID, ROWS, UM_PER_LAYOUT_UNIT};
+use asus_numpad::layout::{Geometry, KeyMode, Tol, COLS, KEY_GRID, ROWS, UM_PER_LAYOUT_UNIT};
 use asus_numpad::{banner, sku};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
@@ -629,9 +629,11 @@ fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
                     cx.round() as i32,
                     cy.round() as i32,
                     cfg.key_mode,
-                    cfg.tap_threshold_mm,
-                    cfg.tap_threshold_mm * 1000.0 * geometry.ux,
-                    cfg.tap_threshold_mm * 1000.0 * geometry.uy,
+                    Tol::new(
+                        cfg.tap_threshold_mm,
+                        1000.0 * geometry.ux,
+                        1000.0 * geometry.uy,
+                    ),
                 )
                 .map(|k| kc::name_of(k).to_string())
                 .unwrap_or_else(|| "None".into());

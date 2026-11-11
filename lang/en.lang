@@ -318,3 +318,16 @@ sku.gx550.display = ASUS ROG Zephyrus Duo, 15" / 16", side-mounted touchpad (GX5
 sku.gx550.note = GX550 / GX551 / GX650 all belong to the gx551 key family; module ASUE1408 → GVM_A, ASUE1404 → GVM. GVM_A and GVM share one parameter set (the official NUMPADLAYOUT_GVM_* list stops at _06 and the remaining fields default to 0); layout status: same family, not verified on real hardware. The touchpad sits vertically to the right of the keyboard and numeric mode is toggled by a dedicated keyboard key, not by a long press on the icon area (see README, dual-screen models)
 sku.ux582.display = ASUS Zenbook Pro Duo, side-mounted touchpad (UX582 / UX482)
 sku.ux582.note = Module ASUE1406 / ELAN1406 → layout NVM (the official NUMPADLAYOUT_NVM_* list stops at _12 and the remaining fields default to 0); layout status: same family, not verified on real hardware. The touchpad sits to the right of the keyboard and numeric mode is toggled by a dedicated keyboard key, not by a long press on the icon area
+
+# ---- custom extensions: report / layout / pressure / hotkey ----
+note.custom_layout_no_name = a custom layout has no name and was ignored
+note.custom_layout_builtin_clash = custom layout "{name}" clashes with a built-in layout, ignored
+note.custom_layout_base_missing = custom layout "{name}": base "{base}" not found, ignored
+note.custom_layout_bad_keys = custom layout "{name}" has an invalid key table, ignored: {err}
+note.custom_layout_bad_columns = custom layout "{name}": {n} columns is outside 1..=8, ignored
+note.custom_hid_override = HID {hid}: custom layout "{name}" overrides built-in "{builtin}"
+note.led_proto_invalid = custom LED report is invalid, falling back to the built-in one ({err})
+note.pressure_switch_on = pressure switching on: {percent}% held for {frames} frames toggles
+note.hotkey_bad = hotkey "{spec}" is invalid and was ignored: {err}
+engine.pressure.toggle = pressure triggered a toggle ({value}/{max})
+engine.hotkey.fired = hotkey fired: {action} ({key})

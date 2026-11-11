@@ -318,3 +318,16 @@ sku.gx550.display = ASUS 冰刃雙屏，15 / 16 吋，側置觸控板（GX550 / 
 sku.gx550.note = GX550 / GX551 / GX650 同屬 gx551 鍵位族；模組 ASUE1408 → GVM_A、ASUE1404 → GVM。GVM_A 與 GVM 共用同一份參數（官方 NUMPADLAYOUT_GVM_* 只列到 _06，其餘項按預設 0），鍵表狀態是同族、未上真機。觸控板豎排在鍵盤右側，數字模式由鍵盤上的專用鍵切換，不是長按圖示區（見 README「雙屏機型：側置觸控板」）
 sku.ux582.display = ASUS 靈耀雙屏，側置觸控板（UX582 / UX482）
 sku.ux582.note = 模組 ASUE1406 / ELAN1406 → 鍵表 NVM（官方 NUMPADLAYOUT_NVM_* 只列到 _12，其餘項按預設 0），鍵表狀態是同族、未上真機。觸控板在鍵盤右側，數字模式由鍵盤上的專用鍵切換，不是長按圖示區
+
+# ---- 自訂擴充：報文 / 佈局 / 壓感 / 熱鍵 ----
+note.custom_layout_no_name = 有一條自訂佈局缺少 name，已忽略
+note.custom_layout_builtin_clash = 自訂佈局「{name}」與內建佈局同名，已忽略
+note.custom_layout_base_missing = 自訂佈局「{name}」的 base「{base}」不存在，已忽略
+note.custom_layout_bad_keys = 自訂佈局「{name}」鍵表有誤，已忽略：{err}
+note.custom_layout_bad_columns = 自訂佈局「{name}」欄數 {n} 超出 1..=8，已忽略
+note.custom_hid_override = HID {hid}：自訂佈局「{name}」覆蓋了內建佈局「{builtin}」
+note.led_proto_invalid = 自訂點亮報文無效，改回內建報文（{err}）
+note.pressure_switch_on = 已啟用壓感切換：壓力達到 {percent}% 並維持 {frames} 幀即切換
+note.hotkey_bad = 熱鍵「{spec}」無效，已忽略：{err}
+engine.pressure.toggle = 壓感觸發切換（{value}/{max}）
+engine.hotkey.fired = 熱鍵觸發：{action}（{key}）

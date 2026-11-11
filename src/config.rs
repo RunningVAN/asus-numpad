@@ -351,6 +351,18 @@ pub struct Config {
     pub led_kind: String,
     /// i2c 载荷首字节（与 LED 命令字构成 w2 写入）
     pub i2c_payload: String,
+    // ---- 自定义扩展（见 `custom` 模块） ----
+    /// 自定义布局：几何参数 + 键表 + 可选绑定的触摸板 HID 模组 ID。
+    ///
+    /// 用来覆盖官方表里还没有的机型，以及在**没有镭雕的普通触摸板**上贴一张
+    /// 小键盘贴纸——贴纸怎么排，键表就怎么写，`columns` 跟着键表列数走。
+    pub custom_layouts: Vec<crate::custom::CustomLayoutSpec>,
+    /// 自定义点亮报文（默认就是 NumberPad 的 `0d 14 03 ff ad`）。
+    pub led_proto: crate::custom::LedProtoSpec,
+    /// 压感触摸板「用力按 = 切换」。
+    pub pressure_switch: crate::custom::PressureSwitch,
+    /// 物理键盘上的全局组合键。
+    pub hotkeys: Vec<crate::custom::HotkeySpec>,
 }
 
 impl Default for Config {
@@ -398,6 +410,10 @@ impl Default for Config {
             keyboard_override: None,
             led_kind: "auto".to_string(),
             i2c_payload: "0x00".to_string(),
+            custom_layouts: Vec::new(),
+            led_proto: crate::custom::LedProtoSpec::default(),
+            pressure_switch: crate::custom::PressureSwitch::default(),
+            hotkeys: Vec::new(),
         }
     }
 }
@@ -582,6 +598,29 @@ impl Config {
     /// 与上游 `load_config` 相同的收敛逻辑：非法值回落官方默认，并说明原因。
     pub fn sanitize(&mut self) -> Vec<String> {
         let mut notes = Vec::new();
+        // 自定义布局必须先注册：下面的 `layout_name` 解析要认得它们，
+        // 否则写了自定义布局名的配置会被当成「未知布局」打回 auto。
+        notes.extend(crate::custom::install_layouts(&self.custom_layouts));
+        if let Err(err) = self.led_proto.validate() {
+            notes.push(format!(
+                "{} ({}), falling back to built-in report",
+                err,
+                crate::i18n::t("note.led_proto_invalid")
+            ));
+            self.led_proto = crate::custom::LedProtoSpec::default();
+        }
+        self.pressure_switch = self.pressure_switch.sanitized();
+        if self.pressure_switch.enabled {
+            notes.push(crate::i18n::tf(
+                "note.pressure_switch_on",
+                &[
+                    ("percent", &self.pressure_switch.percent.to_string()),
+                    ("frames", &self.pressure_switch.frames.to_string()),
+                ],
+            ));
+        }
+        let (_state, hotkey_notes) = crate::custom::HotkeyState::new(&self.hotkeys);
+        notes.extend(hotkey_notes);
         // 界面语言只接受 auto / zh-CN / zh-TW / en（大小写不敏感），其余回落 auto
         let lang_raw = self.language.trim().to_string();
         if lang_raw.is_empty() {
@@ -712,6 +751,21 @@ impl Config {
             self.layout_name = "auto".to_string();
         }
         notes
+    }
+
+    /// 把配置里的自定义布局注册进全局表（`sanitize` 会调用，重复调用无害）。
+    pub fn install_custom(&self) -> Vec<String> {
+        crate::custom::install_layouts(&self.custom_layouts)
+    }
+
+    /// 当前布局应当使用的键表：自定义布局用自己的，其余用内置表。
+    pub fn key_table(&self) -> crate::custom::KeyTable {
+        crate::custom::table_for(&self.layout_name)
+    }
+
+    /// 自定义点亮报文是否就是内置报文（是的话点亮走原来的快路径）。
+    pub fn led_proto_is_builtin(&self) -> bool {
+        self.led_proto.is_builtin()
     }
 
     /// 解析一份配置文本，并把已删除的历史字段折到现行字段上。
@@ -925,8 +979,23 @@ impl Config {
             "led_kind": self.led_kind,
         });
 
-        // 只在手动指定机型时写出：默认配置里没有这一项，读一眼就知道是自动识别
+        // 自定义扩展单独挂上去：塞进 `json!` 里会把宏递归撑爆（serde_json 的
+        // `json_internal!` 有递归深度限制），也便于空列表时不落盘。
         let mut value = value;
+        if let Ok(v) = serde_json::to_value(&self.custom_layouts) {
+            value["custom_layouts"] = v;
+        }
+        if let Ok(v) = serde_json::to_value(&self.led_proto) {
+            value["led_proto"] = v;
+        }
+        if let Ok(v) = serde_json::to_value(self.pressure_switch) {
+            value["pressure_switch"] = v;
+        }
+        if let Ok(v) = serde_json::to_value(&self.hotkeys) {
+            value["hotkeys"] = v;
+        }
+
+        // 只在手动指定机型时写出：默认配置里没有这一项，读一眼就知道是自动识别
         if let Some(id) = &self.sku {
             value["sku"] = serde_json::json!(id);
         }

@@ -12,6 +12,7 @@
 //! Linux 侧同一份函数，避免两边灯效暗中不一致。
 
 mod driver;
+mod extend;
 mod full;
 mod windows;
 
@@ -73,6 +74,8 @@ enum Action {
 enum Page {
     Light,
     Driver,
+    /// 扩展：自定义布局 / 报文 / 压感 / 热键
+    Extend,
     System,
     Command,
     Settings,
@@ -83,6 +86,7 @@ impl Page {
         match self {
             Page::Light => "灯光",
             Page::Driver => "驱动配置",
+            Page::Extend => "扩展",
             Page::System => "系统状态",
             Page::Command => "命令行",
             Page::Settings => "设置",
@@ -97,6 +101,7 @@ impl Page {
         };
         match value.trim().to_ascii_lowercase().as_str() {
             "driver" | "cfg" | "config" => Page::Driver,
+            "extend" | "ext" | "extension" => Page::Extend,
             "system" | "sys" => Page::System,
             "command" | "cmd" | "cli" => Page::Command,
             "settings" | "prefs" => Page::Settings,
@@ -129,6 +134,13 @@ pub struct App {
     tab: Page,
     /// Linux 侧驱动配置（`asus-numpad.json`）的编辑草稿
     driver: driver::Draft,
+    /// 扩展页「校验扩展项」的结果（布局装没装上、HID 打没打架、报文合不合法）
+    ext_notes: Vec<String>,
+    /// 扩展页里自定义报文模板的十六进制草稿
+    ext_proto: String,
+    /// 草稿是否正被编辑：编辑期间不用配置里的值覆盖，免得打到一半跳一下
+    ext_proto_dirty: bool,
+    ext_proto_err: Option<String>,
     /// 后台服务是否开机自启；Windows 用注册表那份，Linux 用这一份
     service_enabled: bool,
     /// 命令面板：与 `asus-numpad` CLI 同一套实现，界面只负责拼参数
@@ -152,6 +164,9 @@ impl App {
             .as_ref()
             .map(|s| s.enabled.trim() == "enabled")
             .unwrap_or(false);
+        let driver = driver::Draft::load();
+        // 报文草稿从配置里的模板起步；之后的编辑由 draw_ext_proto 自己同步
+        let ext_proto = extend::hex_of(&driver.cfg.led_proto.template);
         let mut app = Self {
             palette,
             backend: backend::create(),
@@ -170,7 +185,11 @@ impl App {
             state_at: Instant::now(),
             ui_full: ui_full(),
             tab: Page::from_env(),
-            driver: driver::Draft::load(),
+            driver,
+            ext_notes: Vec::new(),
+            ext_proto,
+            ext_proto_dirty: false,
+            ext_proto_err: None,
             service_enabled,
             cmd: CommandForm::default(),
             cmd_bin: cli_bridge::locate(),
@@ -1159,12 +1178,13 @@ impl App {
                     "提示",
                     Some("驱动运行时给出的即时提示，出现这行黄字说明某项配置需要留意。"),
                     |ui| {
-                    ui.label(
-                        egui::RichText::new(hint.clone())
-                            .small()
-                            .color(egui::Color32::from_rgb(200, 150, 40)),
-                    );
-                });
+                        ui.label(
+                            egui::RichText::new(hint.clone())
+                                .small()
+                                .color(egui::Color32::from_rgb(200, 150, 40)),
+                        );
+                    },
+                );
             }
 
             if let Some(service) = &self.state.service {
@@ -1804,11 +1824,12 @@ impl App {
                 "状态",
                 Some("命令已提交，正在等 asus-numpad 进程退出并回传输出。"),
                 |ui| {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(small("等待进程返回……"));
-                });
-            });
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(small("等待进程返回……"));
+                    });
+                },
+            );
         }
 
         let Some(output) = self.cmd_out.clone() else {
@@ -1820,15 +1841,16 @@ impl App {
             "输出",
             Some("上一条命令的输出，标准输出与标准错误合并显示；只是界面上的文本，不影响配置。"),
             |ui| {
-            theme::actions(
-                ui,
-                &p,
-                &[
-                    ("复制", false, "把这段输出复制到剪贴板。"),
-                    ("清空", false, "只清界面上的这段输出，不影响配置。"),
-                ],
-            )
-        });
+                theme::actions(
+                    ui,
+                    &p,
+                    &[
+                        ("复制", false, "把这段输出复制到剪贴板。"),
+                        ("清空", false, "只清界面上的这段输出，不影响配置。"),
+                    ],
+                )
+            },
+        );
         if picked == Some(0) {
             ui.ctx().copy_text(output.clone());
         }
@@ -1985,15 +2007,16 @@ impl App {
                 "打开目录",
                 Some("在系统文件管理器里定位配置所在目录，方便直接改配置文件。"),
                 |ui| {
-                theme::actions(
-                    ui,
-                    &p,
-                    &[
-                        ("设置目录", false, "在文件管理器里打开界面设置所在目录。"),
-                        ("驱动目录", false, "在文件管理器里打开驱动配置所在目录。"),
-                    ],
-                )
-            });
+                    theme::actions(
+                        ui,
+                        &p,
+                        &[
+                            ("设置目录", false, "在文件管理器里打开界面设置所在目录。"),
+                            ("驱动目录", false, "在文件管理器里打开驱动配置所在目录。"),
+                        ],
+                    )
+                },
+            );
             match picked {
                 Some(0) => {
                     let dir = settings::config_path();
@@ -2204,6 +2227,11 @@ impl eframe::App for App {
                             "驱动配置：机型、布局、键码风格、手势阈值、背光通道、时序、语言",
                         ),
                         (
+                            Page::Extend,
+                            Page::Extend.title(),
+                            "扩展：给表外机型补自定义布局、换点亮报文、压感切开关、绑全局热键",
+                        ),
+                        (
                             Page::System,
                             Page::System.title(),
                             "系统状态：认出哪台机、走哪条背光通道、后台服务状态、诊断导出",
@@ -2259,6 +2287,7 @@ impl eframe::App for App {
                                 self.draw_log(ui);
                             }
                             (true, Page::Driver) => self.draw_full_controls(ui, &mut action),
+                            (true, Page::Extend) => self.draw_extension(ui, &mut action),
                             (true, Page::System) => self.draw_system(ui, &mut action),
                             (true, Page::Command) => self.draw_commands(ui, &mut action),
                             (true, Page::Settings) => self.draw_settings(ui, &mut action),

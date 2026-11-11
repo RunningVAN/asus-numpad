@@ -178,3 +178,31 @@ DMI 写坏、写成占位串的机器靠这一层仍能认出机型。机型表�
 新 PID 加进 `src/led_policy.rs` 的 `KNOWN_NUMPAD_PIDS`；新模组在
 `evidence/drivers/*_unpacked/**/AsusNUMPADFilter.inf` 里查 `HID_DEVICE_NAME`
 补一条 `HID_LAYOUTS`，再按上游布局文件补键表。
+
+## 表外机型与自定义布局
+
+表里没有的机器不必等驱动更新，先在 `asus-numpad.json` 里写一条 `custom_layouts` 试：
+
+```json
+{
+  "custom_layouts": [
+    {
+      "name": "ASUE1419-贴纸",
+      "base": "GH3XLNDZ",
+      "hid_ids": ["ASUE1419"],
+      "keys": ["7 8 9 / bs", "4 5 6 * minus", "1 2 3 plus enter", "0 0 period . enter"]
+    }
+  ]
+}
+```
+
+- `hid_ids` 填 `asus-numpad check` 里「本机触摸板模组」那一行打印的 ID（`ASUE1416` 这一层），
+  绑上之后 `layout_name` 留 `auto` 也能命中，`verified` / `family` / `unsupported` 三级校验对它
+  不起作用。
+- 触摸板本身没有镭雕、也没背光时，贴一张小键盘贴纸就是「键盘」：`keys` 按贴纸的排布写，列数由
+  键表列数决定，几何参数照抄 `base` 一般就对。
+- 个别会亮的触摸板若报文不是 `0d 14 03 .. ad`，用 `led_proto.template` 换一条（一个字节写 `255`
+  当档位占位符）。
+- 自定义布局优先于官方 `HID_LAYOUTS` 映射；绑到表里已有的模组会把官方映射覆盖掉，启动提示里
+  会写明。
+- 真机验证通过后，欢迎把模组 ID 与键表提上来补进 `HID_LAYOUTS`，这样同型号的人不用自己配。

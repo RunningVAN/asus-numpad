@@ -120,13 +120,20 @@ pub use crate::led_proto::{
 
 pub struct HidrawLed {
     pub path: String,
+    /// 点亮报文的拼装方式：默认就是上面那 5 字节，配置里可以换。
+    proto: crate::custom::LedProtoSpec,
     history: Vec<u8>,
 }
 
 impl HidrawLed {
     pub fn new(path: &str) -> Self {
+        Self::with_proto(path, crate::custom::LedProtoSpec::default())
+    }
+
+    pub fn with_proto(path: &str, proto: crate::custom::LedProtoSpec) -> Self {
         Self {
             path: path.to_string(),
+            proto,
             history: Vec::new(),
         }
     }
@@ -134,18 +141,12 @@ impl HidrawLed {
 
 impl LedSink for HidrawLed {
     fn send(&mut self, value: u8) -> bool {
-        let Some(level) = level_byte(value) else {
-            // 0x60 是 i2c 的解锁字，hidraw FEATURE 通道没有这个前置动作，静默跳过
+        // 报文由 `custom::LedProtoSpec` 拼装：`is_builtin()` 时与内置报文逐字节一致。
+        // 遇到不该写的值（hidraw 通道的解锁字 0x60、自定义模板里没有摆放位的档位）
+        // 都是 `None`，这里静默跳过——点亮失败不该刷屏。
+        let Some(mut buf) = self.proto.encode(value) else {
             return true;
         };
-        let mut buf = [
-            LED_FEATURE_REPORT_ID,
-            LED_FEATURE_BODY[0],
-            LED_FEATURE_BODY[1],
-            level,
-            LED_FEATURE_TAIL,
-        ];
-        debug_assert_eq!(buf.len(), LED_FEATURE_LEN);
 
         // 每次写都重新 open/close：驱动占着 hidraw 句柄会让 EC 通路在其他工具里不可用
         let fd = match open_rw(&self.path) {
@@ -164,7 +165,7 @@ impl LedSink for HidrawLed {
         // 必须走 SET_REPORT / Feature；write() 走的是 OUTPUT 报告，会假成功
         let rc = do_ioctl(
             fd,
-            hid_iocsfeature(LED_FEATURE_LEN as u64),
+            hid_iocsfeature(buf.len() as u64),
             buf.as_mut_ptr() as *mut libc::c_void,
         );
         let err = io::Error::last_os_error();
@@ -177,7 +178,7 @@ impl LedSink for HidrawLed {
                     &[
                         ("path", &self.path),
                         ("rid", &format!("{LED_FEATURE_REPORT_ID:02x}")),
-                        ("level", &format!("{level:02x}")),
+                        ("level", &format!("{value:02x}")),
                         ("err", &err.to_string()),
                     ]
                 )
@@ -680,7 +681,7 @@ pub fn build_led(cfg: &Config) -> Box<dyn LedSink> {
         "hidraw" => {
             let path = cfg.hidraw.clone().or_else(find_hidraw);
             match path {
-                Some(p) => Box::new(HidrawLed::new(&p)),
+                Some(p) => Box::new(HidrawLed::with_proto(&p, cfg.led_proto.clone())),
                 None => Box::new(NullLed::new(&crate::i18n::t("led.none.no_hidraw"))),
             }
         }

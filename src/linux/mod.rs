@@ -547,6 +547,19 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
     };
 
     let mut engine = Engine::new(cfg.clone(), geometry, deps, has_mt);
+    // 压感切换要知道压力轴满量程：EVIOCGABS 读一次就够，只有「用力按 = 切换」
+    // 打开时才需要；没有压力轴的机型拿到 0，引擎侧自动失效。
+    let pressure_max = {
+        let dev = tpad.borrow();
+        [kc::ABS_PRESSURE, kc::ABS_MT_PRESSURE]
+            .into_iter()
+            .filter(|code| dev.supports(kc::EV_ABS, *code))
+            .filter_map(|code| dev.abs_info(code).ok())
+            .map(|info| info.maximum)
+            .max()
+            .unwrap_or(0)
+    };
+    engine.set_pressure_max(pressure_max);
     if verbose {
         println!("{}", crate::banner());
         for line in engine.geometry_report() {
@@ -616,6 +629,10 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
                         || (ev.etype == kc::EV_KEY && ev.code == kc::KEY_NUMLOCK)
                     {
                         engine.handle_kb_event(&ev);
+                    }
+                    // 热键只旁听，不吞事件：键盘不是我们的 grab 对象，正常输入不受影响
+                    if ev.etype == kc::EV_KEY {
+                        engine.handle_hotkey_event(&ev);
                     }
                 }
             }

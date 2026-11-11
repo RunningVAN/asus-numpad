@@ -1109,4 +1109,3 @@ pub fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
         });
     });
 }
-

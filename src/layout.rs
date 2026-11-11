@@ -102,6 +102,31 @@ pub enum Cell {
     Plus,
 }
 
+/// 格子内容 → 短名（`7` `/` `bs` …），供键表展示复用。
+pub fn cell_label(cell: Cell) -> &'static str {
+    match cell {
+        Cell::Digit(0) => "0",
+        Cell::Digit(1) => "1",
+        Cell::Digit(2) => "2",
+        Cell::Digit(3) => "3",
+        Cell::Digit(4) => "4",
+        Cell::Digit(5) => "5",
+        Cell::Digit(6) => "6",
+        Cell::Digit(7) => "7",
+        Cell::Digit(8) => "8",
+        Cell::Digit(9) => "9",
+        Cell::Period => ".",
+        Cell::Backspace => "bs",
+        Cell::Return => "ret",
+        Cell::Slash => "/",
+        Cell::Asterisk => "*",
+        Cell::Minus => "-",
+        Cell::Plus => "+",
+        // 键表只使用 0..=9；越界值不构造，真出现时给个明确占位而不是 panic
+        Cell::Digit(_) => "?",
+    }
+}
+
 pub const ROWS: usize = 4;
 pub const COLS: usize = 5;
 
@@ -207,6 +232,35 @@ pub fn key_for_cell(cell: Cell, mode: KeyMode) -> Option<u16> {
         },
     };
     Some(code)
+}
+
+/// 命中容差：`mm` 为毫米阈值（0 表示不吸附，直接按格子取键），
+/// `ux` / `uy` 是按触摸板分辨率换算成采样单位的同一阈值。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tol {
+    pub mm: f64,
+    pub ux: f64,
+    pub uy: f64,
+}
+
+impl Tol {
+    /// 由毫米阈值与触摸板分辨率换算：两个参数分别是每毫米的 X / Y 采样单位数。
+    pub fn new(mm: f64, ux_per_mm: f64, uy_per_mm: f64) -> Self {
+        Self {
+            mm,
+            ux: mm * ux_per_mm,
+            uy: mm * uy_per_mm,
+        }
+    }
+
+    /// 不吸附：直接按落在哪一格取键。
+    pub fn exact() -> Self {
+        Self {
+            mm: 0.0,
+            ux: 0.0,
+            uy: 0.0,
+        }
+    }
 }
 
 /// 已换算成触摸板单位的几何矩形。
@@ -363,33 +417,33 @@ impl Geometry {
         Some(cell)
     }
 
-    /// 坐标 → 键码（NumLock 图标区不出键；第 0 行第 5 格为空）。
-    pub fn key_at(
+    /// 坐标 → 键码（内置键表）。
+    pub fn key_at(&self, x: i32, y: i32, mode: KeyMode, tol: Tol) -> Option<u16> {
+        self.key_at_with(crate::custom::builtin_table(), x, y, mode, tol)
+    }
+
+    /// 坐标 → 键码，键表由调用方给（自定义布局走这一条）。
+    ///
+    /// NumLock 图标区统一不出键；网格之外的坐标属于触摸板光标区，不吸附。
+    /// 第 0 行最后一格在内置键表里本来就是空位，因此不再额外特判。
+    pub fn key_at_with(
         &self,
+        table: &crate::custom::KeyTable,
         x: i32,
         y: i32,
         mode: KeyMode,
-        tol_mm: f64,
-        tol_ux: f64,
-        tol_uy: f64,
+        tol: Tol,
     ) -> Option<u16> {
         if self.in_numlock(x, y) {
             return None;
         }
-        let cell = if tol_mm > 0.0 {
-            self.hit_cell(x, y, tol_ux, tol_uy)?
+        let cell = if tol.mm > 0.0 {
+            self.hit_cell(x, y, tol.ux, tol.uy)?
         } else {
             self.cell_of(x, y)?
         };
         let (row, col) = cell;
-        // 第 0 行最后一格是 NumLock 图标（几何上同为整格，见 [`Geometry::new`]）
-        if row == 0 && col + 1 == self.layout.columns as usize {
-            return None;
-        }
-        // 格位号来自配置里的 `columns`，键表却是固定的 5 列：列数更大的布局在这里
-        // 判为「无键」，不做越界下标。
-        let content = *KEY_GRID.get(row)?.get(col)?;
-        key_for_cell(content?, mode)
+        table.key_at(row, col, mode)
     }
 
     /// 计算器图标区（左上 1 列 x 1 行）。官方只给联动开关、未给触发区参数。
@@ -1026,8 +1080,20 @@ impl LayoutSupport {
     }
 }
 
-/// 按官方布局名查表（大小写不敏感）。
+/// 按布局名查表（大小写不敏感）：先查配置里的自定义布局，再查官方表。
 pub fn by_name(name: &str) -> Option<&'static LayoutEntry> {
+    let want = name.trim();
+    if want.is_empty() {
+        return None;
+    }
+    if let Some(entry) = crate::custom::entry_by_name(want) {
+        return Some(entry);
+    }
+    builtin_by_name(want)
+}
+
+/// 只查官方布局表（注册自定义布局时用来判重名）。
+pub fn builtin_by_name(name: &str) -> Option<&'static LayoutEntry> {
     let want = name.trim();
     if want.is_empty() {
         return None;
@@ -1083,13 +1149,22 @@ pub fn hid_id_of(device_name: &str) -> Option<String> {
     None
 }
 
-/// HID 硬件 ID → 布局记录。
+/// HID 硬件 ID → 布局记录：配置里显式绑定的自定义布局优先于官方映射。
 pub fn for_hid_id(hid: &str) -> Option<&'static LayoutEntry> {
+    let key = hid.trim().to_uppercase();
+    if let Some(entry) = crate::custom::entry_by_hid(&key) {
+        return Some(entry);
+    }
+    builtin_for_hid_id(&key)
+}
+
+/// 只查官方 `HID -> 布局` 映射表。
+pub fn builtin_for_hid_id(hid: &str) -> Option<&'static LayoutEntry> {
     let key = hid.trim().to_uppercase();
     HID_LAYOUTS
         .iter()
         .find(|(k, _)| *k == key)
-        .and_then(|(_, name)| by_name(name))
+        .and_then(|(_, name)| builtin_by_name(name))
 }
 
 /// 设备名 → 布局记录（先取 HID 硬件 ID，再查表）。
@@ -1244,7 +1319,7 @@ mod tests {
         let (row, col) = (2usize, COLS);
         let (cx, cy) = g.cell_center(row, col);
         assert_eq!(
-            g.key_at(cx as i32, cy as i32, KeyMode::Keypad, 0.0, 0.0, 0.0),
+            g.key_at(cx as i32, cy as i32, KeyMode::Keypad, Tol::exact()),
             None
         );
     }

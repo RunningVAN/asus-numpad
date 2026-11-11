@@ -21,6 +21,7 @@
 
 pub mod brightness;
 pub mod config;
+pub mod custom;
 pub mod engine;
 pub mod i18n;
 pub mod keycodes;

@@ -133,6 +133,10 @@ use vendor defaults.
 | `allow_unverified_layout` | `true` / `false` | Accept an unlisted layout of a known family |
 | `layout_name` | keymap name / `auto` | Pin a keymap by name, `auto` selects it from the module |
 | `sku` | model id / `null` | Pin a model and skip detection; `null` means auto |
+| `custom_layouts` | array | Custom layouts, see [Extending](#extending-adding-a-numpad-to-other-models): `name`, `base`, `hid_ids`, `keys`, plus optional geometry overrides |
+| `led_proto` | object | Custom illumination report: `template` is a byte array with exactly one `255` marking the level slot |
+| `pressure_switch` | object | Force-press toggling on pressure-sensitive touchpads: `enabled`, `percent`, `frames`, `cooldown_ms` |
+| `hotkeys` | array | Global combos on the physical keyboard: `gesture` (e.g. `ctrl+alt+n`) plus `action` (`toggle` / `on` / `off`) |
 
 ## Supported models
 
@@ -250,6 +254,118 @@ only, not to the model id.
 ```bash
 asus-numpad --allow-unverified run    # or set allow_unverified_layout in the config
 ```
+
+## Extending: adding a numpad to other models
+
+Any model outside the table can get its own numpad as long as the touchpad reports key coordinates.
+Pick by what the hardware in hand actually offers:
+
+| What you have | What to configure | Backlight |
+| --- | --- | --- |
+| Laser-etched digits on the touchpad, or a keypad sticker | A keymap in `custom_layouts` | None, at best lit by the keyboard backlight spill |
+| Plain glass touchpad, keys only where the sticker is | Same, with `keys` matching the sticker | Same |
+| The touchpad does light up, just not with `0d 14 03 .. ad` | New report in `led_proto` | Yes |
+| The touchpad reports a pressure axis | `pressure_switch` to toggle by force | Unaffected |
+| You would rather toggle from the physical keyboard | Bind a combo in `hotkeys` | Unaffected |
+
+The four are independent; configure only the ones the machine needs. All of them live in the same
+`asus-numpad.json`, and the GUI's Extension page edits that same file.
+
+### Custom layouts
+
+```json
+{
+  "custom_layouts": [
+    {
+      "name": "GH3X-sticker",
+      "base": "GH3XLNDZ",
+      "hid_ids": ["ASUE1416", "ASUE1419"],
+      "keys": [
+        "7 8 9 / bs",
+        "4 5 6 * minus",
+        "1 2 3 plus enter",
+        "0 0 period . enter"
+      ]
+    }
+  ]
+}
+```
+
+- `name` is the keymap name: set `layout_name` to it to select it, or leave `auto` and let `hid_ids`
+  pick it on the matching module.
+- `base` is the parameter source: a built-in keymap name, or another custom layout listed earlier in
+  the same file (copy a geometry, change two cells). Geometry fields (`columns`, `left`, `right`,
+  `top`, `bottom`, `gap`, ...) are inherited when omitted; `columns` follows the width of `keys` and
+  is rewritten automatically.
+- `keys` is a 4-row keymap with 1..=8 columns. All four rows must have the same width, otherwise the
+  layout is rejected and the reason is shown in the GUI. An empty list keeps the keymap of `base`
+  (use this when only the geometry differs).
+- `hid_ids` binds the **touchpad module HID hardware ID** (`ASUE1416` level), not the laptop model, so
+  the machine matches without touching `layout_name`. Binding a module that already has an official
+  mapping prints an "overrides official mapping" note.
+- Custom layouts count as `verified`: you wrote them, so the `family` / `unsupported` gate no longer
+  applies to them.
+
+How to write a key (space separated, case insensitive):
+
+| Want this key | Write |
+| --- | --- |
+| Digit | `7` |
+| Symbols printed on the key | `+`, `*`, `/` (also `plus`, `asterisk`, `slash`) |
+| Decimal point | `period` (`.` means empty cell, not a period) |
+| Minus | `minus` (`-` means empty cell) |
+| Enter, backspace | `enter`, `bs` |
+| Empty cell | `none`, or `.` / `-` |
+| Anything else | `kp7`, `F13`, `backspace`, `volup`, or a raw code such as `0x64` / `100` |
+
+The Extension page shows those exact lines and reports "N columns x 4 rows, usable" or which row is
+off right after an edit.
+
+### Custom illumination report
+
+```json
+{ "led_proto": { "template": [13, 20, 3, 255, 173] } }
+```
+
+- `template` is the whole HID FEATURE report; the first byte is the report ID. Exactly one byte is
+  written as `255` (`0xff`) to mark the **level slot**, which is replaced with the current level
+  (`0x41`..`0x48`, `0` for off) whenever the backlight is set.
+- The template must contain exactly one `255` and be 2..=64 bytes long; otherwise it is discarded,
+  the built-in report comes back, and both the GUI and `--verbose` say so.
+- The GUI edits it in hex (`0d 14 03 ff ad`), bytes separated by spaces.
+
+### Force-press toggling
+
+```json
+{ "pressure_switch": { "enabled": true, "percent": 85, "frames": 6, "cooldown_ms": 600 } }
+```
+
+- When the touchpad reports a pressure axis, pressure above `percent`% of full scale for `frames`
+  consecutive frames counts as one force press and toggles the numpad. One frame is `frame_ms`
+  (8 ms by default), so 6 frames is about 50 ms.
+- `cooldown_ms` is the minimum gap between two toggles, so holding the pad down cannot flip it
+  repeatedly.
+- It does not interact with `mixed_mode`: only the on/off state flips, no keys are synthesised and no
+  pressure events are forwarded to the desktop.
+- Touchpads without a pressure axis simply ignore it; leaving it configured is harmless.
+
+### Global hotkeys
+
+```json
+{ "hotkeys": [ { "gesture": "ctrl+alt+n", "action": "toggle" } ] }
+```
+
+- `gesture` joins key names with `+`: `ctrl`, `alt`, `shift`, `super` plus one regular key.
+- `action` is `toggle`, `on` or `off`.
+- The keyboard is only observed, never grabbed, so normal typing is unaffected. Combos that fail to
+  parse are reported in the GUI and skipped.
+
+### How this relates to model detection and layout validation
+
+The two gates are separate: the model (DMI / `sku`) decides whether the driver may run at all, the
+keymap (`HID_LAYOUTS`) decides which coordinate produces which key. Custom layouts only solve the
+second gate - use them when the module is unknown, or known but arranged differently. An unrecognised
+machine still needs `--sku` or the `sku` setting to pass the first gate.
 
 ## FAQ
 

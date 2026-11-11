@@ -229,6 +229,25 @@ pub struct Engine {
     pending_level: Option<u8>,
     pending_level_at: f64,
 
+    // ---- 自定义扩展 ----
+    /// 当前布局的键表：自定义布局用配置里的，其余用内置表。
+    ///
+    /// 内置表是 5 列固定表，自定义布局的列数由配置决定（贴纸方案常见 4 列），
+    /// 所以键表不能再当全局常量用，必须跟着引擎走。
+    table: crate::custom::KeyTable,
+    /// 压感触摸板的「用力按 = 切换」状态机。
+    pressure: crate::custom::PressureGate,
+    /// 压力轴满量程（`EVIOCGABS` 读出；`0` = 该触摸板没有压力轴）。
+    pressure_max: i32,
+    /// 最近一次压力采样值。
+    pressure_now: i32,
+    /// 最近一次压感切换的时刻（状态行/日志用）。
+    pressure_last_ms: f64,
+    /// 物理键盘上的全局组合键状态机（`custom::HotkeySpec` 解析结果）。
+    hotkeys: crate::custom::HotkeyState,
+    /// 最近一次热键触发的动作名（状态行用）。
+    hotkey_last: Option<&'static str>,
+
     echo: bool,
     logs: VecDeque<String>,
 }
@@ -258,6 +277,9 @@ impl Engine {
         // 必须在 cfg 被移入 Self 之前构造
         let brightness =
             BrightnessFollower::new(&cfg.keyboard_brightness_dir, cfg.effective_levels());
+        let table = crate::custom::table_for(&cfg.layout_name);
+        let pressure = crate::custom::PressureGate::new(cfg.pressure_switch);
+        let hotkeys = crate::custom::HotkeyState::new(&cfg.hotkeys).0;
         Self {
             cfg,
             geometry,
@@ -311,6 +333,13 @@ impl Engine {
             forwarding: false,
             pending_level: None,
             pending_level_at: 0.0,
+            table,
+            pressure,
+            pressure_max: 0,
+            pressure_now: 0,
+            pressure_last_ms: f64::NEG_INFINITY,
+            hotkeys,
+            hotkey_last: None,
             echo: true,
             logs: VecDeque::new(),
         }
@@ -814,15 +843,23 @@ impl Engine {
         }
     }
 
+    /// 当前配置的命中容差（毫米阈值 + 两轴换算）。
+    fn tap_tol(&self) -> crate::layout::Tol {
+        crate::layout::Tol {
+            mm: self.cfg.tap_threshold_mm,
+            ux: self.tol_ux,
+            uy: self.tol_uy,
+        }
+    }
+
     /// 按下点命中判定并按需发键。
     fn emit_at_down_point(&mut self) -> bool {
-        let key = self.geometry.key_at(
+        let key = self.geometry.key_at_with(
+            &self.table,
             self.x0,
             self.y0,
             self.cfg.key_mode,
-            self.cfg.tap_threshold_mm,
-            self.tol_ux,
-            self.tol_uy,
+            self.tap_tol(),
         );
         let Some(key) = key else { return false };
         if self.mixed_active() {
@@ -1159,8 +1196,11 @@ impl Engine {
         match ev.etype {
             kc::EV_ABS => {
                 if ev.code == kc::ABS_PRESSURE || ev.code == kc::ABS_MT_PRESSURE {
-                    // 这代 NumberPad 是普通电容触摸板，没有压感档位；压力轴不参与判键，
-                    // 留着只会让「按下没反应」多一种可疑原因，直接忽略。
+                    // 压力轴仍然不参与判键（判键只看坐标格位），但可以拿来当
+                    // 「用力按 = 切换」的输入：配置里 `pressure_switch.enabled` 关着
+                    // 时这里只记一个采样值，行为与以前完全一致。
+                    self.pressure_now = ev.value;
+                    self.pressure_tick();
                     return;
                 }
                 if ev.code == kc::ABS_MT_SLOT {
@@ -1274,7 +1314,7 @@ impl Engine {
     /// `--dump` 用的一行状态。
     pub fn state_line(&self) -> String {
         format!(
-            "x={} y={} dist={:.0}µm spread={:.1}mm numlock={} cell={} key={} mode={} enabled={} fwd={}",
+            "x={} y={} dist={:.0}µm spread={:.1}mm numlock={} cell={} key={} mode={} enabled={} fwd={} pressure={} hotkey={}",
             self.cur_x,
             self.cur_y,
             self.moved_units,
@@ -1285,20 +1325,120 @@ impl Engine {
                 .map(|(r, c)| format!("({r},{c})"))
                 .unwrap_or_else(|| "None".into()),
             self.geometry
-                .key_at(
+                .key_at_with(
+                    &self.table,
                     self.cur_x,
                     self.cur_y,
                     self.cfg.key_mode,
-                    self.cfg.tap_threshold_mm,
-                    self.tol_ux,
-                    self.tol_uy
+                    self.tap_tol()
                 )
                 .map(|k| kc::name_of(k).to_string())
                 .unwrap_or_else(|| "None".into()),
             self.mode.as_str(),
             self.enabled,
-            self.forwarding
+            self.forwarding,
+            if self.pressure_available() {
+                self.pressure_now
+            } else {
+                0
+            },
+            self.hotkey_last.unwrap_or("-")
         )
+    }
+
+    /// 告诉引擎压力轴的满量程（由 Linux 层 `EVIOCGABS` 读出后调用）。
+    ///
+    /// `0`（或负数）表示该触摸板没有压力轴，压感切换自动失效——不需要用户
+    /// 去配置里关掉它，避免「换了一台没压感的机器就忘了改配置」。
+    pub fn set_pressure_max(&mut self, max: i32) {
+        self.pressure_max = max.max(0);
+    }
+
+    /// 压力轴满量程（`0` = 无压感）。
+    pub fn pressure_max(&self) -> i32 {
+        self.pressure_max
+    }
+
+    /// 压感切换是否已启用且当前硬件支持。
+    pub fn pressure_available(&self) -> bool {
+        self.pressure.enabled() && self.pressure_max > 0
+    }
+
+    /// 压感切换的一行状态（GUI / `--status` 展示用）。
+    pub fn pressure_report(&self) -> String {
+        let cfg = self.pressure.config();
+        format!(
+            "enabled={} max={} now={} threshold={}% frames={} fired={}",
+            self.pressure_available(),
+            self.pressure_max,
+            self.pressure_now,
+            cfg.percent,
+            cfg.frames,
+            self.pressure.fired()
+        )
+    }
+
+    /// 喂一次压力判定；命中则切换数字键盘开关。
+    fn pressure_tick(&mut self) {
+        if !self.pressure_available() {
+            return;
+        }
+        let now = self.now();
+        let contact = self.primary.is_some() || !self.active_slots.is_empty();
+        let value = self.pressure_now;
+        let max = self.pressure_max;
+        if self.pressure.feed(value, max, contact, now) {
+            self.pressure_last_ms = now;
+            self.log(crate::i18n::tf(
+                "engine.pressure.toggle",
+                &[("value", &value.to_string()), ("max", &max.to_string())],
+            ));
+            self.toggle();
+        }
+    }
+
+    /// 喂一次物理键盘事件；命中绑定的组合键就执行对应动作。
+    ///
+    /// 只旁听键盘事件（键盘设备不 grab），因此热键不会影响正常输入。
+    /// 返回本次是否真的触发了动作，方便 `--verbose` 或 GUI 打点。
+    pub fn handle_hotkey_event(&mut self, ev: &Event) -> bool {
+        if ev.etype != kc::EV_KEY {
+            return false;
+        }
+        let Some(action) = self.hotkeys.feed(ev.code, ev.value) else {
+            return false;
+        };
+        self.hotkey_last = Some(action.as_str());
+        self.log(crate::i18n::tf(
+            "engine.hotkey.fired",
+            &[("action", action.as_str()), ("key", kc::name_of(ev.code))],
+        ));
+        match action {
+            crate::custom::HotkeyAction::Toggle => self.toggle(),
+            crate::custom::HotkeyAction::On => self.enable(),
+            crate::custom::HotkeyAction::Off => self.disable(),
+        }
+        true
+    }
+
+    /// 已装载的热键绑定（`组合键 -> 动作`），GUI 列表与 `--status` 用。
+    pub fn hotkey_labels(&self) -> Vec<String> {
+        self.hotkeys.describe()
+    }
+
+    /// 键状态复位：切 tty / 重新 grab 后键盘可能残留按下态。
+    pub fn clear_hotkey_state(&mut self) {
+        self.hotkeys.clear();
+    }
+
+    /// 配置里的布局/键表换了之后重新取一次（GUI 热切换用）。
+    pub fn refresh_table(&mut self) {
+        self.table = crate::custom::table_for(&self.cfg.layout_name);
+    }
+
+    /// 当前键表（GUI 展示自定义网格用）。
+    pub fn key_table(&self) -> &crate::custom::KeyTable {
+        &self.table
     }
 
     /// `--check` 用：把几何与关键判定打印出来。
