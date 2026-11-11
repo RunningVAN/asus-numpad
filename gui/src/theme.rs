@@ -582,25 +582,11 @@ pub const LABEL_W: f32 = 132.0;
 /// 卡片内容到卡片边缘的左右留白（[`card`] 的 `inner_margin`）。
 pub const CARD_PAD_X: f32 = 20.0;
 
-/// 内容列（含卡片左右留白）的宽度上限，各页所有卡片共用这一个宽度。
-///
-/// 取值 = 两倍留白 + 标签列 + 列间距 + 控件列上限，也就是「标签 + 最宽控件」刚好
-/// 顶到卡片右边的那一刻：卡片右内边距与控件右边缘落在同一条竖线上，一行里的
-/// 输入框、下拉框、按钮组、档位条右端全部齐平，卡片之间也不会一宽一窄。
-pub const CARD_MAX_W: f32 = CARD_PAD_X * 2.0 + LABEL_W + ROW_GAP + CTRL_MAX_W;
-
 /// 标签列与控件列之间的间距，与全局 `item_spacing.x` 取同一个值。
 pub const ROW_GAP: f32 = 12.0;
 
 /// 控件列宽度下限：窄窗口下也不能窄到把下拉框里的档位名切掉。
 pub const CTRL_MIN_W: f32 = 280.0;
-
-/// 控件列宽度上限：正好放得下一排四颗 [`BTN_W`] 按钮（4×104 + 3×8）。
-///
-/// 上限存在的意义是别让控件在大窗口里拉成一条横贯整页的输入框；
-/// 四颗按钮这一档是页面上最宽的一组控件，控件列只要够它，其余行就不会有任何
-/// 元素越出控件列的右边缘。
-pub const CTRL_MAX_W: f32 = 4.0 * BTN_W + 3.0 * 8.0;
 
 /// 控件行高。输入框、下拉框、数字框、按钮都取这个高度，一行里高矮一致。
 pub const CTRL_H: f32 = 32.0;
@@ -625,8 +611,10 @@ static COLUMN_W_MILLI: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU
 /// 每页开画时调用一次：按本页内容宽度定下控件列宽度。
 pub fn begin_page(ui: &mut egui::Ui) {
     use std::sync::atomic::Ordering;
+    // 控件列 = 卡片内宽 - 标签列 - 列间距，正好吃掉卡片右侧那段内边距：
+    // 输入框、下拉框、档位条、按钮组右端于是都压在卡片右边这条竖线上。
     let content = ui.available_width() - CARD_PAD_X * 2.0;
-    let width = (content - LABEL_W - ROW_GAP).clamp(CTRL_MIN_W, CTRL_MAX_W);
+    let width = (content - LABEL_W - ROW_GAP).max(CTRL_MIN_W);
     COLUMN_W_MILLI.store((width * 1000.0).round() as u32, Ordering::Relaxed);
 }
 
