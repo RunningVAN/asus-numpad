@@ -56,6 +56,14 @@ jobs:
         run: |
           rustup component add rustfmt
           cargo fmt --all -- --check
+      # 扩展功能（自定义布局 / 自定义报文 / 压感切换 / 全局热键）的自检。
+      # 脚本所有自动项都只写 mktemp 里的临时配置，不碰 /dev、不改系统配置，
+      # 在 CI 里能安全跑；没硬件的项它会自己 SKIP 并打印真机命令。
+      - name: 扩展功能自检
+        run: |
+          cargo build --release --bin asus-numpad
+          bash tools/verify-extend.sh --bin target/release/asus-numpad
+          cat verify-extend.txt
 
   # 每个发行版在自己的容器里出包，这是最贴近用户的验证方式
   package:
