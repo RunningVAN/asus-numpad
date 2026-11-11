@@ -247,6 +247,13 @@ pub fn card<R>(ui: &mut egui::Ui, p: &Palette, add: impl FnOnce(&mut egui::Ui) -
     };
     frame
         .show(ui, |ui| {
+            // 卡片宽度一律吃满内容列，不按内容收缩：`Frame` 默认是「有多大内容就多宽」，
+            // 于是「机型与布局」这种窄卡片右边缘停在 1030，「命令行」那种宽内容撑到
+            // 1159，一页里几个圆角矩形右边缘参差不齐。宽度交给页面统一规定。
+            let w = ui.available_width();
+            if w.is_finite() {
+                ui.set_width(w);
+            }
             // 卡片里不缩进：折叠头、列表这些默认会按 indent 往右推，一推控件列就跟着
             // 偏移，同一份表单在「折叠卡片」和「带标题卡片」里就错开十几像素。
             ui.spacing_mut().indent = 0.0;
@@ -574,6 +581,13 @@ pub const LABEL_W: f32 = 132.0;
 
 /// 卡片内容到卡片边缘的左右留白（[`card`] 的 `inner_margin`）。
 pub const CARD_PAD_X: f32 = 20.0;
+
+/// 内容列（含卡片左右留白）的宽度上限，各页所有卡片共用这一个宽度。
+///
+/// 取值 = 两倍留白 + 标签列 + 列间距 + 控件列上限，也就是「标签 + 最宽控件」刚好
+/// 顶到卡片右边的那一刻：卡片右内边距与控件右边缘落在同一条竖线上，一行里的
+/// 输入框、下拉框、按钮组、档位条右端全部齐平，卡片之间也不会一宽一窄。
+pub const CARD_MAX_W: f32 = CARD_PAD_X * 2.0 + LABEL_W + ROW_GAP + CTRL_MAX_W;
 
 /// 标签列与控件列之间的间距，与全局 `item_spacing.x` 取同一个值。
 pub const ROW_GAP: f32 = 12.0;

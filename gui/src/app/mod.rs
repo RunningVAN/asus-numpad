@@ -2144,12 +2144,18 @@ impl eframe::App for App {
         self.draw_devices(root);
 
         let p = self.palette;
+        // 中央内容列（页签、卡片、滚动区）统一到 CARD_MAX_W 宽并左右居中：
+        // 侧栏宽度可拖动，可用宽度每帧都在变，所以留白按剩余宽度现算。
+        // 不居中时卡片右缘停在面板中间，右边空出一大块，几个圆角矩形看着东倒西歪。
+        let spare = (root.available_width() - 40.0 - theme::CARD_MAX_W).max(0.0);
+        let pad = (spare * 0.5).floor();
         egui::CentralPanel::default()
-            .frame(
-                egui::Frame::new()
-                    .fill(p.bg)
-                    .inner_margin(egui::Margin::symmetric(20, 16)),
-            )
+            .frame(egui::Frame::new().fill(p.bg).inner_margin(egui::Margin {
+                left: 20 + pad as i8,
+                right: 20 + pad as i8,
+                top: 16,
+                bottom: 16,
+            }))
             .show(root, |ui| {
                 if self.ui_full {
                     let pages = [
@@ -2193,8 +2199,12 @@ impl eframe::App for App {
                     }
                     ui.add_space(12.0);
                 }
+                // 内容列封顶：窗口再宽也不把表单拉成横贯整页的长输入框，
+                // 页签基线、卡片右缘、控件右缘于是共用同一条右边界。
+                let col_w = ui.available_width().min(theme::CARD_MAX_W);
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
+                    .max_width(col_w)
                     .id_salt(("page", self.tab))
                     .show(ui, |ui| {
                         // 控件列宽度整页只定一次，各卡片、各折叠区里的行都照这一个宽度排
