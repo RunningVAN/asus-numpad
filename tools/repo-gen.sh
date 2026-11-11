@@ -743,7 +743,7 @@ install_deb() {
 
 install_rpm() {
     mgr="$1"
-    log "$mgr：写 rpm 源"
+    log "${mgr}：写 rpm 源"
     if [ "$SIGNED" = 1 ]; then
         fetch "$BASE/keys/asus-numpad-repo.asc" > /tmp/asus-numpad.asc
         rpm --import /tmp/asus-numpad.asc
@@ -875,7 +875,7 @@ sed -e "s|@@BASE_URL@@|$BASE_URL|g" \
     "$OUT/install.sh" > "$OUT/install.sh.new"
 mv -f "$OUT/install.sh.new" "$OUT/install.sh"
 chmod 0755 "$OUT/install.sh"
-log "一键安装脚本: $OUT/install.sh（签名=$INST_SIGNED）"
+log "一键安装脚本: $OUT/install.sh（签名=${INST_SIGNED}）"
 
 log "仓库已生成于 $OUT"
 find "$OUT" -maxdepth 2 -type d | sort | sed 's/^/  /'

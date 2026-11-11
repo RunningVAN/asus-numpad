@@ -147,6 +147,19 @@
   `layout` / `check`、`--lang` 切换、坏值是否被拒并留提示），全程用临时配置，不碰 `~/.config`
   与任何 hidraw 设备；需要手指按触摸板的三项只打印命令。
 
+### 脚本里的 `$VAR` 不再被中文标点吃掉（分发自检包可独立跑）
+
+- `$BIN（先在仓库根目录…）` 这类写法，bash 只认 ASCII 变量名，会把全角括号的字节啃进变量名：
+  普通模式输出乱码，`set -u` 下直接 `BIN?: unbound variable` 退出。全仓库扫出 5 处
+  （`install.sh`、`tools/repo-gen.sh`、`tools/verify-extend.sh`）统一改成 `${VAR}`。
+- 新增 `tools/check-sh-vars.py`：扫全部 `.sh` / `PKGBUILD` / `APKBUILD`，命中即报行号，
+  已接进 CI，防止以后再写回去。
+- `tools/verify-extend.sh` 两处可用性修正：① 目录里没有 `Cargo.toml` 时不再跑
+  `cargo test`（以前用户在装了 cargo 的机器上跑分发包，会因「could not find
+  Cargo.toml」记一条 FAIL，是脚本自己的错）；② `--bin` 给相对路径时按**调用者当前目录**
+  解析再 cd，分发包解压到任意位置都能直接 `bash tools/verify-extend.sh --bin ./asus-numpad`
+  （实测无源码包里 PASS=13 FAIL=0，只跳过 cargo 与 `file` 两项）。
+
 ### 悬浮说明气泡拍得到图了（截图工具链补漏）
 
 - 以前离屏截图没有指针，`on_hover_ui` 的气泡永远拍不到，只能看到小 i 圆点；现在

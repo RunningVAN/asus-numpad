@@ -47,6 +47,10 @@ jobs:
               tools/repo-gen.sh
       - name: shellcheck 维护脚本（POSIX sh）
         run: shellcheck -s sh -S warning packaging/deb/postinst packaging/deb/prerm packaging/deb/postrm
+      # `$BIN（中文…）` 这种写法 bash 会把全角括号的字节啃进变量名，set -u 下直接退出；
+      # 脚本正文全是中文，靠静态检查兜住（本行规则见 tools/check-sh-vars.py）
+      - name: 检查「变量名后紧跟中文」的写法
+        run: python3 tools/check-sh-vars.py
       # 只把 correctness 级别当门槛，样式类提示留给后续清理
       - name: cargo clippy
         run: |

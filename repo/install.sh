@@ -49,7 +49,7 @@ install_deb() {
 
 install_rpm() {
     mgr="$1"
-    log "$mgr：写 rpm 源"
+    log "${mgr}：写 rpm 源"
     if [ "$SIGNED" = 1 ]; then
         fetch "$BASE/keys/asus-numpad-repo.asc" > /tmp/asus-numpad.asc
         rpm --import /tmp/asus-numpad.asc

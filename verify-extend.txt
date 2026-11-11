@@ -1,5 +1,5 @@
 asus-numpad 扩展功能验证
-时间: 2026-11-12 05:35:39 +0800
+时间: 2026-11-12 05:43:24 +0800
 主机: Darwin 27.2.0 arm64
 发行版: unknown
 二进制: target/release/asus-numpad

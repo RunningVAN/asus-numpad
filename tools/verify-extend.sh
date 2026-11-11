@@ -27,6 +27,15 @@ done
 # rustup 装的 cargo 只在 ~/.cargo/bin，非交互 shell 里常常不在 PATH 上
 export PATH="$HOME/.cargo/bin:$PATH"
 
+# 相对路径的 --bin 要按「调用者所在目录」解析：脚本马上会 cd 到仓库根，cd 之后同一个
+# 相对路径指向别处（把包解压到任意目录、在上一层 `bash pkg/tools/verify-extend.sh
+# --bin ./asus-numpad` 就会踩到），第 1 步会误报「找不到可执行文件」。
+if [[ -n "$BIN" && "$BIN" != /* ]]; then
+    if BIN_DIR="$(cd -- "$(dirname -- "$BIN")" 2>/dev/null && pwd)"; then
+        BIN="$BIN_DIR/$(basename -- "$BIN")"
+    fi
+fi
+
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 [[ -n "$BIN" ]] || BIN="$ROOT/target/release/asus-numpad"
@@ -55,7 +64,7 @@ hr
 # ---------------------------------------------------------------------------
 say "1. 二进制"
 if [[ ! -x "$BIN" ]]; then
-    fail "找不到可执行文件 $BIN（先在仓库根目录 cargo build --release）"
+    fail "找不到可执行文件 ${BIN}（先在仓库根目录 cargo build --release）"
     say "    其余项无法继续。"
     say
 else
@@ -76,7 +85,12 @@ hr
 # 2. 离线用例：扩展相关的单元测试
 # ---------------------------------------------------------------------------
 say "2. 单元测试（扩展相关）"
-if command -v cargo >/dev/null 2>&1; then
+# 两种跑法要区分开：仓库里跑（有 Cargo.toml）才做源码级用例；只拿到发下去的预编译
+# 二进制时，机器上就算装了 cargo，在没有 Cargo.toml 的目录里跑 `cargo test` 也只会
+# 报「could not find Cargo.toml」，那是脚本自己的错，不该记成 FAIL。
+if [ ! -f Cargo.toml ]; then
+    skip "当前目录没有源码（没 Cargo.toml），跳过单元测试——预编译二进制请从第 3 步看起"
+elif command -v cargo >/dev/null 2>&1; then
     if cargo test --lib -q 2>/tmp/verify-extend-cargo.err | tail -3 | grep -q "test result: ok"; then
         pass "cargo test --lib 全绿: $(cargo test --lib -q 2>/dev/null | grep 'test result' | tail -1)"
     else
@@ -248,7 +262,7 @@ if ((FAIL)); then
     say "失败项:"
     for f in "${FAILED[@]}"; do say "  - $f"; done
     say
-    say "把这份输出（$OUT）连同 $BIN --config <cfg> check 的全文贴到 issue 里即可定位。"
+    say "把这份输出（${OUT}）连同 $BIN --config <cfg> check 的全文贴到 issue 里即可定位。"
 else
     say "自动项全部通过。真机项请按第 5 节逐条确认。"
 fi
