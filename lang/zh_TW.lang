@@ -337,8 +337,9 @@ note.custom_layout_base_missing = 自訂佈局「{name}」的 base「{base}」�
 note.custom_layout_bad_keys = 自訂佈局「{name}」鍵表有誤，已忽略：{err}
 note.custom_layout_bad_columns = 自訂佈局「{name}」欄數 {n} 超出 1..=8，已忽略
 note.custom_hid_override = HID {hid}：自訂佈局「{name}」覆蓋了內建佈局「{builtin}」
-note.led_proto_invalid = 自訂點亮報文無效，改回內建報文（{err}）
+note.led_proto_invalid = 自訂點亮報文無效（{err}）
 note.pressure_switch_on = 已啟用壓感切換：壓力達到 {percent}% 並維持 {frames} 幀即切換
+note.pressure_clamped = 壓感閾值超出範圍，已修正為 {percent}% / 連續 {frames} 幀
 note.hotkey_bad = 熱鍵「{spec}」無效，已忽略：{err}
 engine.pressure.toggle = 壓感觸發切換（{value}/{max}）
 engine.hotkey.fired = 熱鍵觸發：{action}（{key}）

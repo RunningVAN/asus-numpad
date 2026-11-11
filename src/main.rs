@@ -472,7 +472,10 @@ fn build_config(cli: &Opts) -> (Config, Vec<String>, std::path::PathBuf) {
     if let Some(v) = &cli.i2c_transfer {
         cfg.i2c_transfer = v.clone();
     }
+    // 这里是对「CLI 覆盖后的配置」再复核一遍，因此配置本身的问题会被第二次报到
+    // notes 里；不去重的话 `check` 会把同一句提示印两遍（第一遍来自 load）。
     notes.extend(cfg.sanitize());
+    Config::dedup_notes(&mut notes);
     (cfg, notes, path)
 }
 
@@ -1924,14 +1927,40 @@ fn cmd_run(cfg: Config, verbose: bool) -> Result<i32> {
     }
 }
 
+/// 恢复 SIGPIPE 的系统默认处理（进程收到就退出，不 panic）。
+///
+/// 自己声明而不引 `libc`：SIGPIPE=13、SIG_DFL=0 在 Linux / macOS / BSD 上一致，
+/// 而 `libc` 只挂在 lib target 的依赖里，bin 这边够不到。
+#[cfg(unix)]
+fn reset_sigpipe() {
+    extern "C" {
+        fn signal(sig: i32, handler: usize) -> usize;
+    }
+    const SIGPIPE: i32 = 13;
+    const SIG_DFL: usize = 0;
+    // SAFETY: `signal(2)` 只登记处置方式，不触碰任何 Rust 侧内存。
+    unsafe {
+        signal(SIGPIPE, SIG_DFL);
+    }
+}
+
 fn main() -> Result<()> {
+    // 管道被 `head` / `grep -q` 提前关掉时，Rust 默认忽略 SIGPIPE，后续 println!
+    // 会拿到 EPIPE 并 panic；release 是 panic=abort，用户看到的是
+    // `Abort trap: 6` 而不是安静退出。CLI 恢复系统默认行为即可。
+    #[cfg(unix)]
+    reset_sigpipe();
+
     // 语言必须在任何输出之前定下来：先扫原始参数与环境变量，再读配置
     let argv: Vec<String> = std::env::args().collect();
     let cli_lang = raw_arg(&argv, "--lang");
     let pre_path = raw_arg(&argv, "--config")
         .map(PathBuf::from)
         .unwrap_or_else(Config::default_path);
-    let (pre_cfg, _) = Config::load(&pre_path);
+    // 这次 load 只为拿到配置里写的语言，结果丢掉。它会把自定义布局注册进全局表、
+    // 并产出一批 notes；build_config 又完整 load 一遍，两批 notes 一拼就成了
+    // 「同一句提示印两遍」。所以这里连 notes 一起丢弃，改由 build_config 统一交代。
+    let (pre_cfg, _pre_notes) = Config::load(&pre_path);
     let (lang, source) = i18n::resolve(&pre_cfg.language, cli_lang.as_deref());
     i18n::init(lang);
     let _ = LANG_SOURCE.set(source);

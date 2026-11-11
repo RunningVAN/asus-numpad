@@ -602,14 +602,26 @@ impl Config {
         // 否则写了自定义布局名的配置会被当成「未知布局」打回 auto。
         notes.extend(crate::custom::install_layouts(&self.custom_layouts));
         if let Err(err) = self.led_proto.validate() {
-            notes.push(format!(
-                "{} ({}), falling back to built-in report",
-                err,
-                crate::i18n::t("note.led_proto_invalid")
+            notes.push(crate::i18n::tf(
+                "note.led_proto_invalid",
+                &[("err", &err.to_string())],
             ));
             self.led_proto = crate::custom::LedProtoSpec::default();
         }
+        let pressure_before = self.pressure_switch;
         self.pressure_switch = self.pressure_switch.sanitized();
+        if self.pressure_switch.enabled
+            && (self.pressure_switch.percent != pressure_before.percent
+                || self.pressure_switch.frames != pressure_before.frames)
+        {
+            notes.push(crate::i18n::tf(
+                "note.pressure_clamped",
+                &[
+                    ("percent", &self.pressure_switch.percent.to_string()),
+                    ("frames", &self.pressure_switch.frames.to_string()),
+                ],
+            ));
+        }
         if self.pressure_switch.enabled {
             notes.push(crate::i18n::tf(
                 "note.pressure_switch_on",
@@ -750,12 +762,20 @@ impl Config {
         } else {
             self.layout_name = "auto".to_string();
         }
+        Self::dedup_notes(&mut notes);
         notes
     }
 
     /// 把配置里的自定义布局注册进全局表（`sanitize` 会调用，重复调用无害）。
     pub fn install_custom(&self) -> Vec<String> {
         crate::custom::install_layouts(&self.custom_layouts)
+    }
+
+    /// 顺序去重（保序）：`Config::load` 只 sanitize 一次，但 CLI 会在应用
+    /// `--key-mode` 等覆盖后再复核一遍，两份 notes 一拼就成了「同一句提示印两遍」。
+    pub fn dedup_notes(notes: &mut Vec<String>) {
+        let mut seen = std::collections::HashSet::new();
+        notes.retain(|n| seen.insert(n.clone()));
     }
 
     /// 当前布局应当使用的键表：自定义布局用自己的，其余用内置表。
@@ -1647,6 +1667,45 @@ mod tests {
         let json = c.to_json();
         assert!(!json.contains("STICKER"));
         assert!(serde_json::from_str::<Config>(&json).is_ok());
+    }
+
+    /// 坏配置的提示必须**每条只说一次**：`check` 曾经把同一句印两遍
+    /// （load 一遍 + CLI 覆盖后复核一遍），用户会以为配了两份坏配置。
+    #[test]
+    fn duplicate_notes_collapse_to_one_each() {
+        let _guard = crate::test_lock::registry();
+        let text = r#"{
+            "custom_layouts": [
+                { "name": "BROKEN", "keys": ["not-a-key q w e", "a s d f", "z x c v", "1 2 3 4"] }
+            ],
+            "led_proto": { "template": [1, 2, 3] },
+            "hotkeys": [{ "gesture": "hyper+q", "action": "on" }]
+        }"#;
+        let mut cfg = Config::from_json(text).expect("bad-but-parsable");
+        let first = cfg.sanitize();
+        assert!(!first.is_empty(), "坏配置应当产提示");
+        let mut merged = first.clone();
+        // 第二次只报还没被修掉的项（LED 报文已被回落成内置，不再重复报），
+        // 所以两次的并集一定包含重复——这正是 check 印两遍的来源。
+        merged.extend(cfg.sanitize());
+        let before = merged.len();
+        Config::dedup_notes(&mut merged);
+        assert!(merged.len() < before, "去重应当真的删掉了重复项");
+        assert_eq!(merged, first, "去重结果应当与单份一致且顺序不变");
+    }
+
+    /// LED 报文的提示里必须带真正的错因，不能漏出未替换的 `{err}` 占位符。
+    #[test]
+    fn led_proto_note_has_no_unreplaced_placeholder() {
+        let _guard = crate::test_lock::registry();
+        let mut cfg = Config::from_json(r#"{ "led_proto": { "template": [1, 2, 3] } }"#).unwrap();
+        let notes = cfg.sanitize();
+        let note = notes
+            .iter()
+            .find(|n| n.contains("255"))
+            .expect("应当有一条说明模板少了 255 占位");
+        assert!(!note.contains("{err}"), "占位符没替换: {note}");
+        assert!(!note.contains('{'), "还有没替换的占位符: {note}");
     }
 
     #[test]

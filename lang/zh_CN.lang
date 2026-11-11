@@ -333,8 +333,9 @@ note.custom_layout_base_missing = 自定义布局「{name}」的 base「{base}�
 note.custom_layout_bad_keys = 自定义布局「{name}」键表有误，已忽略：{err}
 note.custom_layout_bad_columns = 自定义布局「{name}」列数 {n} 超出 1..=8，已忽略
 note.custom_hid_override = HID {hid}：自定义布局「{name}」覆盖了内置布局「{builtin}」
-note.led_proto_invalid = 自定义点亮报文无效，回落到内置报文（{err}）
+note.led_proto_invalid = 自定义点亮报文无效（{err}）
 note.pressure_switch_on = 已启用压感切换：压力达到 {percent}% 并保持 {frames} 帧即切换
+note.pressure_clamped = 压感阈值超出范围，已修正为 {percent}% / 连续 {frames} 帧
 note.hotkey_bad = 热键「{spec}」无效，已忽略：{err}
 engine.pressure.toggle = 压感触发切换（{value}/{max}）
 engine.hotkey.fired = 热键触发：{action}（{key}）

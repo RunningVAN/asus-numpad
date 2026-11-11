@@ -337,8 +337,9 @@ note.custom_layout_base_missing = custom layout "{name}": base "{base}" not foun
 note.custom_layout_bad_keys = custom layout "{name}" has an invalid key table, ignored: {err}
 note.custom_layout_bad_columns = custom layout "{name}": {n} columns is outside 1..=8, ignored
 note.custom_hid_override = HID {hid}: custom layout "{name}" overrides built-in "{builtin}"
-note.led_proto_invalid = custom LED report is invalid, falling back to the built-in one ({err})
+note.led_proto_invalid = custom LED report is invalid ({err})
 note.pressure_switch_on = pressure switching on: {percent}% held for {frames} frames toggles
+note.pressure_clamped = hard press threshold out of range, corrected to {percent}% / {frames} frames
 note.hotkey_bad = hotkey "{spec}" is invalid and was ignored: {err}
 engine.pressure.toggle = pressure triggered a toggle ({value}/{max})
 engine.hotkey.fired = hotkey fired: {action} ({key})
