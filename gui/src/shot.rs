@@ -7,17 +7,118 @@
 //!   ASUS_NUMPAD_GUI_FULL=1 ASUS_NUMPAD_GUI_SHOT=full.ppm ./target/debug/asus-numpad-gui
 //!
 //! 存完即退出，方便脚本化；PPM 交给 `PIL`/`sips` 转 PNG（不为此给 GUI 加图片依赖）。
+//!
+//! 离屏渲染没有真实鼠标，`on_hover_ui` 的气泡永远拍不到。设了
+//! `ASUS_NUMPAD_GUI_HOVER=1`（或显式坐标 `ASUS_NUMPAD_GUI_HOVER=640,320`）后，
+//! 本模块会在每帧的 `RawInput` 里塞一个 `PointerMoved`，停在第一个（或
+//! `ASUS_NUMPAD_GUI_HOVER_INDEX=n` 指定的第 n 个）挂了说明的控件上，气泡便随帧渲染出来。
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use eframe::egui;
 
 /// 截图前先空转几帧：字体、面板宽度和滚动区域都要几帧才稳定。
+///
+/// 开了悬停（`ASUS_NUMPAD_GUI_HOVER`）时要多等：egui 的气泡有 0.5 s 的停留延迟，
+/// 而离屏每帧只有几毫秒，不把时间推上去永远等不到那个阈值。
 const WARMUP_FRAMES: u32 = 16;
+const WARMUP_FRAMES_HOVER: u32 = 40;
+/// 悬停模式下每帧推进的「虚拟时间」，让 40 帧足够盖过 0.5 s 的 tooltip 延迟。
+const HOVER_STEP_SECS: f64 = 0.1;
 
 static FRAMES: AtomicU32 = AtomicU32::new(0);
 static REQUESTED: AtomicBool = AtomicBool::new(false);
+/// 本帧已经画过多少个挂说明的控件（每帧开头清零，见 [`tick`]）
+static TIPS_SEEN: AtomicU32 = AtomicU32::new(0);
+/// 停靠点：`tip` 命中目标序号时记下控件中心，之后每帧注入到 `RawInput`
+static HOVER_AT: OnceLock<Mutex<Option<egui::Pos2>>> = OnceLock::new();
+
+fn hover_at() -> &'static Mutex<Option<egui::Pos2>> {
+    HOVER_AT.get_or_init(|| Mutex::new(None))
+}
+
+/// 截图模式下的悬停设置：`None` = 不注入指针（默认，纯静态图）。
+fn hover_setting() -> Option<HoverSetting> {
+    let raw = std::env::var("ASUS_NUMPAD_GUI_HOVER").ok()?;
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    // `640,320` 这种写法直接指定坐标；其余非空值一律当作「自动停在第一个说明控件上」
+    let explicit = raw
+        .split_once(',')
+        .and_then(|(x, y)| Some(egui::pos2(x.trim().parse().ok()?, y.trim().parse().ok()?)));
+    let index = std::env::var("ASUS_NUMPAD_GUI_HOVER_INDEX")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(0u32);
+    let text = std::env::var("ASUS_NUMPAD_GUI_HOVER_TEXT")
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+    Some(HoverSetting {
+        explicit,
+        index,
+        text,
+    })
+}
+
+struct HoverSetting {
+    explicit: Option<egui::Pos2>,
+    index: u32,
+    /// 按说明正文里的关键字挑控件（优先于 `index`）
+    text: Option<String>,
+}
+
+/// `tip` 每次落笔都报一次位置：命中目标（序号或文本关键字）且还没记过，就当作停靠点。
+///
+/// 序号按本帧绘制顺序数，跨页跨主题都不稳定；想拍某一句话的气泡，用
+/// `ASUS_NUMPAD_GUI_HOVER_TEXT=<正文里的一段>` 更靠谱。
+pub fn note_tip_rect(rect: egui::Rect, text: &str) {
+    let Some(cfg) = hover_setting() else {
+        return;
+    };
+    if cfg.explicit.is_some() {
+        return;
+    }
+    if let Some(needle) = cfg.text.as_deref() {
+        if !text.contains(needle) {
+            return;
+        }
+    } else {
+        let seen = TIPS_SEEN.fetch_add(1, Ordering::Relaxed);
+        if seen != cfg.index {
+            return;
+        }
+    }
+    if let Ok(mut guard) = hover_at().lock() {
+        if guard.is_none() {
+            *guard = Some(rect.center());
+        }
+    }
+}
+
+/// 装在 `eframe::App::raw_input_hook` 上：每帧把指针挪到停靠点。
+pub fn raw_input_hook(raw_input: &mut egui::RawInput) {
+    let Some(cfg) = hover_setting() else {
+        return;
+    };
+    let pos = cfg
+        .explicit
+        .or_else(|| hover_at().lock().ok().and_then(|g| *g));
+    let Some(pos) = pos else {
+        return;
+    };
+    // 指针只递两帧：egui 认为「每帧都在动」就不会弹气泡（time_since_last_movement
+    // 一直归零），挪到位之后必须让它静止，位置本身在 PointerState 里跨帧保留。
+    let frame = FRAMES.load(Ordering::Relaxed);
+    if frame <= 2 {
+        raw_input.events.push(egui::Event::PointerMoved(pos));
+    }
+    // 离屏渲染几十帧只花几十毫秒，egui 的气泡要「静止 0.5 s」才弹，不推时间就永远等不到。
+    raw_input.time = Some(frame as f64 * HOVER_STEP_SECS);
+}
 
 fn target_path() -> Option<PathBuf> {
     std::env::var_os("ASUS_NUMPAD_GUI_SHOT").map(PathBuf::from)
@@ -28,8 +129,15 @@ pub fn tick(ctx: &egui::Context) {
     let Some(path) = target_path() else {
         return;
     };
+    // 新的一帧：`tip` 的序号从头数
+    TIPS_SEEN.store(0, Ordering::Relaxed);
     let frames = FRAMES.fetch_add(1, Ordering::Relaxed) + 1;
-    if frames < WARMUP_FRAMES {
+    let warmup = if hover_setting().is_some() {
+        WARMUP_FRAMES_HOVER
+    } else {
+        WARMUP_FRAMES
+    };
+    if frames < warmup {
         ctx.request_repaint();
         return;
     }

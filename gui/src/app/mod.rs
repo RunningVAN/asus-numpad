@@ -2187,6 +2187,11 @@ impl App {
 }
 
 impl eframe::App for App {
+    /// 截图模式用：每帧先把指针放到「要拍气泡的那个控件」上（正常启动是空操作）
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        crate::shot::raw_input_hook(raw_input);
+    }
+
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // 文档截图模式（设置了 ASUS_NUMPAD_GUI_SHOT 才生效）
         crate::shot::tick(root.ctx());

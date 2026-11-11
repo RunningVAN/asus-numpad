@@ -679,6 +679,8 @@ pub fn pair_b() -> f32 {
 /// 方块都能一眼认出是解释。宽度压到 300 像素（约 25 个汉字一行），再长也读得下去。
 pub fn tip(resp: Response, text: impl Into<String>) -> Response {
     let text = text.into();
+    // 截图模式下要靠这个矩形决定指针停在哪，气泡才拍得到（正常启动是空操作）
+    crate::shot::note_tip_rect(resp.rect, &text);
     // 挂说明的控件统一换成问号光标，用户能先看出「这里有东西可停」再停上去。
     resp.on_hover_cursor(egui::CursorIcon::Help)
         .on_hover_ui(move |ui| {
