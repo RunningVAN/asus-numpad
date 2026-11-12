@@ -141,6 +141,10 @@ pub struct App {
     /// 草稿是否正被编辑：编辑期间不用配置里的值覆盖，免得打到一半跳一下
     ext_proto_dirty: bool,
     ext_proto_err: Option<String>,
+    /// 扩展页「配置片段」文本框：四项打包成一段 JSON，方便同机型之间互传
+    ext_snippet: String,
+    /// 片段导入结果：`(文案, 是否出错)`
+    ext_snippet_msg: Option<(String, bool)>,
     /// 后台服务是否开机自启；Windows 用注册表那份，Linux 用这一份
     service_enabled: bool,
     /// 命令面板：与 `asus-numpad` CLI 同一套实现，界面只负责拼参数
@@ -190,6 +194,8 @@ impl App {
             ext_proto,
             ext_proto_dirty: false,
             ext_proto_err: None,
+            ext_snippet: String::new(),
+            ext_snippet_msg: None,
             service_enabled,
             cmd: CommandForm::default(),
             cmd_bin: cli_bridge::locate(),

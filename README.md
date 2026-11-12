@@ -360,6 +360,15 @@ off right after an edit.
 - The keyboard is only observed, never grabbed, so normal typing is unaffected. Combos that fail to
   parse are reported in the GUI and skipped.
 
+### Handing a config to someone with the same model
+
+The bottom card on the Extend page is the config snippet: hit Export to pack the four extension
+settings into one JSON blob, and whoever receives it pastes it into the same box and hits Apply. The
+snippet carries only `custom_layouts` / `led_proto` / `pressure_switch` / `hotkeys`, none of the
+per-machine bits (frame cadence, geometry fallback, UI language), which need redoing when the machine
+changes anyway. Import is all-or-nothing: if any of the four fails to parse, nothing is written, so you
+never end up with a half-applied config. A template that isn't a valid report is rejected by name.
+
 ### Checking an extension config
 
 ```sh

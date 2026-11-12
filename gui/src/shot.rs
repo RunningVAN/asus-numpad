@@ -113,8 +113,10 @@ pub fn note_tip_rect(rect: egui::Rect, text: &str) {
     }
 }
 
-/// 装在 `eframe::App::raw_input_hook` 上：每帧把指针挪到停靠点。
+/// 装在 `eframe::App::raw_input_hook` 上：先把页面滚到指定位置，再把指针挪到停靠点。
 pub fn raw_input_hook(raw_input: &mut egui::RawInput) {
+    let frame = FRAMES.load(Ordering::Relaxed);
+    scroll_hook(raw_input, frame);
     let Some(cfg) = hover_setting() else {
         return;
     };
@@ -126,12 +128,49 @@ pub fn raw_input_hook(raw_input: &mut egui::RawInput) {
     };
     // 指针只递两帧：egui 认为「每帧都在动」就不会弹气泡（time_since_last_movement
     // 一直归零），挪到位之后必须让它静止，位置本身在 PointerState 里跨帧保留。
-    let frame = FRAMES.load(Ordering::Relaxed);
     if frame <= 2 {
         raw_input.events.push(egui::Event::PointerMoved(pos));
     }
     // 离屏渲染几十帧只花几十毫秒，egui 的气泡要「静止 0.5 s」才弹，不推时间就永远等不到。
     raw_input.time = Some(frame as f64 * HOVER_STEP_SECS);
+}
+
+/// 截图前要预先滚动的距离（逻辑点，正数 = 内容往下走，看到更靠后的部分）。
+fn scroll_setting() -> f32 {
+    std::env::var("ASUS_NUMPAD_GUI_SCROLL")
+        .ok()
+        .and_then(|value| value.trim().parse::<f32>().ok())
+        .filter(|v| v.is_finite() && *v != 0.0)
+        .unwrap_or(0.0)
+}
+
+/// 把滚动拆进前若干帧逐帧注入。
+///
+/// 三个都是踩过的点：① egui 的滚动带平滑，一帧塞一大坨会被速度曲线吃掉大半，
+/// 拍出来只滚了一屏的一角；② 滚轮事件不带坐标，靠指针所在位置决定滚哪个区域，
+/// 所以得先把指针放到内容区中间；③ 等滚完要留几帧让它停稳，滚动惯性未落时截图会糊。
+fn scroll_hook(raw_input: &mut egui::RawInput, frame: u32) {
+    let scroll = scroll_setting();
+    if scroll == 0.0 {
+        return;
+    }
+    const STEPS: u32 = 8;
+    if frame <= 1 {
+        if let Some(rect) = raw_input.screen_rect {
+            raw_input
+                .events
+                .push(egui::Event::PointerMoved(rect.center()));
+        }
+    }
+    if frame < STEPS {
+        raw_input.events.push(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -scroll / STEPS as f32),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Unknown,
+            modifiers: egui::Modifiers::NONE,
+        });
+    }
 }
 
 fn target_path() -> Option<PathBuf> {

@@ -11,8 +11,11 @@
 
 use eframe::egui;
 
-use asus_numpad::custom::{self, CustomLayoutSpec, HotkeyAction, HotkeySpec, LedProtoSpec};
-use asus_numpad::layout::LAYOUTS;
+use asus_numpad::custom::{
+    self, CustomLayoutSpec, Hotkey, HotkeyAction, HotkeySpec, KeySlot, LayoutPatch, LedProtoSpec,
+    PressureSwitch,
+};
+use asus_numpad::layout::{self, Layout, LAYOUTS};
 
 use super::{small, Action, App, WARN};
 use crate::theme;
@@ -36,6 +39,8 @@ impl App {
         self.draw_ext_pressure(ui);
         ui.add_space(10.0);
         self.draw_ext_hotkeys(ui);
+        ui.add_space(10.0);
+        self.draw_ext_fragment(ui);
 
         if self.driver.cfg != before {
             self.driver.dirty = true;
@@ -95,6 +100,11 @@ impl App {
                         false,
                         "在副本上跑一遍解析：布局能不能装、HID 有没有和内置表打架、报文模板合不合法、压感阈值会不会被夹、热键解析得出来吗。不动磁盘也不动设备。",
                     ),
+                    (
+                        "放弃改动",
+                        false,
+                        "重新从磁盘读一遍配置，没保存的改动全部丢掉；已保存的不受影响。",
+                    ),
                 ],
             );
             match picked {
@@ -113,6 +123,10 @@ impl App {
                     };
                 }
                 _ => {}
+            }
+            if picked == Some(3) {
+                *action = Some(Action::ReloadDriver);
+                self.ext_notes.clear();
             }
             if !self.ext_notes.is_empty() {
                 ui.add_space(6.0);
@@ -197,28 +211,22 @@ impl App {
                 }
             }
 
-            let bad: Vec<String> = self
-                .driver
-                .cfg
-                .custom_layouts
-                .iter()
-                .filter_map(|spec| {
-                    if custom::keys_inherit_base(&spec.keys) {
-                        return None;
-                    }
-                    custom::KeyTable::parse(&spec.keys).err().map(|err| {
-                        format!(
-                            "{}：{err}",
-                            if spec.name.trim().is_empty() {
-                                "未命名"
-                            } else {
-                                spec.name.trim()
-                            }
-                        )
-                    })
-                })
-                .collect();
-            for line in bad {
+            // 装不上的原因一次列全：命名 / HID 冲突 + 键表解析错误
+            let mut issues = layout_issues(&self.driver.cfg.custom_layouts);
+            for (index, spec) in self.driver.cfg.custom_layouts.iter().enumerate() {
+                if custom::keys_inherit_base(&spec.keys) {
+                    continue;
+                }
+                if let Err(err) = custom::KeyTable::parse(&spec.keys) {
+                    let tag = if spec.name.trim().is_empty() {
+                        format!("#{} 未命名", index + 1)
+                    } else {
+                        format!("#{} {}", index + 1, spec.name.trim())
+                    };
+                    issues.push(format!("{tag}：{err}"));
+                }
+            }
+            for line in issues {
                 ui.add_space(2.0);
                 theme::row(ui, &p, "", None, |ui| {
                     ui.label(egui::RichText::new(line).size(12.0).color(WARN));
@@ -280,6 +288,33 @@ impl App {
                 theme::row(ui, &p, "", None, |ui| {
                     ui.label(egui::RichText::new(err).size(12.0).color(WARN));
                 });
+            }
+            // 档位预览：把 0..4 档真会下发的字节摊开，换模板时不用靠脑补对表
+            let proto = self.driver.cfg.led_proto.clone();
+            if proto.validate().is_ok() {
+                let levels: Vec<(u8, String)> = (0..=4u8)
+                    .map(|level| {
+                        let text = proto
+                            .encode(level)
+                            .map(|bytes| hex_of(&bytes))
+                            .unwrap_or_else(|| "—".to_string());
+                        (level, text)
+                    })
+                    .collect();
+                egui::CollapsingHeader::new("各档实际下发的字节")
+                    .id_salt("ext_proto_preview")
+                    .default_open(!builtin)
+                    .show(ui, |ui| {
+                        for (level, text) in levels {
+                            theme::read_row(
+                                ui,
+                                &p,
+                                &format!("{level} 档"),
+                                &text,
+                                Some("这是把占位符替换成该档位后的整条报文，驱动就是照这几串字节下发的。"),
+                            );
+                        }
+                    });
             }
             ui.add_space(2.0);
             action_row(ui, |ui| {
@@ -382,6 +417,14 @@ impl App {
             );
 
             let mut remove: Option<usize> = None;
+            // 先按规整写法收一遍组合键，下面每行据此判断「有没有和别的条目撞车」
+            let labels: Vec<String> = self
+                .driver
+                .cfg
+                .hotkeys
+                .iter()
+                .map(|spec| hotkey_key(&spec.gesture))
+                .collect();
             let count = self.driver.cfg.hotkeys.len();
             for index in 0..count {
                 ui.add_space(6.0);
@@ -413,10 +456,19 @@ impl App {
                         if action != before {
                             spec.action = action.as_str().to_string();
                         }
-                        if spec.gesture.trim().is_empty() {
-                            ui.label(egui::RichText::new("未填组合键").size(12.0).color(WARN));
-                        }
                     });
+                    draw_hotkey_check(ui, &p, spec);
+                    let mine = hotkey_key(&spec.gesture);
+                    if !mine.is_empty() && labels.iter().filter(|other| **other == mine).count() > 1
+                    {
+                        ui.label(
+                            egui::RichText::new(
+                                "与其它条目重复：同一个组合键只有排在前面的那条生效",
+                            )
+                            .size(12.0)
+                            .color(WARN),
+                        );
+                    }
                 });
             }
             if let Some(index) = remove {
@@ -434,6 +486,170 @@ impl App {
             });
         });
     }
+
+    /// 卡五：配置片段——四项打包成一段 JSON，同机型之间直接对拷。
+    ///
+    /// 只装四项扩展，不碰帧节拍、几何兜底、界面语言这些「换了机器就该重设」的项。
+    fn draw_ext_fragment(&mut self, ui: &mut egui::Ui) {
+        let p = self.palette;
+        theme::card(ui, &p, |ui| {
+            theme::title_row_help(
+                ui,
+                &p,
+                "配置片段",
+                Some(
+                    "把四项扩展打包成一段 JSON：同机型的人贴过去点「应用」就能用。\
+                     只含 custom_layouts / led_proto / pressure_switch / hotkeys，\
+                     不含帧节拍、几何兜底、界面语言这些按机器走的项。",
+                ),
+            );
+            ui.add_space(4.0);
+            theme::row(
+                ui,
+                &p,
+                "片段",
+                Some("点「导出」从当前配置生成；也可以直接粘贴别人给的片段。"),
+                |ui| {
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.ext_snippet)
+                            .desired_rows(5)
+                            .desired_width(theme::ctrl_width())
+                            .hint_text("{ ... }"),
+                    )
+                },
+            );
+            ui.add_space(2.0);
+            action_row(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let resp = theme::secondary(ui, &p, "导出");
+                    let resp = theme::tip(resp, "把当前四项扩展序列化成 JSON 文本，可直接复制走。");
+                    if resp.clicked() {
+                        self.ext_snippet = fragment_of(&self.driver.cfg);
+                        let len = self.ext_snippet.len();
+                        self.ext_snippet_msg = Some((format!("已生成 {len} 字节的片段"), false));
+                    }
+                    let resp = theme::secondary(ui, &p, "应用");
+                    let resp = theme::tip(
+                        resp,
+                        "把框里的片段写进配置；缺的项保持原样，写坏的项会明确指出是哪一段。",
+                    );
+                    if resp.clicked() {
+                        self.ext_snippet_msg =
+                            Some(apply_fragment(&mut self.driver.cfg, &self.ext_snippet));
+                    }
+                });
+            });
+            if let Some((msg, bad)) = self.ext_snippet_msg.clone() {
+                ui.add_space(2.0);
+                theme::row(ui, &p, "", None, |ui| {
+                    ui.label(egui::RichText::new(msg).size(12.0).color(if bad {
+                        WARN
+                    } else {
+                        p.ok
+                    }));
+                });
+            }
+        });
+    }
+}
+
+/// 四项扩展打包成一段 JSON 文本（同机型对拷用）。
+fn fragment_of(cfg: &asus_numpad::config::Config) -> String {
+    let value = serde_json::json!({
+        "custom_layouts": cfg.custom_layouts,
+        "led_proto": cfg.led_proto,
+        "pressure_switch": cfg.pressure_switch,
+        "hotkeys": cfg.hotkeys,
+    });
+    serde_json::to_string_pretty(&value).unwrap_or_default()
+}
+
+/// 片段写回配置：缺的项保持原样，坏的那段直接报出是哪一项。
+///
+/// 返回值第二项为 `true` 表示出错。写进来的内容不做裁剪——真正能不能装，
+/// 由保存时的 `sanitize` 统一判定，界面不替它猜。
+fn apply_fragment(cfg: &mut asus_numpad::config::Config, text: &str) -> (String, bool) {
+    let text = text.trim();
+    if text.is_empty() {
+        return (
+            "片段是空的：先点「导出」，或粘贴别人的片段".to_string(),
+            true,
+        );
+    }
+    let value: serde_json::Value = match serde_json::from_str(text) {
+        Ok(value) => value,
+        Err(err) => return (format!("不是合法 JSON：{err}"), true),
+    };
+    let mut touched: Vec<String> = Vec::new();
+    // 先全部解析到局部，四项都过了再一次性写回：一段坏片段不该留下改了一半的配置。
+    let mut layouts: Option<Vec<CustomLayoutSpec>> = None;
+    let mut proto: Option<LedProtoSpec> = None;
+    let mut pressure: Option<PressureSwitch> = None;
+    let mut hotkeys: Option<Vec<HotkeySpec>> = None;
+
+    if let Some(raw) = value.get("custom_layouts") {
+        match serde_json::from_value::<Vec<CustomLayoutSpec>>(raw.clone()) {
+            Ok(items) => {
+                touched.push(format!("自定义布局 {} 条", items.len()));
+                layouts = Some(items);
+            }
+            Err(err) => return (format!("custom_layouts 解析失败：{err}"), true),
+        }
+    }
+    if let Some(raw) = value.get("led_proto") {
+        match serde_json::from_value::<LedProtoSpec>(raw.clone()) {
+            Ok(spec) => match spec.validate() {
+                Ok(()) => {
+                    touched.push("点亮报文".to_string());
+                    proto = Some(spec);
+                }
+                Err(err) => return (format!("led_proto 模板不合法：{err}"), true),
+            },
+            Err(err) => return (format!("led_proto 解析失败：{err}"), true),
+        }
+    }
+    if let Some(raw) = value.get("pressure_switch") {
+        match serde_json::from_value::<PressureSwitch>(raw.clone()) {
+            Ok(spec) => {
+                touched.push("压感切换".to_string());
+                pressure = Some(spec);
+            }
+            Err(err) => return (format!("pressure_switch 解析失败：{err}"), true),
+        }
+    }
+    if let Some(raw) = value.get("hotkeys") {
+        match serde_json::from_value::<Vec<HotkeySpec>>(raw.clone()) {
+            Ok(items) => {
+                touched.push(format!("热键 {} 条", items.len()));
+                hotkeys = Some(items);
+            }
+            Err(err) => return (format!("hotkeys 解析失败：{err}"), true),
+        }
+    }
+
+    if touched.is_empty() {
+        return (
+            "片段里没有这四项里的任何一项：需要 custom_layouts / led_proto / pressure_switch / hotkeys".to_string(),
+            true,
+        );
+    }
+
+    if let Some(items) = layouts {
+        cfg.custom_layouts = items;
+    }
+    if let Some(spec) = proto {
+        cfg.led_proto = spec;
+    }
+    if let Some(spec) = pressure {
+        cfg.pressure_switch = spec;
+    }
+    if let Some(items) = hotkeys {
+        cfg.hotkeys = items;
+    }
+    (
+        format!("已应用 {}；记得点「保存」落盘", touched.join("、")),
+        false,
+    )
 }
 
 /// 画一条自定义布局的全部字段。
@@ -445,13 +661,6 @@ fn draw_one_layout(
     spec: &mut CustomLayoutSpec,
     index: usize,
 ) {
-    eprintln!(
-        "[dbg] before name row y={:.1} x={:.1} max={:?} clip={:?}",
-        ui.next_widget_position().y,
-        ui.next_widget_position().x,
-        ui.max_rect(),
-        ui.clip_rect()
-    );
     theme::row(
         ui,
         p,
@@ -494,11 +703,13 @@ fn draw_one_layout(
         },
     );
 
-    // 键表：4 行单行输入，一行一串键名
+    // 键表：4 行单行输入，一行一串键名。
+    // 只补齐、不截断：配置里若是手写了第 5 行，驱动侧解析会明确报错，界面这里
+    // 悄悄把那行删掉就成了「打开界面即改配置」，保存后用户才发现内容少了。
     while spec.keys.len() < KEY_ROWS {
         spec.keys.push(String::new());
     }
-    spec.keys.truncate(KEY_ROWS);
+    let extra_rows = spec.keys.len() - KEY_ROWS;
     theme::block(
         ui,
         p,
@@ -526,6 +737,26 @@ fn draw_one_layout(
                     );
                 });
             }
+            ui.add_space(4.0);
+            // 贴纸/镭雕多半是「照基准机型改一两个键」，先把基准键表抄成文本再改最省事
+            ui.horizontal(|ui| {
+                let base_name = spec.base.trim().to_string();
+                let hint = if base_name.is_empty() {
+                    "未选基准，会按内置键表填".to_string()
+                } else {
+                    format!("把 {base_name} 的键表抄成 4 行文字，在这上面逐个改键")
+                };
+                let resp = theme::secondary(ui, p, "按基准填满");
+                let resp = theme::tip(resp, hint);
+                if resp.clicked() {
+                    spec.keys = custom::table_for(&base_name).describe();
+                }
+                let resp = theme::secondary(ui, p, "清空键表");
+                let resp = theme::tip(resp, "清空表示键位沿用基准，只改行列几何时用这个。");
+                if resp.clicked() {
+                    spec.keys = vec![String::new(); KEY_ROWS];
+                }
+            });
         },
     );
 
@@ -556,6 +787,7 @@ fn draw_one_layout(
                 &format!("{} 列 × {} 行，可用", table.cols(), KEY_ROWS),
                 Some("列数以键表为准：贴纸几列，键区就几列，不会串到相邻列。"),
             );
+            draw_key_preview(ui, p, &table);
         }
         Err(err) => {
             theme::row(ui, p, "键表解析", None, |ui| {
@@ -563,6 +795,23 @@ fn draw_one_layout(
             });
         }
     }
+
+    if extra_rows > 0 {
+        theme::row(ui, p, "", None, |ui| {
+            ui.label(
+                egui::RichText::new(format!(
+                    "配置里这段键表写了 {} 行，界面只编辑前 {KEY_ROWS} 行；驱动上限就是 {KEY_ROWS} 行，多出的行会在校验时报错。",
+                    spec.keys.len()
+                ))
+                .size(12.0)
+                .color(WARN),
+            );
+        });
+    }
+
+    // 几何覆盖：贴纸 / 镭雕方案真正要动的往往是这些 0.1 mm 的边界值，
+    // 键表照抄基准就能用，键区却还压在基准机型的位置上。
+    draw_one_patch(ui, p, index, &mut spec.patch, resolve_base(&spec.base));
 
     // HID 绑定
     theme::block(
@@ -649,11 +898,619 @@ pub(super) fn hex_of(bytes: &[u8]) -> String {
         .join(" ")
 }
 
+/// 组合键的比对键：能解析就用规整写法，解析不出来退回去按原文小写比。
+///
+/// 判断「两条热键是不是同一个组合键」不能直接比字符串——`ctrl+alt+n` 与
+/// `Alt+Ctrl+N` 在驱动里是同一个，界面上却是两串不同的字。
+fn hotkey_key(gesture: &str) -> String {
+    match Hotkey::parse(gesture) {
+        Ok(hotkey) => hotkey.label(),
+        Err(_) => gesture.trim().to_ascii_lowercase(),
+    }
+}
+
+/// 布局列表里那些「装不上」的问题：空名、与内置重名、互相重名、HID 重复绑定。
+///
+/// 这些正是 `install_layouts` 会退回并写进校验提示的几种，提前在界面上标出来，
+/// 省得存盘之后再去命令行对账。
+fn layout_issues(specs: &[CustomLayoutSpec]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (index, spec) in specs.iter().enumerate() {
+        let name = spec.name.trim();
+        let tag = if name.is_empty() {
+            format!("#{} 未命名", index + 1)
+        } else {
+            format!("#{} {name}", index + 1)
+        };
+        if name.is_empty() {
+            out.push(format!("{tag}：布局名为空，这条不会被装上"));
+        } else {
+            if layout::builtin_by_name(name).is_some() {
+                out.push(format!("{tag}：与内置布局重名，会被退回"));
+            }
+            let clash = specs
+                .iter()
+                .skip(index + 1)
+                .any(|other| other.name.trim().eq_ignore_ascii_case(name));
+            if clash {
+                out.push(format!("{tag}：与后面的另一条自定义布局重名"));
+            }
+        }
+        for hid in &spec.hid_ids {
+            let hid = hid.trim().to_ascii_uppercase();
+            if hid.is_empty() {
+                continue;
+            }
+            let repeated = specs.iter().enumerate().any(|(other_index, other)| {
+                other_index != index
+                    && other
+                        .hid_ids
+                        .iter()
+                        .any(|h| h.trim().eq_ignore_ascii_case(&hid))
+            });
+            if repeated {
+                out.push(format!("{tag}：{hid} 同时绑在了多条自定义布局上"));
+            }
+        }
+    }
+    out
+}
+
 /// 热键动作的界面文案。
 fn action_label(action: HotkeyAction) -> &'static str {
     match action {
         HotkeyAction::Toggle => "切换开关",
         HotkeyAction::On => "强制打开",
         HotkeyAction::Off => "强制关闭",
+    }
+}
+
+/// 配置里 `base` 指向的基准布局：先查内置表，再查已注册的自定义布局。
+///
+/// 只用于把基准数值显示在界面上给人对照，不参与命中判定。
+fn resolve_base(name: &str) -> Option<Layout> {
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    if let Some(entry) = layout::builtin_by_name(name) {
+        return Some(entry.layout);
+    }
+    custom::entry_by_name(name).map(|entry| entry.layout)
+}
+
+/// 键表预览：照贴纸的排布摆成网格，列数、行数、空位一眼看清。
+///
+/// 只画解析结果，不参与命中；真正生效的行列数仍以驱动解析为准。
+fn draw_key_preview(ui: &mut egui::Ui, p: &theme::Palette, table: &custom::KeyTable) {
+    let cols = table.cols().clamp(1, 8);
+    let gap = 4.0;
+    let cell_w = ((theme::ctrl_width() - gap * (cols as f32 - 1.0)) / cols as f32).min(76.0);
+    ui.horizontal_top(|ui| {
+        ui.add_space(theme::LABEL_W + ui.spacing().item_spacing.x);
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = gap;
+            for row in 0..KEY_ROWS {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = gap;
+                    for col in 0..cols {
+                        let slot = table.get(row, col).unwrap_or(KeySlot::None);
+                        key_cell(ui, p, slot, cell_w);
+                    }
+                });
+            }
+        });
+    });
+}
+
+/// 预览里的一格：有键实底、空位凹底，空位印 `·` 以免看成少了格子。
+fn key_cell(ui: &mut egui::Ui, p: &theme::Palette, slot: KeySlot, cell_w: f32) {
+    let (rect, _) = ui.allocate_exact_size(egui::Vec2::new(cell_w, 26.0), egui::Sense::hover());
+    let empty = matches!(slot, KeySlot::None);
+    let fill = if empty { p.sunk } else { p.field };
+    let color = if empty { p.text_weak } else { p.text };
+    let text = if empty {
+        "·".to_string()
+    } else {
+        slot.label()
+    };
+    ui.painter().rect(
+        rect,
+        egui::CornerRadius::same(6),
+        fill,
+        egui::Stroke::new(1.0, p.stroke),
+        egui::StrokeKind::Inside,
+    );
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        text,
+        egui::FontId::proportional(12.0),
+        color,
+    );
+}
+
+/// 几何覆盖：`LayoutPatch` 的 15 项，逐项「勾选启用 + 数值」。
+///
+/// 贴纸 / 镭雕方案常常只动 `columns` 与四边内缩、键位照抄基准；界面原先只给键表
+/// 不给这些，改完键表还得去手改 JSON，等于半个功能。
+fn draw_one_patch(
+    ui: &mut egui::Ui,
+    p: &theme::Palette,
+    index: usize,
+    patch: &mut LayoutPatch,
+    base: Option<Layout>,
+) {
+    theme::block(
+        ui,
+        p,
+        "几何覆盖",
+        Some(
+            "单位 0.1 mm，对应官方 AsusNUMPADFilter.inf 的 NUMPADLAYOUT_<机型>_00..14。\
+             只有勾上的项才写进配置，其余沿用基准；不勾时右侧显示基准原值。",
+        ),
+        |ui| {
+            let covered = patch_count(patch);
+            let head = if covered == 0 {
+                "未覆盖，全按基准几何".to_string()
+            } else {
+                format!("已覆盖 {covered} 项")
+            };
+            egui::CollapsingHeader::new(head)
+                .id_salt(("custom_patch", index))
+                .default_open(covered > 0)
+                .show(ui, |ui| {
+                    patch_section(ui, p, "键区");
+                    patch_row(
+                        ui,
+                        p,
+                        "列数",
+                        "键区摊开成几列，1..=8。填了键表时列数以键表为准，这一项会被键表覆盖。",
+                        base.map(|l| l.columns),
+                        &mut patch.columns,
+                        1..=8,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "首列左留 _01",
+                        "第 0 列左侧留白，越小键区越靠左。",
+                        base.map(|l| l.index0),
+                        &mut patch.index0,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "末列右留 _02",
+                        "最后一列右侧留白；列数不是 5 时它压在末列上。",
+                        base.map(|l| l.index4),
+                        &mut patch.index4,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "首行上留 _03",
+                        "第 0 行上侧留白。",
+                        base.map(|l| l.level0),
+                        &mut patch.level0,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "末行下留 _04",
+                        "最后一行下侧留白。",
+                        base.map(|l| l.level3),
+                        &mut patch.level3,
+                        0..=250,
+                    );
+
+                    patch_section(ui, p, "有效区内缩");
+                    patch_row(
+                        ui,
+                        p,
+                        "左 _07",
+                        "有效区左边内缩，防止边缘误触。",
+                        base.map(|l| l.left),
+                        &mut patch.left,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "右 _08",
+                        "有效区右边内缩。",
+                        base.map(|l| l.right),
+                        &mut patch.right,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "上 _09",
+                        "有效区上边内缩。",
+                        base.map(|l| l.up),
+                        &mut patch.up,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "下 _10",
+                        "有效区下边内缩。",
+                        base.map(|l| l.down),
+                        &mut patch.down,
+                        0..=250,
+                    );
+
+                    patch_section(ui, p, "NumLock 热区");
+                    patch_row(
+                        ui,
+                        p,
+                        "Edge Index _05",
+                        "NumLock 边缘的热区索引。当前实现不把它用于热区判定，按官方原值填即可。",
+                        base.map(|l| l.numlock_index),
+                        &mut patch.numlock_index,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "Edge Level _06",
+                        "NumLock 边缘的热区高度。",
+                        base.map(|l| l.numlock_level),
+                        &mut patch.numlock_level,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "Adv Index _11",
+                        "NumLock 扩展热区索引。",
+                        base.map(|l| l.numadv_index),
+                        &mut patch.numadv_index,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "Adv Level _12",
+                        "NumLock 扩展热区高度。",
+                        base.map(|l| l.numadv_level),
+                        &mut patch.numadv_level,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "InValid Index _13",
+                        "NumLock 无效区索引，决定「不算按到键」的那条边界。",
+                        base.map(|l| l.invalid_index),
+                        &mut patch.invalid_index,
+                        0..=250,
+                    );
+                    patch_row(
+                        ui,
+                        p,
+                        "InValid Level _14",
+                        "NumLock 无效区高度。",
+                        base.map(|l| l.invalid_level),
+                        &mut patch.invalid_level,
+                        0..=250,
+                    );
+                });
+
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                let has_base = base.is_some();
+                let resp = ui.add_enabled(has_base, {
+                    let size = egui::Vec2::new(theme::BTN_W, theme::CTRL_H);
+                    egui::Button::new(egui::RichText::new("全部填入基准数值").color(p.text))
+                        .fill(p.field)
+                        .stroke(egui::Stroke::new(1.0, p.stroke))
+                        .min_size(size)
+                });
+                let resp = theme::tip(
+                    resp,
+                    "把基准机型的 15 项原值一次性抄进配置，方便在此基础上逐项微调。",
+                );
+                if resp.clicked() {
+                    if let Some(base) = base {
+                        patch_fill_base(patch, base);
+                    }
+                }
+                if covered > 0 {
+                    let resp = ui.add({
+                        let size = egui::Vec2::new(theme::BTN_W, theme::CTRL_H);
+                        egui::Button::new(egui::RichText::new("清空覆盖").color(p.text))
+                            .fill(p.field)
+                            .stroke(egui::Stroke::new(1.0, p.stroke))
+                            .min_size(size)
+                    });
+                    let resp = theme::tip(resp, "撤回这 15 项的全部覆盖，改回「全按基准」。");
+                    if resp.clicked() {
+                        *patch = LayoutPatch::default();
+                    }
+                }
+            });
+        },
+    );
+}
+
+/// 几何区里的小标题：把 15 项分成键区 / 内缩 / 热区三组。
+fn patch_section(ui: &mut egui::Ui, p: &theme::Palette, text: &str) {
+    ui.add_space(6.0);
+    ui.label(
+        egui::RichText::new(text)
+            .size(11.5)
+            .strong()
+            .color(p.text_weak),
+    );
+    ui.add_space(2.0);
+}
+
+/// 一行几何参数：开关决定这写不写进配置，未勾时右侧灰字显示基准原值。
+fn patch_row(
+    ui: &mut egui::Ui,
+    p: &theme::Palette,
+    label: &str,
+    help: &str,
+    base: Option<i32>,
+    field: &mut Option<i32>,
+    range: std::ops::RangeInclusive<i32>,
+) {
+    ui.horizontal(|ui| {
+        let mut on = field.is_some();
+        let resp = theme::switch(ui, p, &mut on);
+        let resp = theme::tip(resp, format!("勾上即写进配置。{help}"));
+        if resp.changed() {
+            *field = if on {
+                Some(base.unwrap_or(*range.start()))
+            } else {
+                None
+            };
+        }
+        ui.add_sized(
+            egui::Vec2::new(theme::LABEL_W - 20.0, theme::CTRL_H),
+            egui::Label::new(egui::RichText::new(label).size(12.0).color(p.text_weak)).truncate(),
+        )
+        .on_hover_text(help);
+        match field.as_mut() {
+            Some(value) => {
+                ui.add_sized(
+                    egui::Vec2::new(theme::pair_b(), theme::CTRL_H),
+                    egui::DragValue::new(value).range(range.clone()),
+                );
+                match base {
+                    Some(base) if base != *value => {
+                        ui.label(
+                            egui::RichText::new(format!("基准 {base}（{:+}）", *value - base))
+                                .size(11.5)
+                                .color(p.accent),
+                        );
+                    }
+                    Some(base) => {
+                        ui.label(
+                            egui::RichText::new(format!("基准 {base}"))
+                                .size(11.5)
+                                .color(p.text_weak),
+                        );
+                    }
+                    None => {}
+                }
+            }
+            None => {
+                let text = base
+                    .map(|b| b.to_string())
+                    .unwrap_or_else(|| "—".to_string());
+                ui.add_sized(
+                    egui::Vec2::new(theme::pair_b(), theme::CTRL_H),
+                    egui::Label::new(
+                        egui::RichText::new(text)
+                            .size(12.0)
+                            .monospace()
+                            .color(p.text_weak),
+                    ),
+                );
+            }
+        }
+    });
+}
+
+/// 已覆盖的项数，用于折叠标题上标一句「改了几项」。
+fn patch_count(patch: &LayoutPatch) -> usize {
+    [
+        patch.columns,
+        patch.index0,
+        patch.index4,
+        patch.level0,
+        patch.level3,
+        patch.numlock_index,
+        patch.numlock_level,
+        patch.left,
+        patch.right,
+        patch.up,
+        patch.down,
+        patch.numadv_index,
+        patch.numadv_level,
+        patch.invalid_index,
+        patch.invalid_level,
+    ]
+    .iter()
+    .filter(|v| v.is_some())
+    .count()
+}
+
+/// 把基准布局的 15 项原值整组抄进覆盖表。
+fn patch_fill_base(patch: &mut LayoutPatch, base: Layout) {
+    patch.columns = Some(base.columns);
+    patch.index0 = Some(base.index0);
+    patch.index4 = Some(base.index4);
+    patch.level0 = Some(base.level0);
+    patch.level3 = Some(base.level3);
+    patch.numlock_index = Some(base.numlock_index);
+    patch.numlock_level = Some(base.numlock_level);
+    patch.left = Some(base.left);
+    patch.right = Some(base.right);
+    patch.up = Some(base.up);
+    patch.down = Some(base.down);
+    patch.numadv_index = Some(base.numadv_index);
+    patch.numadv_level = Some(base.numadv_level);
+    patch.invalid_index = Some(base.invalid_index);
+    patch.invalid_level = Some(base.invalid_level);
+}
+
+/// 组合键校验：写得对就显示规整写法，写得不对就把驱动会报的错原样摆出来。
+fn draw_hotkey_check(ui: &mut egui::Ui, p: &theme::Palette, spec: &mut HotkeySpec) {
+    if spec.gesture.trim().is_empty() {
+        ui.label(
+            egui::RichText::new("未填组合键，这条不会生效")
+                .size(12.0)
+                .color(WARN),
+        );
+        return;
+    }
+    match Hotkey::parse(&spec.gesture) {
+        Ok(hotkey) => {
+            let canonical = hotkey.label();
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("识别为 {canonical}"))
+                        .size(12.0)
+                        .color(p.ok),
+                );
+                if canonical != spec.gesture.trim() {
+                    let resp = theme::secondary(ui, p, "规整写法");
+                    let resp = theme::tip(
+                        resp,
+                        "把 `Ctrl+Alt+N`、`ctrl + alt + n` 这类写法统一成配置里的规范形式。",
+                    );
+                    if resp.clicked() {
+                        spec.gesture = canonical;
+                    }
+                }
+            });
+        }
+        Err(err) => {
+            ui.label(
+                egui::RichText::new(format!("解析失败：{err}"))
+                    .size(12.0)
+                    .color(WARN),
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use asus_numpad::config::Config;
+
+    /// 导出再导入必须得到同一份四项配置——片段是对外分享的文件格式，不能单向。
+    #[test]
+    fn fragment_round_trip() {
+        let source = Config {
+            custom_layouts: vec![CustomLayoutSpec {
+                name: "GH3X-贴纸".to_string(),
+                base: "GH4XLNDZ".to_string(),
+                hid_ids: vec!["ASUE1416".to_string()],
+                keys: vec!["7 8 9 +".to_string(), "4 5 6 -".to_string()],
+                patch: LayoutPatch {
+                    columns: Some(4),
+                    ..Default::default()
+                },
+            }],
+            hotkeys: vec![HotkeySpec {
+                gesture: "ctrl+alt+n".to_string(),
+                action: "toggle".to_string(),
+            }],
+            ..Default::default()
+        };
+
+        let text = fragment_of(&source);
+        let mut target = Config::default();
+        let (msg, bad) = apply_fragment(&mut target, &text);
+        assert!(!bad, "导入片段失败：{msg}");
+        assert_eq!(target.custom_layouts, source.custom_layouts);
+        assert_eq!(target.hotkeys, source.hotkeys);
+        assert_eq!(target.led_proto, source.led_proto);
+        assert_eq!(target.pressure_switch, source.pressure_switch);
+    }
+
+    /// 空片段、非 JSON、四项都不沾的 JSON 都要明确报错，而不是「悄悄什么都没改」。
+    #[test]
+    fn fragment_rejects_bad_input() {
+        let mut cfg = Config::default();
+        let (msg, bad) = apply_fragment(&mut cfg, "   ");
+        assert!(bad && msg.contains("空"), "{msg}");
+
+        let (msg, bad) = apply_fragment(&mut cfg, "numpad = 1");
+        assert!(bad && msg.contains("JSON"), "{msg}");
+
+        let (msg, bad) = apply_fragment(&mut cfg, r#"{"frame_ms": 8}"#);
+        assert!(bad && msg.contains("四项"), "{msg}");
+        assert_eq!(cfg, Config::default(), "报错时不该改动配置");
+    }
+
+    /// 报文模板不合法时整段拒绝，不能把坏模板写进配置。
+    #[test]
+    fn fragment_rejects_bad_led_proto() {
+        let mut cfg = Config::default();
+        let (msg, bad) = apply_fragment(&mut cfg, r#"{"led_proto": {"template": [13, 20]}}"#);
+        assert!(bad && msg.contains("led_proto"), "{msg}");
+        assert_eq!(cfg, Config::default());
+    }
+
+    /// 两组字面不同、实际同义的写法要认成同一条热键，否则重复检测形同虚设。
+    #[test]
+    fn hotkey_key_normalises_case_and_order() {
+        assert_eq!(hotkey_key("ctrl+alt+n"), hotkey_key("Alt+Ctrl+N"));
+        assert_ne!(hotkey_key("ctrl+alt+n"), hotkey_key("ctrl+shift+n"));
+        assert_eq!(hotkey_key("  "), "");
+    }
+
+    /// 命名与 HID 冲突要在界面上先报出来，覆盖 `install_layouts` 会退回的几种。
+    #[test]
+    fn layout_issues_flags_conflicts() {
+        let builtin = LAYOUTS[0].name.to_string();
+        let specs = vec![
+            CustomLayoutSpec {
+                name: String::new(),
+                ..Default::default()
+            },
+            CustomLayoutSpec {
+                name: builtin,
+                ..Default::default()
+            },
+            CustomLayoutSpec {
+                name: "贴纸".to_string(),
+                hid_ids: vec!["ASUE1416".to_string()],
+                ..Default::default()
+            },
+            CustomLayoutSpec {
+                name: "贴纸".to_string(),
+                hid_ids: vec!["asue1416".to_string()],
+                ..Default::default()
+            },
+        ];
+        let issues = layout_issues(&specs);
+        assert!(
+            issues.iter().any(|line| line.contains("未命名")),
+            "{issues:?}"
+        );
+        assert!(
+            issues.iter().any(|line| line.contains("内置布局重名")),
+            "{issues:?}"
+        );
+        assert!(
+            issues.iter().any(|line| line.contains("重名")),
+            "{issues:?}"
+        );
+        assert!(
+            issues.iter().any(|line| line.contains("ASUE1416")),
+            "{issues:?}"
+        );
     }
 }
