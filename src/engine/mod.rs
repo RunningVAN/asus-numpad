@@ -29,6 +29,9 @@ use crate::config::{
 use crate::keycodes as kc;
 use crate::layout::{Geometry, KeyMode};
 
+mod recover;
+mod report;
+
 /// 与 Linux input 事件同构的最小事件（透传时需要原样回放）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Event {
@@ -392,7 +395,7 @@ impl Engine {
 
     /// 自 `t0` 起经过的帧数（官方帧模型 8 ms/帧）。
     pub fn frames_since(&self, t0: f64) -> f64 {
-        (self.now() - t0) * 1000.0 / (self.cfg.frame_ms.max(1) as f64 * 1000.0)
+        recover::frames_between(t0, self.now(), self.cfg.frame_ms)
     }
 
     pub fn numlock_frames(&self) -> u32 {
@@ -401,17 +404,7 @@ impl Engine {
 
     /// 两点实际距离（µm）。
     pub fn dist_um(&self, x0: i32, y0: i32, x1: i32, y1: i32) -> f64 {
-        let dx = if self.geometry.ux > 0.0 {
-            (x1 - x0) as f64 / self.geometry.ux
-        } else {
-            0.0
-        };
-        let dy = if self.geometry.uy > 0.0 {
-            (y1 - y0) as f64 / self.geometry.uy
-        } else {
-            0.0
-        };
-        (dx * dx + dy * dy).sqrt()
+        recover::dist_um(&self.geometry, x0, y0, x1, y1)
     }
 
     // ------------------------------------------------------------------ //
@@ -1119,23 +1112,9 @@ impl Engine {
         if self.forwarding {
             let slots: Vec<i32> = self.active_slots.iter().copied().collect();
             if let Some(p) = self.pointer.as_mut() {
-                for slot in slots {
-                    p.feed(&Event {
-                        etype: kc::EV_ABS,
-                        code: kc::ABS_MT_SLOT,
-                        value: slot,
-                    });
-                    p.feed(&Event {
-                        etype: kc::EV_ABS,
-                        code: kc::ABS_MT_TRACKING_ID,
-                        value: -1,
-                    });
+                for ev in recover::release_all(&slots) {
+                    p.feed(&ev);
                 }
-                p.feed(&Event {
-                    etype: kc::EV_SYN,
-                    code: 0,
-                    value: 0,
-                });
             }
         }
         self.active_slots.clear();
@@ -1402,39 +1381,8 @@ impl Engine {
 
     /// `--dump` 用的一行状态。
     pub fn state_line(&self) -> String {
-        format!(
-            "x={} y={} dist={:.0}µm spread={:.1}mm numlock={} cell={} key={} mode={} enabled={} fwd={} pressure={} hotkey={}",
-            self.cur_x,
-            self.cur_y,
-            self.moved_units,
-            self.scroll_spread_mm,
-            self.geometry.in_numlock(self.cur_x, self.cur_y),
-            self.geometry
-                .cell_of(self.cur_x, self.cur_y)
-                .map(|(r, c)| format!("({r},{c})"))
-                .unwrap_or_else(|| "None".into()),
-            self.geometry
-                .key_at_with(
-                    &self.table,
-                    self.cur_x,
-                    self.cur_y,
-                    self.cfg.key_mode,
-                    self.tap_tol()
-                )
-                .map(|k| kc::name_of(k).to_string())
-                .unwrap_or_else(|| "None".into()),
-            self.mode.as_str(),
-            self.enabled,
-            self.forwarding,
-            if self.pressure_available() {
-                self.pressure_now
-            } else {
-                0
-            },
-            self.hotkey_last.unwrap_or("-")
-        )
+        report::state_line(self)
     }
-
     /// 告诉引擎压力轴的满量程（由 Linux 层 `EVIOCGABS` 读出后调用）。
     ///
     /// `0`（或负数）表示该触摸板没有压力轴，压感切换自动失效——不需要用户
@@ -1532,48 +1480,7 @@ impl Engine {
 
     /// `--check` 用：把几何与关键判定打印出来。
     pub fn geometry_report(&self) -> Vec<String> {
-        let mut out = Vec::new();
-        out.push(crate::i18n::tf(
-            "engine.geo.range",
-            &[
-                ("x0", &self.geometry.xmin.to_string()),
-                ("x1", &self.geometry.xmax.to_string()),
-                ("y0", &self.geometry.ymin.to_string()),
-                ("y1", &self.geometry.ymax.to_string()),
-            ],
-        ));
-        out.push(crate::i18n::tf(
-            "engine.geo.unit",
-            &[
-                (
-                    "ux",
-                    &format!(
-                        "{:.1}",
-                        if self.geometry.ux > 0.0 {
-                            1.0 / self.geometry.ux
-                        } else {
-                            0.0
-                        }
-                    ),
-                ),
-                (
-                    "uy",
-                    &format!(
-                        "{:.1}",
-                        if self.geometry.uy > 0.0 {
-                            1.0 / self.geometry.uy
-                        } else {
-                            0.0
-                        }
-                    ),
-                ),
-            ],
-        ));
-        out.push(crate::i18n::tf(
-            "engine.geo.official",
-            &[("text", &self.geometry.describe())],
-        ));
-        out
+        report::geometry_lines(self)
     }
 
     /// 供测试读取：当前 armed 延迟帧数。
@@ -2409,5 +2316,48 @@ mod tests {
             !log.borrow().contains(&0x45),
             "熄灭后不该再把暂存的亮度档补发出去"
         );
+    }
+
+    /// 帧节拍换算：8 ms/帧时 1 s 应恰好 125 帧；`frame_ms` 为 0 时按 1 ms 兜底，不能算出 inf。
+    #[test]
+    fn frames_between_follows_frame_model() {
+        let f = recover::frames_between(0.0, 1000.0, 8);
+        assert!(
+            (f - 125.0).abs() < 1e-9,
+            "8 ms/帧下 1 s 应为 125 帧，实际 {f}"
+        );
+        let guard = recover::frames_between(0.0, 1000.0, 0);
+        assert!(guard.is_finite() && guard > 0.0, "帧长缺失时必须兜底且有限");
+    }
+
+    /// 丢事件自愈：每个在按触点都要补 SLOT + TRACKING_ID(-1)，末尾补一个 SYN 收尾。
+    #[test]
+    fn release_all_covers_every_slot() {
+        let evs = recover::release_all(&[0, 3]);
+        assert_eq!(evs.len(), 5, "两个触点 = 4 条抬起 + 1 条 SYN");
+        assert_eq!(
+            evs.iter()
+                .filter(|e| e.code == kc::ABS_MT_TRACKING_ID)
+                .count(),
+            2
+        );
+        assert!(
+            evs.iter()
+                .filter(|e| e.code == kc::ABS_MT_TRACKING_ID)
+                .all(|e| e.value == -1),
+            "抬起必须用 -1 表示离开"
+        );
+        let last = evs.last().unwrap();
+        assert_eq!((last.etype, last.code), (kc::EV_SYN, 0));
+    }
+
+    /// 距离换算走 geometry 的 µm 单位：单轴运动只在该轴上放大，单位缺失的轴按 0 算。
+    #[test]
+    fn dist_um_uses_geometry_units() {
+        let mut g = Geometry::new(0, 3000, 0, 2000, 10.0, 10.0, GH3XLNDZ);
+        g.ux = 0.5; // 1 个原始单位 = 2 µm
+        g.uy = 0.0; // 无 Y 单位
+        assert!((recover::dist_um(&g, 0, 0, 10, 0) - 20.0).abs() < 1e-9);
+        assert!(recover::dist_um(&g, 0, 0, 0, 50).abs() < 1e-9);
     }
 }

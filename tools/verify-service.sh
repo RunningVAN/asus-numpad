@@ -41,9 +41,9 @@ chk "单实例锁（防两个实例互抢 grab）" src/linux/mod.rs 'fn acquire_
 chk "锁失败以非零码退出（否则服务停在 inactive）" src/cli/run.rs 'ServiceExit::Busy => Ok\(75\)'
 chk "SIGHUP = 重载而不是停机" src/linux/mod.rs 'RELOAD\.store\(true'
 chk "挂起恢复补灯" src/linux/mod.rs 'resume_detected\('
-chk "grab 运行期重试" src/engine.rs 'should_retry_grab'
+chk "grab 运行期重试" src/engine/mod.rs 'should_retry_grab'
 chk "uinput 写失败重建" src/linux/dev.rs 'fn rebuild|write_or_recover'
-chk "SYN_DROPPED 自愈" src/engine.rs 'fn handle_syn_dropped'
+chk "SYN_DROPPED 自愈" src/engine/mod.rs 'fn handle_syn_dropped'
 
 echo "== 通道漂移：按型号认设备，不按节点编号 ==" | tee -a "$OUT"
 chk "hidraw 背光通道可重连" src/linux/led.rs 'fn reattach\('
