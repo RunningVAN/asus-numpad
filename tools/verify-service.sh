@@ -64,7 +64,7 @@ chk "驱动配置保存回显被修正项" gui/src/app/driver.rs '见右侧列�
 
 echo "== 键位/配置不被静默丢弃 ==" | tee -a "$OUT"
 chk "配置坏字段前移 sanitize" src/config/sanitize.rs 'fn sanitize'
-chk "片段应用先全量解析" gui/src/app/extend.rs 'apply_fragment'
+chk "片段应用先全量解析" gui/src/app/extend/fragment.rs 'apply_fragment'
 
 echo "----------------------------------------------------------------" | tee -a "$OUT"
 echo "汇总: PASS=$pass FAIL=$fail SKIP=$skip" | tee -a "$OUT"
