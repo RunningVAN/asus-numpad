@@ -72,6 +72,13 @@ enum Cmd {
     Sku {
         id: Option<String>,
     },
+    /// 手动校准：采四角与两格中心，反解面板范围与网格矩形。
+    Calibrate {
+        samples: Option<String>,
+        write: bool,
+        cols: Option<usize>,
+        rows: Option<usize>,
+    },
 }
 
 /// 预先在原始参数里找某个全局选项的值（用于在 clap 解析前确定语言）。
@@ -304,6 +311,37 @@ fn build_cli() -> Command {
                 .arg(Arg::new("id").value_name("ID").help(t("cli.cmd.sku.id"))),
         )
         .subcommand(
+            Command::new("calibrate")
+                .about(t("cli.cmd.calibrate"))
+                .long_about(t("cli.cmd.calibrate.long"))
+                .arg(
+                    Arg::new("samples")
+                        .long("samples")
+                        .value_name("FILE")
+                        .help(t("cli.cmd.calibrate.samples")),
+                )
+                .arg(
+                    Arg::new("write")
+                        .long("write")
+                        .action(ArgAction::SetTrue)
+                        .help(t("cli.cmd.calibrate.write")),
+                )
+                .arg(
+                    Arg::new("cols")
+                        .long("cols")
+                        .value_name("N")
+                        .value_parser(clap::value_parser!(usize))
+                        .help(t("cli.cmd.calibrate.cols")),
+                )
+                .arg(
+                    Arg::new("rows")
+                        .long("rows")
+                        .value_name("N")
+                        .value_parser(clap::value_parser!(usize))
+                        .help(t("cli.cmd.calibrate.rows")),
+                ),
+        )
+        .subcommand(
             Command::new("lang")
                 .about(t("cli.cmd.lang"))
                 .long_about(t("cli.cmd.lang.long"))
@@ -361,6 +399,12 @@ fn opts_from(matches: &ArgMatches) -> Opts {
         },
         Some(("sku", sub)) => Cmd::Sku {
             id: sub.get_one::<String>("id").cloned(),
+        },
+        Some(("calibrate", sub)) => Cmd::Calibrate {
+            samples: sub.get_one::<String>("samples").cloned(),
+            write: sub.get_flag("write"),
+            cols: sub.get_one::<usize>("cols").copied(),
+            rows: sub.get_one::<usize>("rows").copied(),
         },
         _ => Cmd::Run,
     };
@@ -512,12 +556,31 @@ fn render_keygrid(cfg: &Config) -> String {
 }
 
 fn fallback_geometry(cfg: &Config) -> Geometry {
-    // 无真机时用配置里的物理尺寸构造一个 0..1000 的虚拟坐标系
+    // 无真机时用配置里的物理尺寸构造一个 0..1000 的虚拟坐标系。
+    // 配了自定义分区（绝对坐标）时把虚拟面板撑到能容下它——否则在 mac 上跑 `check`
+    // 永远看到「分区越界被拒」，等于没法离线验证分区配置。先撑到 1000 的整数倍。
+    let (mut side_x, mut side_y) = (1000i32, 1000i32);
+    if let Some(r) = cfg.partition.rect {
+        if r[2] > side_x as f64 {
+            side_x = (r[2] * 1.05).ceil() as i32;
+        }
+        if r[3] > side_y as f64 {
+            side_y = (r[3] * 1.05).ceil() as i32;
+        }
+    }
     let width_um = cfg.touchpad_width_mm * 1000.0;
     let height_um = cfg.touchpad_height_mm * 1000.0;
-    let ux = 1000.0 / width_um;
-    let uy = 1000.0 / height_um;
-    Geometry::new(0, 1000, 0, 1000, ux, uy, cfg.layout()).with_layout_name(cfg.layout_entry().name)
+    let ux = side_x as f64 / width_um;
+    let uy = side_y as f64 / height_um;
+    let panel = asus_numpad::partition::Panel {
+        xmin: 0,
+        xmax: side_x,
+        ymin: 0,
+        ymax: side_y,
+        ux,
+        uy,
+    };
+    cfg.build_geometry(panel, cfg.layout_entry().name).0
 }
 
 fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
@@ -1944,6 +2007,205 @@ fn reset_sigpipe() {
     }
 }
 
+// --------------------------------------------------------------------------- //
+// calibrate：非原生机型的手动校准
+// --------------------------------------------------------------------------- //
+
+/// 读 `--samples` 文件：只认 `corners` / `first_point` / `last_point`。
+///
+/// 样本数据是纯坐标，不含任何机型信息——同一次采集在 mac 上解算和在真机上解算
+/// 走的是同一段代码，离线调算法时不用占着触摸板。
+fn read_raw_samples(path: &Path) -> Result<asus_numpad::partition::RawSamples> {
+    use asus_numpad::partition::{CornerSamples, RawSamples};
+
+    fn pair_at(obj: &serde_json::Value, name: &str) -> Result<(i32, i32)> {
+        let bad = || i18n::tf("calibrate.samples.bad_pair", &[("k", name)]);
+        let arr = obj
+            .get(name)
+            .and_then(|x| x.as_array())
+            .filter(|a| a.len() == 2)
+            .ok_or_else(|| anyhow::anyhow!(bad()))?;
+        let x = arr[0].as_i64().ok_or_else(|| anyhow::anyhow!(bad()))?;
+        let y = arr[1].as_i64().ok_or_else(|| anyhow::anyhow!(bad()))?;
+        Ok((x as i32, y as i32))
+    }
+
+    let text = std::fs::read_to_string(path).with_context(|| {
+        i18n::tf(
+            "calibrate.samples.read_failed",
+            &[("path", &path.display().to_string())],
+        )
+    })?;
+    let v: serde_json::Value = serde_json::from_str(&text).with_context(|| {
+        i18n::tf(
+            "calibrate.samples.bad_json",
+            &[("path", &path.display().to_string())],
+        )
+    })?;
+    let corners = v.get("corners").ok_or_else(|| {
+        anyhow::anyhow!(i18n::tf("calibrate.samples.missing", &[("k", "corners")]))
+    })?;
+    Ok(RawSamples {
+        corners: CornerSamples {
+            top_left: pair_at(corners, "top_left")?,
+            top_right: pair_at(corners, "top_right")?,
+            bottom_left: pair_at(corners, "bottom_left")?,
+            bottom_right: pair_at(corners, "bottom_right")?,
+        },
+        first_point: pair_at(&v, "first_point")?,
+        last_point: pair_at(&v, "last_point")?,
+    })
+}
+
+fn cmd_calibrate(
+    cfg: &Config,
+    cfg_path: &Path,
+    samples: Option<&str>,
+    write: bool,
+    cols: Option<usize>,
+    rows: Option<usize>,
+) -> Result<i32> {
+    use asus_numpad::partition::{solve_calibration, GridProbe};
+
+    let table = cfg.key_table();
+    let keys = (
+        cols.unwrap_or_else(|| table.cols()),
+        rows.unwrap_or_else(|| table.rows().len()),
+    );
+    println!("{}", banner());
+    println!();
+    if !(1..=8).contains(&keys.0) || !(1..=8).contains(&keys.1) {
+        println!(
+            "{}",
+            i18n::tf(
+                "calibrate.bad_keys",
+                &[("cols", &keys.0.to_string()), ("rows", &keys.1.to_string())]
+            )
+        );
+        return Ok(2);
+    }
+
+    // 取样本：文件优先，其次真机交互采集（仅 Linux）
+    let raw = match samples {
+        Some(p) => {
+            println!("{}", i18n::tf("calibrate.from_samples", &[("path", p)]));
+            println!();
+            read_raw_samples(Path::new(p))?
+        }
+        None => {
+            #[cfg(target_os = "linux")]
+            {
+                let dev = asus_numpad::linux::find_touchpad(cfg)?;
+                let raw = asus_numpad::linux::calibrate::collect(&dev)?;
+                println!();
+                raw
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                println!("{}", i18n::t("calibrate.need_linux"));
+                return Ok(2);
+            }
+        }
+    };
+
+    // 两个探针固定取左上格与右下格：对角两点就能同时定出格宽格高
+    let probe = GridProbe {
+        first_cell: (0, 0),
+        first_point: raw.first_point,
+        last_cell: (keys.1 - 1, keys.0 - 1),
+        last_point: raw.last_point,
+        cols: keys.0,
+        rows: keys.1,
+    };
+    let cal = match solve_calibration(&raw.corners, &probe) {
+        Ok(c) => c,
+        Err(err) => {
+            println!("{}", i18n::tf("calibrate.fail", &[("err", &err)]));
+            return Ok(2);
+        }
+    };
+
+    let rect = cal
+        .partition
+        .rect
+        .expect("solve_calibration 必然给出绝对矩形");
+    let col_w = (rect[2] - rect[0]) / keys.0 as f64;
+    let row_h = (rect[3] - rect[1]) / keys.1 as f64;
+
+    println!("{}", i18n::t("calibrate.ok_title"));
+    println!();
+    println!(
+        "{}",
+        i18n::tf(
+            "calibrate.panel",
+            &[
+                ("x0", &cal.panel.xmin.to_string()),
+                ("x1", &cal.panel.xmax.to_string()),
+                ("y0", &cal.panel.ymin.to_string()),
+                ("y1", &cal.panel.ymax.to_string()),
+            ]
+        )
+    );
+    println!(
+        "{}",
+        i18n::tf(
+            "calibrate.grid",
+            &[
+                ("cols", &keys.0.to_string()),
+                ("rows", &keys.1.to_string()),
+                ("x0", &format!("{:.0}", rect[0])),
+                ("y0", &format!("{:.0}", rect[1])),
+                ("x1", &format!("{:.0}", rect[2])),
+                ("y1", &format!("{:.0}", rect[3])),
+            ]
+        )
+    );
+    println!(
+        "{}",
+        i18n::tf(
+            "calibrate.cell_size",
+            &[
+                ("w", &format!("{col_w:.1}")),
+                ("h", &format!("{row_h:.1}")),
+            ]
+        )
+    );
+    println!();
+    // 格中心表：真机上照着点一遍，哪一个格子不出键一眼就能看出来
+    println!("{}", i18n::t("calibrate.grid_title"));
+    for r in 0..keys.1 {
+        let mut line = String::new();
+        for c in 0..keys.0 {
+            let x = rect[0] + (c as f64 + 0.5) * col_w;
+            let y = rect[1] + (r as f64 + 0.5) * row_h;
+            line.push_str(&format!("[{c},{r}] ({x:.0},{y:.0})  "));
+        }
+        println!("  {}", line.trim_end());
+    }
+    println!();
+
+    let partition = serde_json::to_value(&cal.partition)?;
+    if write {
+        // 打印真实写入的那份配置，而不是 persist 返回的 .bak（那是备份路径）
+        persist_config_keys(cfg_path, &[("partition", partition.clone())])?;
+        let real = Config::writable_path(cfg_path);
+        println!(
+            "{}",
+            i18n::tf("calibrate.written", &[("path", &real.display().to_string())])
+        );
+        return Ok(0);
+    }
+    println!("{}", i18n::t("calibrate.snippet_title"));
+    println!();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({ "partition": partition }))?
+    );
+    println!();
+    println!("{}", i18n::t("calibrate.snippet_hint"));
+    Ok(0)
+}
+
 fn main() -> Result<()> {
     // 管道被 `head` / `grep -q` 提前关掉时，Rust 默认忽略 SIGPIPE，后续 println!
     // 会拿到 EPIPE 并 panic；release 是 panic=abort，用户看到的是
@@ -1993,6 +2255,12 @@ fn main() -> Result<()> {
         Cmd::Lang { code } => cmd_lang(&cfg_path, code.as_deref())?,
         Cmd::Layout { name, ids } => cmd_layout(&cfg, &cfg_path, name.as_deref(), ids)?,
         Cmd::Sku { id } => cmd_sku(&cfg, &cfg_path, id.as_deref())?,
+        Cmd::Calibrate {
+            samples,
+            write,
+            cols,
+            rows,
+        } => cmd_calibrate(&cfg, &cfg_path, samples.as_deref(), write, cols, rows)?,
         Cmd::Run => cmd_run(cfg, opts.verbose)?,
     };
     if code != 0 {

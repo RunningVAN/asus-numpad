@@ -1,5 +1,6 @@
 //! Linux 运行时：设备探测、背光、uinput 输出、主循环。
 
+pub mod calibrate;
 pub mod dev;
 pub mod led;
 pub use self::led::{
@@ -311,16 +312,16 @@ fn geometry_from_abs(
     // 分母一律 max(1)，避免 ABS 范围退化成单点时除零。
     let ux = abs_units_per_um(xi, cfg.touchpad_width_mm);
     let uy = abs_units_per_um(yi, cfg.touchpad_height_mm);
-    Geometry::new(
-        xi.minimum,
-        xi.maximum,
-        yi.minimum,
-        yi.maximum,
+    // 校准与自定义分区都在 `build_geometry` 里叠加：这里只负责把内核原始值递进去。
+    let panel = crate::partition::Panel {
+        xmin: xi.minimum,
+        xmax: xi.maximum,
+        ymin: yi.minimum,
+        ymax: yi.maximum,
         ux,
         uy,
-        cfg.layout(),
-    )
-    .with_layout_name(layout_name)
+    };
+    cfg.build_geometry(panel, layout_name).0
 }
 
 /// 自检用：同时给出几何对象与探测结果字符串。

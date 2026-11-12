@@ -581,7 +581,7 @@ impl App {
 /// 片段落盘：优先写进下载目录，没有这个目录就写到家目录。
 ///
 /// 只新建、不覆盖——连点两次导出不该把上一份盖掉，那样等于没有留底。
-fn save_snippet(text: &str) -> Result<std::path::PathBuf, String> {
+pub(super) fn save_snippet(text: &str) -> Result<std::path::PathBuf, String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("框里还是空的，先点「导出」".to_string());

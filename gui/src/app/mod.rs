@@ -11,6 +11,7 @@
 //! 所有档位映射都走 [`asus_numpad::brightness`] 与 [`asus_numpad::led_proto`]——和
 //! Linux 侧同一份函数，避免两边灯效暗中不一致。
 
+mod calib;
 mod driver;
 mod extend;
 mod full;
@@ -76,6 +77,8 @@ enum Page {
     Driver,
     /// 扩展：自定义布局 / 报文 / 压感 / 热键
     Extend,
+    /// 校准：自定义分区与手动校准（非原生机型）
+    Calib,
     System,
     Command,
     Settings,
@@ -87,6 +90,7 @@ impl Page {
             Page::Light => "灯光",
             Page::Driver => "驱动配置",
             Page::Extend => "扩展",
+            Page::Calib => "校准",
             Page::System => "系统状态",
             Page::Command => "命令行",
             Page::Settings => "设置",
@@ -102,6 +106,7 @@ impl Page {
         match value.trim().to_ascii_lowercase().as_str() {
             "driver" | "cfg" | "config" => Page::Driver,
             "extend" | "ext" | "extension" => Page::Extend,
+            "calib" | "cal" | "calibration" => Page::Calib,
             "system" | "sys" => Page::System,
             "command" | "cmd" | "cli" => Page::Command,
             "settings" | "prefs" => Page::Settings,
@@ -145,6 +150,16 @@ pub struct App {
     ext_snippet: String,
     /// 片段导入结果：`(文案, 是否出错)`
     ext_snippet_msg: Option<(String, bool)>,
+    /// 校准页：样本文件路径（真机采到的落点）
+    calib_samples_path: String,
+    /// 校准页：解算时按几列几行（与键表一致）
+    calib_cols: usize,
+    calib_rows: usize,
+    /// 校准页：回放结果 `(文案, 是否出错)`
+    calib_msg: Option<(String, bool)>,
+    /// 校准页「配置片段」：partition + calibration 打包
+    calib_snippet: String,
+    calib_snippet_msg: Option<(String, bool)>,
     /// 后台服务是否开机自启；Windows 用注册表那份，Linux 用这一份
     service_enabled: bool,
     /// 命令面板：与 `asus-numpad` CLI 同一套实现，界面只负责拼参数
@@ -196,6 +211,12 @@ impl App {
             ext_proto_err: None,
             ext_snippet: String::new(),
             ext_snippet_msg: None,
+            calib_samples_path: String::new(),
+            calib_cols: 5,
+            calib_rows: 4,
+            calib_msg: None,
+            calib_snippet: String::new(),
+            calib_snippet_msg: None,
             service_enabled,
             cmd: CommandForm::default(),
             cmd_bin: cli_bridge::locate(),
@@ -2243,6 +2264,11 @@ impl eframe::App for App {
                             "扩展：给表外机型补自定义布局、换点亮报文、压感切开关、绑全局热键",
                         ),
                         (
+                            Page::Calib,
+                            Page::Calib.title(),
+                            "校准：给表外机型自定义网格分区，并按实测落点校准面板范围与分辨率",
+                        ),
+                        (
                             Page::System,
                             Page::System.title(),
                             "系统状态：认出哪台机、走哪条背光通道、后台服务状态、诊断导出",
@@ -2299,6 +2325,7 @@ impl eframe::App for App {
                             }
                             (true, Page::Driver) => self.draw_full_controls(ui, &mut action),
                             (true, Page::Extend) => self.draw_extension(ui, &mut action),
+                            (true, Page::Calib) => self.draw_calib(ui, &mut action),
                             (true, Page::System) => self.draw_system(ui, &mut action),
                             (true, Page::Command) => self.draw_commands(ui, &mut action),
                             (true, Page::Settings) => self.draw_settings(ui, &mut action),

@@ -363,6 +363,10 @@ pub struct Config {
     pub pressure_switch: crate::custom::PressureSwitch,
     /// 物理键盘上的全局组合键。
     pub hotkeys: Vec<crate::custom::HotkeySpec>,
+    /// 非原生机型的网格划分（列行数、非均匀列宽、网格矩形、NumLock 格）。
+    pub partition: crate::partition::PartitionSpec,
+    /// 触摸板轴的绝对范围与单位换算（内核上报不准时手动校正）。
+    pub calibration: crate::partition::CalibrationSpec,
 }
 
 impl Default for Config {
@@ -414,6 +418,8 @@ impl Default for Config {
             led_proto: crate::custom::LedProtoSpec::default(),
             pressure_switch: crate::custom::PressureSwitch::default(),
             hotkeys: Vec::new(),
+            partition: crate::partition::PartitionSpec::default(),
+            calibration: crate::partition::CalibrationSpec::default(),
         }
     }
 }
@@ -633,6 +639,51 @@ impl Config {
         }
         let (_state, hotkey_notes) = crate::custom::HotkeyState::new(&self.hotkeys);
         notes.extend(hotkey_notes);
+        // 分区 / 校准的自洽性（与面板无关的那部分）。依赖面板尺寸的校验在几何
+        // 构建处做——那里才拿得到 `ABS_MT_POSITION_*` 的实际范围。
+        if !self.partition.is_unset() {
+            if let Some(n) = self.partition.cols {
+                if !self.partition.col_ratios.is_empty() && self.partition.col_ratios.len() != n {
+                    notes.push(crate::i18n::tf(
+                        "note.partition_ratio_mismatch",
+                        &[
+                            ("what", "col_ratios"),
+                            ("have", &self.partition.col_ratios.len().to_string()),
+                            ("want", &n.to_string()),
+                        ],
+                    ));
+                    self.partition.col_ratios.clear();
+                }
+            }
+            if let Some(n) = self.partition.rows {
+                if !self.partition.row_ratios.is_empty() && self.partition.row_ratios.len() != n {
+                    notes.push(crate::i18n::tf(
+                        "note.partition_ratio_mismatch",
+                        &[
+                            ("what", "row_ratios"),
+                            ("have", &self.partition.row_ratios.len().to_string()),
+                            ("want", &n.to_string()),
+                        ],
+                    ));
+                    self.partition.row_ratios.clear();
+                }
+            }
+            if self.partition.col_ratios.iter().any(|r| !(r.is_finite() && *r > 0.0)) {
+                self.partition.col_ratios.clear();
+            }
+            if self.partition.row_ratios.iter().any(|r| !(r.is_finite() && *r > 0.0)) {
+                self.partition.row_ratios.clear();
+            }
+            notes.push(crate::i18n::tf(
+                "note.partition_on",
+                &[("layout", self.partition.layout.trim())],
+            ));
+        }
+        if !self.calibration.is_unset() {
+            for n in self.calibration.notes() {
+                notes.push(crate::i18n::tf(n.key(), &[("axis", n.axis())]));
+            }
+        }
         // 界面语言只接受 auto / zh-CN / zh-TW / en（大小写不敏感），其余回落 auto
         let lang_raw = self.language.trim().to_string();
         if lang_raw.is_empty() {
@@ -781,6 +832,65 @@ impl Config {
     /// 当前布局应当使用的键表：自定义布局用自己的，其余用内置表。
     pub fn key_table(&self) -> crate::custom::KeyTable {
         crate::custom::table_for(&self.layout_name)
+    }
+
+    /// 用面板实测参数装配几何：先叠加手动校准，再套用自定义分区。
+    ///
+    /// `base` 是内核上报（或虚拟坐标系）的原始面板参数。返回的 `notes` 只装分区阶段
+    /// 的问题——校准的问题 `sanitize` 已经报过，不重复。
+    ///
+    /// 分区解算失败时**绝不**半拉子生效：整段丢弃，几何回落到官方参数推出的网格，
+    /// 并把原因写进 `notes`。分区写错的代价是整块触摸板不出键，宁可退回原状。
+    pub fn build_geometry(
+        &self,
+        base: crate::partition::Panel,
+        layout_name: &'static str,
+    ) -> (crate::layout::Geometry, Vec<String>) {
+        let (panel, _cal_notes) = self.calibration.apply(base);
+        let geo = crate::layout::Geometry::new(
+            panel.xmin,
+            panel.xmax,
+            panel.ymin,
+            panel.ymax,
+            panel.ux,
+            panel.uy,
+            self.layout(),
+        )
+        .with_layout_name(layout_name);
+        let mut notes = Vec::new();
+        if self.partition.is_unset() || !self.partition.applies_to(layout_name) {
+            return (geo, notes);
+        }
+        let table = self.key_table();
+        let keys = (table.cols(), table.rows().len());
+        let base_grid = geo.grid_rect();
+        match self.partition.resolve(panel, base_grid, keys) {
+            Ok(r) => match geo.clone().with_partition(r.x_edges, r.y_edges, r.nl_cell) {
+                Ok(g) => {
+                    for n in &r.notes {
+                        let args = n.args();
+                        let refs: Vec<(&str, &str)> =
+                            args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                        notes.push(crate::i18n::tf(n.key(), &refs));
+                    }
+                    (g.with_snap_outside(r.snap_outside), notes)
+                }
+                Err(err) => {
+                    notes.push(crate::i18n::tf(
+                        "note.partition_invalid",
+                        &[("err", &err)],
+                    ));
+                    (geo, notes)
+                }
+            },
+            Err(err) => {
+                notes.push(crate::i18n::tf(
+                    "note.partition_invalid",
+                    &[("err", &err)],
+                ));
+                (geo, notes)
+            }
+        }
     }
 
     /// 自定义点亮报文是否就是内置报文（是的话点亮走原来的快路径）。
@@ -1013,6 +1123,16 @@ impl Config {
         }
         if let Ok(v) = serde_json::to_value(&self.hotkeys) {
             value["hotkeys"] = v;
+        }
+        if !self.partition.is_unset() {
+            if let Ok(v) = serde_json::to_value(&self.partition) {
+                value["partition"] = v;
+            }
+        }
+        if !self.calibration.is_unset() {
+            if let Ok(v) = serde_json::to_value(self.calibration) {
+                value["calibration"] = v;
+            }
         }
 
         // 只在手动指定机型时写出：默认配置里没有这一项，读一眼就知道是自动识别

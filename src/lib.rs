@@ -28,6 +28,7 @@ pub mod keycodes;
 pub mod layout;
 pub mod led_policy;
 pub mod led_proto;
+pub mod partition;
 pub mod sku;
 
 #[cfg(target_os = "linux")]

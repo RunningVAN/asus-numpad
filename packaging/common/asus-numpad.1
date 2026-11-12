@@ -135,6 +135,21 @@ asus-numpad \- ASUS 触摸板数字小键盘（NumberPad）用户态驱动
 .TP
 .B sku auto
 删掉手动指定的机型，恢复自动识别。
+.TP
+.B calibrate
+引导按压四角与两个对角格的中心，据采样解出面板范围与网格矩形。不带 \fB\-\-write\fP
+时只打印结果、不落盘；打印的格中心表用于在真机上逐格点一遍确认。
+仅 Linux 可交互采集（要抓触摸板事件）。
+.TP
+.BI calibrate " \-\-samples " 文件
+不解算设备，直接回放保存好的样本文件（JSON：\fBcorners\fP 四角 + \fBfirst_point\fP /
+\fBlast_point\fP 两个对角格中心），在任何平台上都能跑，便于离线调算法。
+.TP
+.BI calibrate " [\-\-cols " N "] [\-\-rows " M "]"
+按指定的列 / 行数解算（默认跟随键表），用于丝印不是 5 列 4 行的机型。
+.TP
+.BI calibrate " ... \-\-write"
+把解出的 \fBpartition\fP 写进配置文件，上一份存成 \fB.bak\fP。
 .SH 选项
 .TP
 .BI \-\-config " 文件"
@@ -303,6 +318,39 @@ systemd 用户单元，随登录会话启动，不需要 root。手工控制：
 改完先用 \fBasus\-numpad check\fP 看生效情况：自定义布局是否装进注册表、报文是否通过校验、
 压感与热键是否启用都会列在提示里。GUI 的「扩展」页签可以直接改这几项并即时预览。
 .RE
+.SH 校准配置
+机型表里的 15 项几何参数都建立在 5 列 4 行等分网格上。丝印排法不同、或内核上报的坐标
+铺不满面板的机型，用下面两个键补。写错时丢掉该项并在提示里点名，改回官方网格。
+.TP
+.B partition
+自定义分区。字段：
+.B layout
+（对哪套布局生效：\fBauto\fP 跟当前生效布局，也可写具体布局名或自定义布局名）、
+.B rect
+（\fB[x0, y0, x1, y1]\fP 触摸板原始坐标，与 \fBevtest\fP 看到的一致）、
+.B rect\_mm
+（同上，改用面板左上角起的毫米）、
+.B cols
+（列数 1..=8）、
+.B rows
+（行数 1..=4）、
+.B col\_ratios / row\_ratios
+（列宽 / 行高权重，可不等分，长度须等于列数 / 行数）、
+.B numlock\_cell
+（NumLock 图标所在格 \fB[行, 列]\fP，默认第 0 行最后一列）、
+.B snap\_outside
+（网格外落点吸附到最近一格，默认关闭，与官方「网格外属于光标区」一致）。
+\fBcols\fP / \fBrows\fP 留空时跟随键表。
+.TP
+.B calibration
+覆盖内核对坐标轴的上报，只做线性映射，不交换轴也不翻转。
+.B x / y
+各含 \fBmin\fP、\fBmax\fP（绝对值）与 \fBunits\fP\_\fBper\fP\_\fBmm\fP（每毫米单位数，
+与 evdev \fIresolution\fP 同量纲）。某一轴不写就沿用内核值；下界不小于上界、分辨率非正的
+配置会丢掉那一轴。
+.PP
+解算分区用 \fBasus\-numpad calibrate\fP；GUI 的「校准」页签同样能改这两项，还能把
+\fBpartition\fP 与 \fBcalibration\fP 打包成片段搬给同机型的人（片段不含键表）。
 .SH 环境变量
 .TP
 .B ASUS_NUMPAD_LANG

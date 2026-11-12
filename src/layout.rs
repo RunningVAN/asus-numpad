@@ -290,6 +290,22 @@ pub struct Geometry {
     pub nl_x1: f64,
     pub nl_y0: f64,
     pub nl_y1: f64,
+    // ---- 自定义分区（官方均匀网格之外的划分） ----
+    /// 网格列数。默认等于 `layout.columns`；自定义分区可以与之不同。
+    pub grid_cols: usize,
+    /// 网格行数。默认 [`ROWS`]；自定义分区可以与之不同。
+    pub grid_rows: usize,
+    /// 列边界：升序，长度 `grid_cols + 1`；均匀网格由 `grid_x0`/`col_w` 生成。
+    pub col_edges: Vec<f64>,
+    /// 行边界：升序，长度 `grid_rows + 1`。
+    pub row_edges: Vec<f64>,
+    /// NumLock 图标所在格 `(row, col)`，默认第 0 行最后一列。
+    pub nl_cell: (usize, usize),
+    /// 网格外落点是否吸附到最近一格。
+    ///
+    /// 默认 `false`：与官方一致，网格之外属于触摸板光标区，绝不凭空出键。
+    /// 只给「分区未覆盖整块触摸板、但希望整块都算数字区」的表外机型显式开启。
+    pub snap_outside: bool,
 }
 
 impl Geometry {
@@ -335,6 +351,15 @@ impl Geometry {
         let nl_y0 = grid_y0;
         let nl_y1 = grid_y0 + row_h;
 
+        let grid_cols = l.columns.max(1) as usize;
+        let grid_rows = ROWS;
+        let col_edges: Vec<f64> = (0..=grid_cols)
+            .map(|i| grid_x0 + i as f64 * col_w)
+            .collect();
+        let row_edges: Vec<f64> = (0..=grid_rows)
+            .map(|i| grid_y0 + i as f64 * row_h)
+            .collect();
+
         Self {
             layout: l,
             layout_name: DEFAULT_LAYOUT_NAME,
@@ -358,6 +383,12 @@ impl Geometry {
             nl_x1,
             nl_y0,
             nl_y1,
+            grid_cols,
+            grid_rows,
+            col_edges,
+            row_edges,
+            nl_cell: (0, grid_cols - 1),
+            snap_outside: false,
         }
     }
 
@@ -369,26 +400,89 @@ impl Geometry {
 
     pub fn in_numlock(&self, x: i32, y: i32) -> bool {
         let (x, y) = (x as f64, y as f64);
-        x >= self.nl_x0 && x <= self.nl_x1 && y >= self.nl_y0 && y <= self.nl_y1
+        let (x0, x1) = (self.col_edges[self.nl_cell.1], self.col_edges[self.nl_cell.1 + 1]);
+        let (y0, y1) = (self.row_edges[self.nl_cell.0], self.row_edges[self.nl_cell.0 + 1]);
+        x >= x0 && x <= x1 && y >= y0 && y <= y1
     }
 
-    /// 返回 (row, col)；不在网格内返回 None。
-    pub fn cell_of(&self, x: i32, y: i32) -> Option<(usize, usize)> {
-        let (xf, yf) = (x as f64, y as f64);
-        if !(xf >= self.grid_x0 && xf <= self.grid_x1 && yf >= self.grid_y0 && yf <= self.grid_y1) {
+    /// 网格矩形 `(x0, y0, x1, y1)`。
+    pub fn grid_rect(&self) -> (f64, f64, f64, f64) {
+        (
+            self.col_edges[0],
+            self.row_edges[0],
+            self.col_edges[self.grid_cols],
+            self.row_edges[self.grid_rows],
+        )
+    }
+
+    /// 单格矩形 `(x0, y0, x1, y1)`；越界返回 `None`。
+    pub fn cell_rect(&self, row: usize, col: usize) -> Option<(f64, f64, f64, f64)> {
+        if row >= self.grid_rows || col >= self.grid_cols {
             return None;
         }
-        let cols = self.layout.columns.max(1) as isize;
-        let col = (((xf - self.grid_x0) / self.col_w).floor() as isize).clamp(0, cols - 1);
-        let row = (((yf - self.grid_y0) / self.row_h).floor() as isize).clamp(0, ROWS as isize - 1);
-        Some((row as usize, col as usize))
+        Some((
+            self.col_edges[col],
+            self.row_edges[row],
+            self.col_edges[col + 1],
+            self.row_edges[row + 1],
+        ))
+    }
+
+    /// 坐标落在哪一列；`snap_outside` 时把网格外的坐标夹到最近一列。
+    fn col_at(&self, x: f64) -> Option<usize> {
+        let last = self.grid_cols.checked_sub(1)?;
+        let inside = x >= self.col_edges[0] && x <= self.col_edges[self.grid_cols];
+        if !inside && !self.snap_outside {
+            return None;
+        }
+        if x <= self.col_edges[0] {
+            return Some(0);
+        }
+        if x >= self.col_edges[self.grid_cols] {
+            return Some(last);
+        }
+        let col = self
+            .col_edges
+            .windows(2)
+            .position(|w| x >= w[0] && x < w[1])
+            .unwrap_or(last);
+        Some(col.min(last))
+    }
+
+    fn row_at(&self, y: f64) -> Option<usize> {
+        let last = self.grid_rows.checked_sub(1)?;
+        let inside = y >= self.row_edges[0] && y <= self.row_edges[self.grid_rows];
+        if !inside && !self.snap_outside {
+            return None;
+        }
+        if y <= self.row_edges[0] {
+            return Some(0);
+        }
+        if y >= self.row_edges[self.grid_rows] {
+            return Some(last);
+        }
+        let row = self
+            .row_edges
+            .windows(2)
+            .position(|w| y >= w[0] && y < w[1])
+            .unwrap_or(last);
+        Some(row.min(last))
+    }
+
+    /// 返回 (row, col)；不在网格内返回 None（`snap_outside` 时夹到最近一格）。
+    pub fn cell_of(&self, x: i32, y: i32) -> Option<(usize, usize)> {
+        let (xf, yf) = (x as f64, y as f64);
+        let col = self.col_at(xf)?;
+        let row = self.row_at(yf)?;
+        Some((row, col))
     }
 
     pub fn cell_center(&self, row: usize, col: usize) -> (f64, f64) {
-        (
-            self.grid_x0 + (col as f64 + 0.5) * self.col_w,
-            self.grid_y0 + (row as f64 + 0.5) * self.row_h,
-        )
+        let (x0, y0, x1, y1) = match self.cell_rect(row, col) {
+            Some(r) => r,
+            None => return (f64::NAN, f64::NAN),
+        };
+        ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
     }
 
     /// 格内命中判定（官方 GESTURE_06 `iTAPPING_THRESHOLD_MM = 10 mm` 单键容差）。
@@ -448,11 +542,82 @@ impl Geometry {
 
     /// 计算器图标区（左上 1 列 x 1 行）。官方只给联动开关、未给触发区参数。
     pub fn in_calc_zone(&self, x: i32, y: i32) -> bool {
+        let Some((x0, y0, x1, y1)) = self.cell_rect(0, 0) else {
+            return false;
+        };
         let (xf, yf) = (x as f64, y as f64);
-        xf >= self.grid_x0
-            && xf <= self.grid_x0 + self.col_w
-            && yf >= self.grid_y0
-            && yf <= self.grid_y0 + self.row_h
+        xf >= x0 && xf <= x1 && yf >= y0 && yf <= y1
+    }
+
+    /// 用自定义分区替换网格划分（表外机型用）。
+    ///
+    /// `x_edges` / `y_edges` 是触摸板绝对坐标下的升序边界，长度分别为「列数 + 1」与
+    /// 「行数 + 1」；`nl_cell` 为 NumLock 图标所在格。
+    ///
+    /// 校验只看「能不能算出一张站得住的网格」：边界升序、至少一格、落在触摸板范围内、
+    /// 每格宽高非零。宽高是否像一格按键（毫米级）留给上层提示，不在这里拦——贴纸
+    /// 方案的格子尺寸由用户自己的贴纸决定。
+    pub fn with_partition(
+        mut self,
+        x_edges: Vec<f64>,
+        y_edges: Vec<f64>,
+        nl_cell: Option<(usize, usize)>,
+    ) -> Result<Self, String> {
+        let cols = x_edges.len().saturating_sub(1);
+        let rows = y_edges.len().saturating_sub(1);
+        if cols == 0 || rows == 0 {
+            return Err("partition: need at least 1 column and 1 row".to_string());
+        }
+        let mono = |v: &[f64]| v.windows(2).all(|w| w[1] > w[0]);
+        if !mono(&x_edges) {
+            return Err("partition: x edges must be strictly ascending".to_string());
+        }
+        if !mono(&y_edges) {
+            return Err("partition: y edges must be strictly ascending".to_string());
+        }
+        let (xmin, xmax) = (self.xmin as f64, self.xmax as f64);
+        let (ymin, ymax) = (self.ymin as f64, self.ymax as f64);
+        if x_edges[0] < xmin || x_edges[cols] > xmax {
+            return Err(format!(
+                "partition: x edges out of panel range {xmin:.0}..{xmax:.0}"
+            ));
+        }
+        if y_edges[0] < ymin || y_edges[rows] > ymax {
+            return Err(format!(
+                "partition: y edges out of panel range {ymin:.0}..{ymax:.0}"
+            ));
+        }
+        let nl = nl_cell.unwrap_or((0, cols - 1));
+        if nl.0 >= rows || nl.1 >= cols {
+            return Err(format!(
+                "partition: numlock cell ({}, {}) outside {rows}x{cols} grid",
+                nl.0, nl.1
+            ));
+        }
+        self.grid_cols = cols;
+        self.grid_rows = rows;
+        self.col_w = (x_edges[cols] - x_edges[0]) / cols as f64;
+        self.row_h = (y_edges[rows] - y_edges[0]) / rows as f64;
+        self.grid_x0 = x_edges[0];
+        self.grid_x1 = x_edges[cols];
+        self.grid_y0 = y_edges[0];
+        self.grid_y1 = y_edges[rows];
+        self.col_edges = x_edges;
+        self.row_edges = y_edges;
+        self.nl_cell = nl;
+        // NumLock 兼容字段跟随新划分
+        let (nx0, ny0, nx1, ny1) = self.cell_rect(nl.0, nl.1).expect("nl cell validated");
+        self.nl_x0 = nx0;
+        self.nl_x1 = nx1;
+        self.nl_y0 = ny0;
+        self.nl_y1 = ny1;
+        Ok(self)
+    }
+
+    /// 网格外落点吸附到最近一格（默认关闭）。
+    pub fn with_snap_outside(mut self, on: bool) -> Self {
+        self.snap_outside = on;
+        self
     }
 
     pub fn describe(&self) -> String {

@@ -360,6 +360,56 @@ off right after an edit.
 - The keyboard is only observed, never grabbed, so normal typing is unaffected. Combos that fail to
   parse are reported in the GUI and skipped.
 
+### Custom partition and manual calibration
+
+The model table carries 15 geometry fields, all of which assume the stock 5x4 grid. Two cases need
+more than that: a silkscreen laid out differently (uneven column widths, 6 or 7 columns), and a
+kernel that reports coordinates which don't actually span the panel. The Calibrate tab handles both.
+
+```json
+{
+  "partition": {
+    "layout": "auto",
+    "rect": [405, 520, 3630, 2280],
+    "cols": 5,
+    "rows": 4,
+    "col_ratios": [1, 1, 1, 1, 1],
+    "row_ratios": [1, 1, 1, 1],
+    "snap_outside": false
+  },
+  "calibration": {
+    "x": { "min": 0, "max": 3600, "units_per_mm": 40 },
+    "y": { "min": 0, "max": 2200 }
+  }
+}
+```
+
+- `rect` is `[x0, y0, x1, y1]` in raw touchpad coordinates, the same numbers `evtest` prints. It must
+  be non-empty and not inverted; a rejected rect says so and the built-in grid stays in charge.
+- `cols` is 1..=8, `rows` is 1..=4. Leave either out and it follows the keymap.
+- `col_ratios` / `row_ratios` make the grid uneven (the rightmost column wider, say). They are
+  weights, normalised to the rect, and must match the column / row count. This one is config-only;
+  the GUI doesn't draw a row for it.
+- `snap_outside` defaults to off. On, a touch outside the grid snaps to the nearest cell instead of
+  landing in the cursor area.
+- `calibration` overrides what the kernel reports for the axes: `min` / `max` / `units_per_mm`
+  (30 units per mm means gestures measured in millimetres convert correctly). It is a linear remap,
+  nothing more - no axis swap, no inversion. Leave a section out to keep the kernel value.
+- `partition` applies to the layout named in `partition.layout` (`auto` follows the active one), so
+  one file can carry partitions for several layouts.
+- Two more keys have no control of their own: `rect_mm` (`[x0, y0, x1, y1]` in millimetres from the
+  panel corner, for when raw units differ from what the panel measures) and `numlock_cell`
+  (`[row, col]` for the NumLock icon; the default is the last column of row 0).
+
+Measuring beats guessing: `asus-numpad calibrate --samples samples.json` takes four corner presses
+plus the centres of two diagonal cells and solves the rect and cell size. `--write` stores the result
+in the config, keeping a `.bak` of the previous file. The Calibrate tab replays the same sample file
+through the same solver, so a sample taken on the machine can be solved from the GUI without
+re-running the CLI. The tab also packs `partition` + `calibration` into a snippet for copying to
+another machine of the same model - the keymap is not included, that lives in `custom_layouts`.
+
+![Calibrate tab: partition, manual calibration, sample replay, snippet](site/assets/screenshots/gui-calib.png)
+
 ### Handing a config to someone with the same model
 
 The bottom card on the Extend page is the config snippet: hit Export to pack the four extension
@@ -510,13 +560,15 @@ On Windows the window is only about light: interface list, brightness steps, Num
 log. Numpad input stays with the vendor driver — the hidraw backend gives way to `setupapi` and
 `hid.dll`.
 
-On Linux it is the whole thing, split into five tabs:
+On Linux it is the whole thing, split into seven tabs:
 
 | Tab | Contents |
 | --- | --- |
 | Lighting | interface list, keyboard 4 steps → touchpad brightness map (editable per step), on / off, NumLock follow, keyboard-brightness follow, report log |
 | Driver config | every field of the driver config (`~/.config/asus-numpad/asus-numpad.json`, root: `/etc/asus-numpad/asus-numpad.json`) as a control: model, layout, keypad style, NumLock policy, gesture thresholds, backlight channel and follow poll, manual step table, timing constants, driver language |
 | System | config path, detected model, layout, hidraw channel, unit state, start / stop / restart |
+| Extension | custom layouts, LED report template, force-press toggle, global hotkeys, and a config snippet to hand to someone else |
+| Calibrate | custom partition (rect, columns, ratios) and manual axis calibration for models the table doesn't cover, plus sample replay and a snippet |
 | Command line | one form per `asus-numpad` subcommand, spawning the real binary |
 | Settings | step count, NumLock follow, poll interval, enable on login |
 
