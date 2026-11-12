@@ -164,12 +164,17 @@
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><rect x="4.5" y="10.5" width="15" height="9" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
           <h3 data-i18n="feat.5.t">Layout validation</h3>
-          <p data-i18n="feat.5.d">44 touchpad modules map to keymaps from the vendor INF, each tagged verified, family or unsupported. Unknown panels are refused at startup; no key events are emitted.</p>
+          <p data-i18n="feat.5.d">44 touchpad modules map to keymaps from the vendor INF, each tagged verified, family or unsupported. A panel that is not in the table is refused at startup unless you supply your own layout.</p>
         </article>
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.3 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.3-3.6-8.5S9.6 5.8 12 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
           <h3 data-i18n="feat.6.t">English and two Chinese locales</h3>
           <p data-i18n="feat.6.d">Interface and messages ship in en, zh-CN and zh-TW; the man page is English only. The locale comes from <code>ASUS_NUMPAD_LANG</code>, <code>--lang</code>, the config file, then the system locale.</p>
+        </article>
+        <article class="card reveal">
+          <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="14" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M7.5 9.5h2M11 9.5h2M14.5 9.5h2M7.5 13.5h2M11 13.5h2M14.5 13.5h2M9 17h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+          <h3 data-i18n="feat.7.t">Works beyond the model table</h3>
+          <p data-i18n="feat.7.d">Custom keymaps, a rewritten FEATURE report, hard-press toggling and global hotkeys live in the same config file as <code>custom_layouts</code>, <code>led_proto</code>, <code>pressure_switch</code> and <code>hotkeys</code>. A layout can inherit a built-in table and rebind only what differs.</p>
         </article>
       </div>
     </div>
@@ -432,9 +437,10 @@ asus-numpad --lang en check</code></pre>
         <img src="assets/screenshots/gui-main.png" alt="asus-numpad-gui control center on Linux: HID interface cards on the left, lighting and driver config tabs on the right" width="1180" height="900" loading="lazy" decoding="async">
         <figcaption data-i18n="use.gui">
           The optional egui window (<code>asus-numpad-gui</code>) writes the same FEATURE <code>0x0d</code> report.
-          On Linux it is the whole control center in five tabs: lighting — including the keyboard's four brightness
+          On Linux it is the whole control center in six tabs: lighting — including the keyboard's four brightness
           steps mapped onto touchpad levels, editable step by step — every driver config field, system state with
-          unit control, a form for each <code>asus-numpad</code> subcommand, and the window's own settings. The
+          unit control, a form for each <code>asus-numpad</code> subcommand, the extension tab for custom layouts,
+          LED report, hard-press switching and global hotkeys, and the window's own settings. The
           command tab runs the same binary, so the two never drift apart. The window groups everything into cards, follows the system light/dark theme, and steps brightness with a per-step bar instead of a slider.
         </figcaption>
       </figure>

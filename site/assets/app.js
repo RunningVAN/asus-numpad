@@ -44,9 +44,11 @@
     "feat.4.t": "四档背光与亮度跟随",
     "feat.4.d": "默认通过 hidraw FEATURE <code>0x0d</code> 跟随键盘背光；档位值在 0x41–0x48 内可改写，手动模式提供 <code>bright up|down|cycle</code>。",
     "feat.5.t": "布局校验",
-    "feat.5.d": "44 个触摸板模组映射到厂商 INF 里的键表，每份标注 verified / family / unsupported。未识别的模组在启动阶段即被拒绝，不产生任何按键事件。",
+    "feat.5.d": "44 个触摸板模组映射到厂商 INF 里的键表，每份标注 verified / family / unsupported。表里没有的模组默认在启动阶段即被拒绝，自己配一份键表（<code>custom_layouts</code>）就能跑起来。",
     "feat.6.t": "英文与两种中文",
     "feat.6.d": "界面与提示分 en、zh-CN、zh-TW 三套，man 页只有英文。取值顺序为 <code>ASUS_NUMPAD_LANG</code>、<code>--lang</code>、配置文件、系统语言环境。",
+    "feat.7.t": "表外机型也能用",
+    "feat.7.d": "自定义键表、改写点亮报文、压感切换与全局热键都在同一份配置里，分别是 <code>custom_layouts</code>、<code>led_proto</code>、<code>pressure_switch</code>、<code>hotkeys</code>。键表可以继承内置表，只改对不上的那几格。",
 
     "how.title": "工作原理",
     "how.sub": "单个用户态进程，三个阶段，不涉及内核代码。",
@@ -91,7 +93,7 @@
 
     "use.title": "常用命令",
     "use.sub": "守护进程由 systemd 启动，命令行用于排查与调参。",
-    "use.gui": "可选的 egui 窗口（<code>asus-numpad-gui</code>）写的是同一份 FEATURE <code>0x0d</code> 报文。Linux 上它是完整的控制中心，分五个页签：灯光（含键盘四档到触摸板亮度的映射，逐档可改）、驱动配置的全部字段、系统状态与服务启停、每个 <code>asus-numpad</code> 子命令的表单，以及窗口自身的设置。命令页执行的是同一个可执行文件，不重写逻辑，也就不会漂移。界面按卡片分组，跟随系统的深浅色主题；亮度用逐档的档位条而不是滑块，一格一档。",
+    "use.gui": "可选的 egui 窗口（<code>asus-numpad-gui</code>）写的是同一份 FEATURE <code>0x0d</code> 报文。Linux 上它是完整的控制中心，分六个页签：灯光（含键盘四档到触摸板亮度的映射，逐档可改）、驱动配置的全部字段、系统状态与服务启停、每个 <code>asus-numpad</code> 子命令的表单、扩展（自定义布局、点亮报文、压感切换、全局热键），以及窗口自身的设置。命令页执行的是同一个可执行文件，不重写逻辑，也就不会漂移。界面按卡片分组，跟随系统的深浅色主题；亮度用逐档的档位条而不是滑块，一格一档。",
     "use.guiWin": "Windows 上只做灯光：接口、档位、跟随 NumLock、写入日志。小键盘输入交给官方驱动。",
     "use.a.t": "运行与自检",
     "use.b.t": "背光",
@@ -163,9 +165,11 @@
     "feat.4.t": "四段背光與亮度跟隨",
     "feat.4.d": "預設透過 hidraw FEATURE <code>0x0d</code> 跟隨鍵盤背光；檔位值可在 0x41–0x48 內改寫，手動模式提供 <code>bright up|down|cycle</code>。",
     "feat.5.t": "佈局校驗",
-    "feat.5.d": "44 個觸控板模組對應到廠商 INF 裡的鍵表，每份標註 verified / family / unsupported。未辨識的模組在啟動階段即被拒絕，不產生任何按鍵事件。",
+    "feat.5.d": "44 個觸控板模組對應到廠商 INF 裡的鍵表，每份標註 verified / family / unsupported。表裡沒有的模組預設在啟動階段即被拒絕，自己配一份鍵表（<code>custom_layouts</code>）就能跑起來。",
     "feat.6.t": "英文與兩種中文",
     "feat.6.d": "介面與提示分 en、zh-CN、zh-TW 三套，man 頁只有英文。優先順序為 <code>ASUS_NUMPAD_LANG</code>、<code>--lang</code>、設定檔、系統語言環境。",
+    "feat.7.t": "表外機型也能用",
+    "feat.7.d": "自訂鍵表、改寫點亮報文、壓感切換與全域熱鍵都在同一份設定裡，分別是 <code>custom_layouts</code>、<code>led_proto</code>、<code>pressure_switch</code>、<code>hotkeys</code>。鍵表可以繼承內建表，只改對不上的那幾格。",
 
     "how.title": "工作原理",
     "how.sub": "單一使用者空間行程，三個階段，不涉及核心程式碼。",
@@ -210,7 +214,7 @@
 
     "use.title": "常用指令",
     "use.sub": "守護行程由 systemd 啟動，命令列用於排查與調參。",
-    "use.gui": "可選的 egui 視窗（<code>asus-numpad-gui</code>）寫的是同一份 FEATURE <code>0x0d</code> 報文。Linux 上它是完整的控制中心，分五個頁籤：燈光（含鍵盤四檔到觸控板亮度的對映，逐檔可改）、驅動設定的全部欄位、系統狀態與服務啟停、每個 <code>asus-numpad</code> 子命令的表單，以及視窗自行的設定。命令頁執行的是同一個執行檔，不重寫邏輯，也就不會漂移。介面按卡片分組，跟隨系統的深淺色主題；亮度用逐檔的檔位條而不是滑桿，一格一檔。",
+    "use.gui": "可選的 egui 視窗（<code>asus-numpad-gui</code>）寫的是同一份 FEATURE <code>0x0d</code> 報文。Linux 上它是完整的控制中心，分六個頁籤：燈光（含鍵盤四檔到觸控板亮度的對映，逐檔可改）、驅動設定的全部欄位、系統狀態與服務啟停、每個 <code>asus-numpad</code> 子命令的表單、擴充（自訂佈局、點亮報文、壓感切換、全域熱鍵），以及視窗自行的設定。命令頁執行的是同一個執行檔，不重寫邏輯，也就不會漂移。介面按卡片分組，跟隨系統的深淺色主題；亮度用逐檔的檔位條而不是滑桿，一格一檔。",
     "use.guiWin": "Windows 上只做燈光：介面、檔位、跟隨 NumLock、寫入日誌。小鍵盤輸入交給官方驅動。",
     "use.a.t": "執行與自我檢查",
     "use.b.t": "背光",
