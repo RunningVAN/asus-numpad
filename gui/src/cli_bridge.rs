@@ -22,6 +22,9 @@ pub struct Completion {
     pub error: Option<String>,
     /// 超时被主动终止。`dump` 这类不会自己退出的子命令用得上。
     pub timed_out: bool,
+    /// 输出超过上限被截断。`dump` 在转速高的时候一秒能刷几千行，界面渲染几兆文本
+    /// 会直接卡住，所以采集端就设了闸；这里只说一声，别让用户以为输出就这么点。
+    pub truncated: bool,
 }
 
 impl Completion {
@@ -38,6 +41,11 @@ impl Completion {
         }
         if self.timed_out {
             text.push_str("\n[超时终止] 已按上限中止，下面是收到的那部分输出");
+        }
+        if self.truncated {
+            text.push_str(
+                "\n[输出已截断] 超过 512 KiB 的部分没有保留——「复制」拿到的也是截断后的内容",
+            );
         }
         text.push_str(&format!(
             "\n[退出码] {}",
@@ -140,6 +148,7 @@ pub fn run(bin: &Path, args: Vec<String>, timeout: Option<Duration>) -> Completi
                 stderr: String::new(),
                 error: Some(format!("{}：{err}", bin.display())),
                 timed_out: false,
+                truncated: false,
             };
         }
     };
@@ -160,6 +169,7 @@ pub fn run(bin: &Path, args: Vec<String>, timeout: Option<Duration>) -> Completi
                         stderr: String::new(),
                         error: Some(format!("等待进程时出错：{err}")),
                         timed_out: false,
+                        truncated: false,
                     };
                 }
             }
@@ -187,6 +197,7 @@ pub fn run(bin: &Path, args: Vec<String>, timeout: Option<Duration>) -> Completi
         stderr: drained.stderr,
         error: None,
         timed_out,
+        truncated: drained.truncated,
     }
 }
 
@@ -194,7 +205,12 @@ struct Drained {
     code: Option<i32>,
     stdout: String,
     stderr: String,
+    truncated: bool,
 }
+
+/// 采集上限（每条管道）。512 KiB 足够看懂 `doctor` / `dump` 的前因后果，再多只是
+/// 把界面拖垮：egui 每帧都要对整段文本重新排版，几兆 monospace 文本就是几百毫秒一帧。
+const MAX_CAPTURE: usize = 512 * 1024;
 
 /// 边读输出边等进程退出。
 ///
@@ -211,11 +227,20 @@ fn drain(child: &mut std::process::Child, grace: Option<Duration>) -> Drained {
 
     let mut out_buf = Vec::new();
     let mut err_buf = Vec::new();
+    let mut truncated = false;
     let mut accept = |(tag, chunk): (&'static str, Vec<u8>)| {
-        if tag == "out" {
-            out_buf.extend_from_slice(&chunk);
+        let buf = if tag == "out" {
+            &mut out_buf
         } else {
-            err_buf.extend_from_slice(&chunk);
+            &mut err_buf
+        };
+        // 仍然把管道读空（不然后面子进程会写阻塞），只是不再往缓冲区里堆
+        let room = MAX_CAPTURE.saturating_sub(buf.len());
+        if chunk.len() > room {
+            buf.extend_from_slice(&chunk[..room]);
+            truncated = true;
+        } else {
+            buf.extend_from_slice(&chunk);
         }
     };
     match grace {
@@ -240,6 +265,7 @@ fn drain(child: &mut std::process::Child, grace: Option<Duration>) -> Drained {
         code,
         stdout: String::from_utf8_lossy(&out_buf).to_string(),
         stderr: String::from_utf8_lossy(&err_buf).to_string(),
+        truncated,
     }
 }
 
@@ -284,6 +310,7 @@ mod tests {
             stderr: String::new(),
             error: None,
             timed_out: false,
+            truncated: false,
         };
         let text = done.summary();
         assert!(text.starts_with("$ asus-numpad check"));
@@ -301,6 +328,7 @@ mod tests {
             stderr: String::new(),
             error: Some("没有那个文件".to_string()),
             timed_out: false,
+            truncated: false,
         };
         assert!(done.summary().contains("[启动失败] 没有那个文件"));
         assert!(!done.ok());
@@ -315,6 +343,7 @@ mod tests {
             stderr: String::new(),
             error: None,
             timed_out: false,
+            truncated: false,
         };
         assert!(done.summary().contains("被信号终止"));
     }
@@ -328,6 +357,7 @@ mod tests {
             stderr: String::new(),
             error: None,
             timed_out: true,
+            truncated: false,
         };
         let text = done.summary();
         assert!(text.contains("[超时终止]"));

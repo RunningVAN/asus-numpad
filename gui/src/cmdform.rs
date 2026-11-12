@@ -380,9 +380,11 @@ impl CommandForm {
                 let mut text = bin.to_string();
                 for arg in argv {
                     text.push(' ');
-                    if arg.contains(' ') {
+                    // 带空格的要加引号；本身含引号的还得转义一下，否则这一行贴回终端
+                    // 会把参数切断（预览是给人复制的，得能直接用）。
+                    if arg.contains(' ') || arg.contains('"') {
                         text.push('"');
-                        text.push_str(&arg);
+                        text.push_str(&arg.replace('"', "\\\""));
                         text.push('"');
                     } else {
                         text.push_str(&arg);
@@ -575,6 +577,17 @@ mod tests {
         let text = f.preview("asus-numpad");
         assert!(text.contains("\"/tmp/my dir/a.json\""));
         assert!(text.ends_with("dump"));
+    }
+
+    #[test]
+    fn preview_escapes_inner_quotes() {
+        let mut f = form(SubCmd::Dump);
+        f.advanced.config = "/tmp/a \"b\".json".to_string();
+        let text = f.preview("asus-numpad");
+        assert!(
+            text.contains(r#""/tmp/a \"b\".json""#),
+            "预览里要能直接粘回终端：{text}"
+        );
     }
 
     #[test]

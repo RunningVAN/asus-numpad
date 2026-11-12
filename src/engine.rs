@@ -994,7 +994,7 @@ impl Engine {
     pub fn tick(&mut self) {
         let now = self.now();
 
-                // 两段式点灯的第二段：到期后补发亮度档。
+        // 两段式点灯的第二段：到期后补发亮度档。
         // 放在最前面，保证点灯只比按下晚一帧，而不是被 sleep 拖住整个事件循环。
         if let Some(level) = self.pending_level {
             if now >= self.pending_level_at {

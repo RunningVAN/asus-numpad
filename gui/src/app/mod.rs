@@ -40,6 +40,11 @@ const MAX_LOG: usize = 200;
 /// 平台状态里 systemctl 要真起进程，别每帧都刷。
 const STATE_REFRESH: Duration = Duration::from_secs(10);
 
+/// 一次状态读取最多等多久。`snapshot()` 里要问 systemctl / 读 sysfs，机器忙或者
+/// dbus 打嗝时可能几十秒不回来；不设上限的话 `state_rx` 一直占着，每 10 秒的重读
+/// 全被「上一次还没回来」挡掉，界面就停在旧状态上且毫无提示。
+const STATE_TIMEOUT: Duration = Duration::from_secs(8);
+
 /// 设置落盘的静默时间：拖滑块/数字框时每帧都在变，停手这么久才写一次文件。
 ///
 /// 早先是「一有变化就写」，拖动一次亮度滑块能连写几十次磁盘；现在只在停手后
@@ -294,6 +299,18 @@ impl App {
         let Some(rx) = self.state_rx.as_ref() else {
             return;
         };
+        // 读得太久就放弃这一次（线程自己会跑完，只是结果不要了），放行下一次重读，
+        // 否则界面会一直显示上一次读到的状态而看不出是「卡住了」还是「真的没变」。
+        if self.state_at.elapsed() > STATE_TIMEOUT {
+            self.state_rx = None;
+            self.state_want = true; // 下一帧就重新发起
+            self.set_status(
+                "读取系统状态超时（systemctl 或 sysfs 没有及时返回），稍后自动重试".to_string(),
+                true,
+            );
+            ctx.request_repaint();
+            return;
+        }
         match rx.try_recv() {
             Ok(snap) => {
                 self.state = snap;
@@ -1998,14 +2015,33 @@ impl App {
         }
 
         let color = if self.cmd_ok { p.text } else { p.bad };
+        // 只排末尾这些行：egui 每帧都要把这段文本重新排版一遍，`dump` 转储几千行时
+        // 整段渲染会让界面明显卡顿（`drain` 端已经有 512 KiB 硬上限，这里再按行收一次）。
+        // 「复制」拿到的仍是完整输出。
+        let shown = tail_lines(&output, VISIBLE_OUTPUT_LINES);
         egui::ScrollArea::vertical()
             .id_salt("cmd_output")
             .max_height(240.0)
             .auto_shrink([false, true])
             .show(ui, |ui| {
+                if shown.0 {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "（只显示最后 {VISIBLE_OUTPUT_LINES} 行，共 {} 行；「复制」给的是完整输出）",
+                            shown.2
+                        ))
+                        .small()
+                        .color(p.text_weak),
+                    );
+                }
                 ui.add(
-                    egui::Label::new(egui::RichText::new(output).monospace().small().color(color))
-                        .wrap(),
+                    egui::Label::new(
+                        egui::RichText::new(&shown.1)
+                            .monospace()
+                            .small()
+                            .color(color),
+                    )
+                    .wrap(),
                 );
             });
     }
@@ -2305,9 +2341,16 @@ impl App {
                 self.state_want = true;
             }
             Action::ReloadDriver => {
+                // 磁盘上可能被别处改过，重读是覆盖式：界面里没保存的改动会一起没掉，
+                // 得说清楚，不能让人以为「重新读取」是合并。
+                let dropped = self.driver.dirty;
                 self.driver.reload();
                 let path = self.driver.write_path.display().to_string();
-                self.set_status(format!("已重新读取 {path}"), false);
+                if dropped {
+                    self.set_status(format!("已重新读取 {path}；界面上未保存的改动已丢弃"), true);
+                } else {
+                    self.set_status(format!("已重新读取 {path}"), false);
+                }
             }
             Action::ResetDriver => {
                 self.driver.reset();
@@ -2480,6 +2523,22 @@ impl Drop for App {
     }
 }
 
+/// 命令输出框最多排多少行。
+const VISIBLE_OUTPUT_LINES: usize = 400;
+
+/// 取一段文本的末尾若干行：`(是否被裁剪, 裁剪后的文本, 原始行数)`。
+///
+/// 按 `\n` 切，保留原行序；尾部为空行也照旧留着，免得把命令最后的空行吃掉。
+fn tail_lines(text: &str, max: usize) -> (bool, String, usize) {
+    let total = text.lines().count();
+    if total <= max {
+        return (false, text.to_string(), total);
+    }
+    let start = total - max;
+    let tail: Vec<&str> = text.lines().skip(start).collect();
+    (true, tail.join("\n"), total)
+}
+
 /// 用系统文件管理器打开一个目录。只读操作，失败就如实报出来。
 fn open_dir(dir: &std::path::Path) -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
@@ -2611,4 +2670,45 @@ fn now_hms() -> String {
         (secs % 3600) / 60,
         secs % 60
     )
+}
+
+#[cfg(test)]
+mod output_tail_tests {
+    use super::tail_lines;
+
+    #[test]
+    fn short_output_untouched() {
+        let text = "第一行\n第二行";
+        let (cut, body, total) = tail_lines(text, 10);
+        assert!(!cut);
+        assert_eq!(body, text);
+        assert_eq!(total, 2);
+    }
+
+    #[test]
+    fn keeps_tail_in_order() {
+        let text = "a\nb\nc\nd\ne";
+        let (cut, body, total) = tail_lines(text, 3);
+        assert!(cut);
+        assert_eq!(body, "c\nd\ne");
+        assert_eq!(total, 5);
+    }
+
+    #[test]
+    fn exact_fit_not_cut() {
+        let text = "1\n2\n3";
+        let (cut, body, total) = tail_lines(text, 3);
+        assert!(!cut);
+        assert_eq!(body, text);
+        assert_eq!(total, 3);
+    }
+
+    #[test]
+    fn keeps_trailing_blank_line() {
+        let text = "x\ny\n";
+        let (cut, body, total) = tail_lines(text, 5);
+        assert!(!cut);
+        assert_eq!(body, "x\ny\n");
+        assert_eq!(total, 2);
+    }
 }

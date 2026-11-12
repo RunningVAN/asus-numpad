@@ -114,13 +114,27 @@ pub(crate) fn write_atomic(path: &std::path::Path, text: &str) -> std::io::Resul
         .unwrap_or_else(|| "config.json".to_string());
     let tmp = dir.join(format!(".{file_name}.tmp-{}", std::process::id()));
     let write_result = (|| -> std::io::Result<()> {
-        std::fs::write(&tmp, text)?;
+        // 先写临时文件并同步到盘，再改名。只做 rename 而不 fsync，掉电后目录项可能
+        // 指向一个内容还没落盘的空文件——配置直接变成 0 字节，比没保存还糟。
+        {
+            use std::io::Write;
+            let mut f = std::fs::File::create(&tmp)?;
+            f.write_all(text.as_bytes())?;
+            f.sync_all()?;
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o644))?;
         }
-        std::fs::rename(&tmp, path)
+        std::fs::rename(&tmp, path)?;
+        // 改名本身也要落盘，否则掉电后可能还是旧文件名。目录不是所有文件系统都支持
+        // fsync（部分网络盘会返回 EINVAL），失败就算了，不能因此把保存判成失败。
+        #[cfg(unix)]
+        if let Ok(handle) = std::fs::File::open(dir) {
+            let _ = handle.sync_all();
+        }
+        Ok(())
     })();
     if write_result.is_err() {
         let _ = std::fs::remove_file(&tmp);
@@ -155,6 +169,29 @@ mod tests {
             .filter(|name| name != "cfg.json")
             .collect();
         assert!(leftovers.is_empty(), "残留临时文件：{leftovers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 原子写：文件夹本身不存在时能自己建出来（首次运行 / 用户删了配置目录）。
+    #[test]
+    fn write_atomic_creates_missing_dir() {
+        let dir = std::env::temp_dir().join(format!("asus-numpad-mkdir-{}", std::process::id()));
+        let path = dir.join("nested").join("cfg.json");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_atomic(&path, "hello").expect("应能自建目录");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 原子写：写的是空串也要真的把文件清空，不能 rename 成 0 长度的临时文件后失败。
+    #[test]
+    fn write_atomic_accepts_empty_text() {
+        let dir = std::env::temp_dir().join(format!("asus-numpad-empty-{}", std::process::id()));
+        let path = dir.join("cfg.json");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_atomic(&path, "先写点东西").expect("首次写入");
+        write_atomic(&path, "").expect("写空");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
