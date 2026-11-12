@@ -828,5 +828,14 @@ jobs:
             echo "repo/ 无变化"
           else
             git commit -m "chore(repo): 更新软件源索引至 ${{ steps.ver.outputs.version }}"
+            # 这个 job 跑的是 tag 指向的提交，而不是 main 的最新提交。发版之后
+            # 只要往 main 推过文档或站点改动，HEAD 就不是 main 的后代，直接
+            # push 会因非快进被拒，索引发不出去、安装命令指向旧包。先落回
+            # main 再推；真冲突就让这一步红，别带着旧索引把 Release 当成成功。
+            git fetch --quiet origin main
+            if ! git rebase --quiet origin/main; then
+              echo "::error::repo/ 索引无法 rebase 到 main，请手工处理"
+              exit 1
+            fi
             git push origin HEAD:main
           fi

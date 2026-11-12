@@ -100,3 +100,11 @@ shellcheck -s sh -S warning packaging/deb/postinst packaging/deb/prerm packaging
 | `/etc/asus-numpad/asus-numpad.json` | 系统级配置（rpm `%config(noreplace)`） |
 | `~/.config/asus-numpad/asus-numpad.json` | 用户配置，日常读写的就是这份 |
 | `/usr/share/doc/asus-numpad/` | README 与 copyright |
+
+## 发版顺序
+
+推 `v*` 标签即触发 `.github/workflows/release.yml`：各发行版容器出包 → 汇总四套仓库索引 → 发 Release → 把 `repo/` 提交回 main。最后一步要写 main，所以顺序有讲究：
+
+1. 该推的代码、文档、站点改动先全部推完，再打标签。
+2. 打标签后到流水线跑完之前别再往 main 推提交。publish 跑的是标签指向的提交，这时多出来的提交会让 `repo/` 那次推送变成非快进。工作流里已经先 rebase 到最新 main 再推，但真撞上同一批文件还是要人工处理。
+3. 跑完看 publish 是否绿。它红了而 Release 已经挂出去，说明索引没更新，`docs/install.md` 里的安装命令拉到的还是上一版，装出来的版本对不上。修完重打标签再跑一遍。
