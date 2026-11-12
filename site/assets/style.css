@@ -148,7 +148,11 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -.022em; margin: 0; font-weig
 
 .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: -.01em; }
 .brand-mark { display: grid; place-items: center; width: 26px; height: 26px; color: var(--accent); }
-.brand-mark svg { width: 100%; height: 100%; }
+.brand-mark svg, .brand-mark img { width: 100%; height: 100%; display: block; }
+.brand-mark img { border-radius: 6px; }
+.brand { transition: opacity .18s var(--ease); }
+.brand:hover .brand-mark { transform: translateY(-1px); }
+.brand-mark { transition: transform .18s var(--ease); }
 .brand-name { font-size: 15.5px; }
 .brand-tag {
   font-family: var(--mono);
@@ -610,6 +614,27 @@ details p { margin: 0; padding: 0 0 16px; color: var(--text-2); font-size: 14px;
 .foot { border-top: 1px solid var(--line); padding: 54px 0 30px; background: var(--bg-alt); }
 .foot-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 30px; }
 .foot-brand { margin-bottom: 10px; }
+.foot-brand .brand-mark { width: 30px; height: 30px; }
+.foot-brand .brand-name { font-size: 16.5px; letter-spacing: -.015em; }
+.foot-slogan {
+  margin: 0 0 8px; font-size: 14.5px; font-weight: 600; color: var(--text); max-width: 30ch;
+}
+.foot-slogan::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); margin-right: 8px; vertical-align: 2px;
+}
+.foot-meta {
+  list-style: none; margin: 14px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.foot-meta li {
+  font: 500 11.5px/1 var(--mono);
+  color: var(--text-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: var(--surface);
+}
 .foot-note { margin: 0; font-size: 13px; color: var(--text-3); max-width: 34ch; }
 .foot-col h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin-bottom: 12px; }
 .foot-col a { display: block; font-size: 13.5px; color: var(--text-2); padding: 4px 0; transition: color .18s; }

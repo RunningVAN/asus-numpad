@@ -18,7 +18,7 @@ git clone --quiet --depth 1 --branch "$BRANCH" "$REMOTE" "$work/site"
 
 # 清空站点仓库工作区（.git 除外），再整体覆盖为 site/ 的内容
 find "$work/site" -mindepth 1 -maxdepth 1 ! -name .git -exec command rm -rf {} +
-cp -R "$src/index.html" "$src/.nojekyll" "$src/assets" "$work/site/"
+cp -R "$src/index.html" "$src/site.webmanifest" "$src/.nojekyll" "$src/assets" "$work/site/"
 
 cd "$work/site"
 git add -A

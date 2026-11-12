@@ -117,6 +117,9 @@
     "faq.7.q": "Wayland 还是 X11，有区别吗？",
     "faq.7.d": "没有。守护进程只与 evdev、uinput 交互，在 Wayland、X11 和纯 TTY 下行为一致。实际限制来自会话权限：无法访问 <code>/dev/uinput</code> 时，按键事件没有接收端。",
 
+    "foot.slogan": "触控板数字小键盘，Linux 原生可用。",
+    "foot.meta1": "不装内核模块",
+    "foot.meta2": "六种包格式",
     "foot.note": "ASUS 触摸板数字小键盘（NumberPad）的 Linux 用户态驱动。GPL-3.0-or-later。",
     "foot.project": "项目",
     "foot.machines": "机型说明",
@@ -237,6 +240,9 @@
     "faq.7.q": "Wayland 還是 X11，有差別嗎？",
     "faq.7.d": "沒有。守護行程只與 evdev、uinput 互動，在 Wayland、X11 與純 TTY 下行為一致。實際限制來自工作階段權限：無法存取 <code>/dev/uinput</code> 時，按鍵事件沒有接收端。",
 
+    "foot.slogan": "觸控板數字小鍵盤，Linux 原生可用。",
+    "foot.meta1": "不裝核心模組",
+    "foot.meta2": "六種套件格式",
     "foot.note": "ASUS 觸控板數字小鍵盤（NumberPad）的 Linux 使用者空間驅動程式。GPL-3.0-or-later。",
     "foot.project": "專案",
     "foot.machines": "機型說明",
