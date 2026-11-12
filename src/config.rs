@@ -642,6 +642,51 @@ impl Config {
         // 分区 / 校准的自洽性（与面板无关的那部分）。依赖面板尺寸的校验在几何
         // 构建处做——那里才拿得到 `ABS_MT_POSITION_*` 的实际范围。
         if !self.partition.is_unset() {
+            // 与面板无关的那部分先在这里收干净：`check` 只打印 sanitize 的 notes，
+            // 依赖面板的校验在 `build_geometry` 里做，那一步在 check 里看不到，
+            // 所以「方向反了」「列数越界」这类能当场判掉的一律前移到这里点名。
+            if self.partition.layout.trim().is_empty() {
+                self.partition.layout = "auto".to_string();
+            }
+            if let Some(n) = self.partition.cols {
+                if !(1..=8).contains(&n) {
+                    notes.push(crate::i18n::tf(
+                        "note.partition_cols_range",
+                        &[("v", &n.to_string())],
+                    ));
+                    self.partition.cols = None;
+                }
+            }
+            if let Some(n) = self.partition.rows {
+                if !(1..=8).contains(&n) {
+                    notes.push(crate::i18n::tf(
+                        "note.partition_rows_range",
+                        &[("v", &n.to_string())],
+                    ));
+                    self.partition.rows = None;
+                }
+            }
+            for (what, rect) in [("rect", self.partition.rect), ("rect_mm", self.partition.rect_mm)] {
+                if let Some(r) = rect {
+                    if !(r[2] > r[0] && r[3] > r[1]) {
+                        notes.push(crate::i18n::tf(
+                            "note.partition_rect_bad",
+                            &[
+                                ("what", what),
+                                (
+                                    "vals",
+                                    &format!("{:.0}, {:.0}, {:.0}, {:.0}", r[0], r[1], r[2], r[3]),
+                                ),
+                            ],
+                        ));
+                        if what == "rect" {
+                            self.partition.rect = None;
+                        } else {
+                            self.partition.rect_mm = None;
+                        }
+                    }
+                }
+            }
             if let Some(n) = self.partition.cols {
                 if !self.partition.col_ratios.is_empty() && self.partition.col_ratios.len() != n {
                     notes.push(crate::i18n::tf(
@@ -668,16 +713,47 @@ impl Config {
                     self.partition.row_ratios.clear();
                 }
             }
-            if self.partition.col_ratios.iter().any(|r| !(r.is_finite() && *r > 0.0)) {
-                self.partition.col_ratios.clear();
+            for what in ["col_ratios", "row_ratios"] {
+                let bad = {
+                    let v = if what == "col_ratios" {
+                        &self.partition.col_ratios
+                    } else {
+                        &self.partition.row_ratios
+                    };
+                    v.iter().any(|r| !(r.is_finite() && *r > 0.0))
+                };
+                if bad {
+                    notes.push(crate::i18n::tf("note.partition_ratio_bad", &[("what", what)]));
+                    if what == "col_ratios" {
+                        self.partition.col_ratios.clear();
+                    } else {
+                        self.partition.row_ratios.clear();
+                    }
+                }
             }
-            if self.partition.row_ratios.iter().any(|r| !(r.is_finite() && *r > 0.0)) {
-                self.partition.row_ratios.clear();
+            // NumLock 格越界同样与面板无关（只跟行列数有关），能判就判。
+            if let (Some(cell), Some(c)) = (self.partition.numlock_cell, self.partition.cols) {
+                let r = self.partition.rows.unwrap_or(1);
+                if cell[0] >= r || cell[1] >= c {
+                    notes.push(crate::i18n::tf(
+                        "note.partition_numlock_outside",
+                        &[
+                            ("r", &cell[0].to_string()),
+                            ("c", &cell[1].to_string()),
+                            ("rows", &r.to_string()),
+                            ("cols", &c.to_string()),
+                        ],
+                    ));
+                    self.partition.numlock_cell = None;
+                }
             }
-            notes.push(crate::i18n::tf(
-                "note.partition_on",
-                &[("layout", self.partition.layout.trim())],
-            ));
+            // 前面几项可能已经把它清空（比如只写了一个反序的 rect），这时别再报「已启用」。
+            if !self.partition.is_unset() {
+                notes.push(crate::i18n::tf(
+                    "note.partition_on",
+                    &[("layout", self.partition.layout.trim())],
+                ));
+            }
         }
         if !self.calibration.is_unset() {
             for n in self.calibration.notes() {
@@ -1849,6 +1925,74 @@ mod tests {
         assert_eq!(c.pressure_switch.percent, 1);
         assert_eq!(c.pressure_switch.frames, 1);
         crate::custom::install_layouts(&[]);
+    }
+
+    /// 分区里与面板无关的坏值必须当场点名并丢掉：这些校验原本只在 `build_geometry`
+    /// 里做，而 `check` 不打印那一步的 notes，用户改坏配置后跑 check 什么都看不到。
+    #[test]
+    fn partition_sanitize_names_bad_values() {
+        let _registry_guard = crate::test_lock::registry();
+
+        // 列数越界
+        let mut c: Config = serde_json::from_str(r#"{"partition":{"cols":9}}"#).unwrap();
+        let notes = c.sanitize();
+        assert!(notes.iter().any(|n| n.contains("9") && n.contains("1..=8")), "{notes:?}");
+        assert_eq!(c.partition.cols, None);
+        assert!(c.partition.is_unset());
+
+        // 反矩形：整个 rect 丢掉，不再出现「已启用」的假象
+        let mut c: Config =
+            serde_json::from_str(r#"{"partition":{"rect":[3000,2000,400,500]}}"#).unwrap();
+        let notes = c.sanitize();
+        assert!(notes.iter().any(|n| n.contains("rect") && n.contains("3000")), "{notes:?}");
+        assert_eq!(c.partition.rect, None);
+        assert!(!notes.iter().any(|n| n.contains("custom partition active")), "{notes:?}");
+
+        // 权重长度不符
+        let mut c: Config =
+            serde_json::from_str(r#"{"partition":{"cols":5,"col_ratios":[1,1]}}"#).unwrap();
+        let notes = c.sanitize();
+        assert!(notes.iter().any(|n| n.contains("col_ratios")), "{notes:?}");
+        assert!(c.partition.col_ratios.is_empty());
+        assert_eq!(c.partition.cols, Some(5), "列数本身是好的，不该一起丢掉");
+
+        // 权重里有 0 / 负数
+        let mut c: Config = serde_json::from_str(
+            r#"{"partition":{"cols":5,"rows":4,"col_ratios":[1,-1,1,1,1]}}"#,
+        )
+        .unwrap();
+        let notes = c.sanitize();
+        assert!(
+            notes.iter().any(|n| n.contains("col_ratios") && n.contains("non-positive")),
+            "{notes:?}"
+        );
+        assert!(c.partition.col_ratios.is_empty());
+
+        // NumLock 格越界 → 回默认格，行列数保留
+        let mut c: Config = serde_json::from_str(
+            r#"{"partition":{"cols":5,"rows":4,"numlock_cell":[9,9],"layout":"auto"}}"#,
+        )
+        .unwrap();
+        let notes = c.sanitize();
+        assert!(notes.iter().any(|n| n.contains("NumLock")), "{notes:?}");
+        assert_eq!(c.partition.numlock_cell, None);
+        assert_eq!(c.partition.cols, Some(5));
+        assert!(notes.iter().any(|n| n.contains("layout: auto")), "{notes:?}");
+
+        // layout 留空归一成 auto，提示里不再出现空括号
+        let mut c: Config =
+            serde_json::from_str(r#"{"partition":{"cols":5,"layout":"  "}}"#).unwrap();
+        let notes = c.sanitize();
+        assert_eq!(c.partition.layout, "auto");
+        assert!(notes.iter().any(|n| n.contains("layout: auto")), "{notes:?}");
+
+        // 好配置一条坏提示都不该有
+        let mut c: Config = serde_json::from_str(
+            r#"{"partition":{"layout":"auto","cols":5,"rows":4,"col_ratios":[1,1,1,1,1]}}"#,
+        )
+        .unwrap();
+        let notes = c.sanitize();
+        assert_eq!(notes.len(), 1, "只该有「已启用」一条: {notes:?}");
     }
 
     #[test]

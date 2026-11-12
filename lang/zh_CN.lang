@@ -378,3 +378,9 @@ note.partition_invalid = 自定义分区被拒绝，已回落到官方网格：{
 note.partition_extra_cols = 分区有 {have} 列，键表只有 {want} 列，多出的列不出键
 note.partition_extra_rows = 分区有 {have} 行，键表只有 {want} 行，多出的行不出键
 note.partition_on = 已启用自定义分区（布局：{layout}）
+note.partition_cols_range = 自定义分区的列数 {v} 超出 1..=8，已忽略该列数
+note.partition_rows_range = 自定义分区的行数 {v} 超出 1..=8，已忽略该行数
+note.partition_rect_bad = 自定义分区的 {what} [{vals}] 方向反了或没有面积，已忽略该值
+note.partition_ratio_mismatch = {what} 有 {have} 项，网格需要 {want} 项，已忽略这组权重
+note.partition_ratio_bad = {what} 里有非正数或非有限值，已忽略这组权重
+note.partition_numlock_outside = NumLock 格 [{r}, {c}] 超出 {rows}x{cols} 网格，已改用默认格

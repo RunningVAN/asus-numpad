@@ -382,3 +382,9 @@ note.partition_invalid = custom partition rejected, falling back to the official
 note.partition_extra_cols = partition has {have} columns but the key table has {want}; extra columns produce no keys
 note.partition_extra_rows = partition has {have} rows but the key table has {want}; extra rows produce no keys
 note.partition_on = custom partition active (layout: {layout})
+note.partition_cols_range = custom partition column count {v} is outside 1..=8, that value is ignored
+note.partition_rows_range = custom partition row count {v} is outside 1..=8, that value is ignored
+note.partition_rect_bad = custom partition {what} [{vals}] is inverted or has no area, that value is ignored
+note.partition_ratio_mismatch = {what} has {have} entries but the grid needs {want}, that ratio list is ignored
+note.partition_ratio_bad = {what} contains a non-positive or non-finite value, that ratio list is ignored
+note.partition_numlock_outside = NumLock cell [{r}, {c}] is outside the {rows}x{cols} grid, the default cell is used

@@ -351,6 +351,10 @@ systemd 用户单元，随登录会话启动，不需要 root。手工控制：
 .PP
 解算分区用 \fBasus\-numpad calibrate\fP；GUI 的「校准」页签同样能改这两项，还能把
 \fBpartition\fP 与 \fBcalibration\fP 打包成片段搬给同机型的人（片段不含键表）。
+.PP
+两个键里能当场判掉的坏值（列行数越界、矩形方向反了、权重个数或正负不对、NumLock 格
+越界、下界不小于上界）在读取配置时就被丢弃并在提示里点名，不用等几何构建；
+跑 \fBasus\-numpad check\fP 即可看到这些提示，其余项照常生效。
 .SH 环境变量
 .TP
 .B ASUS_NUMPAD_LANG

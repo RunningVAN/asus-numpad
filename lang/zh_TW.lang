@@ -382,3 +382,9 @@ note.partition_invalid = 自訂分區被拒絕，已回退到官方網格：{err
 note.partition_extra_cols = 分區有 {have} 欄，鍵表只有 {want} 欄，多出的欄不出鍵
 note.partition_extra_rows = 分區有 {have} 列，鍵表只有 {want} 列，多出的列不出鍵
 note.partition_on = 已啟用自訂分區（版面：{layout}）
+note.partition_cols_range = 自訂分區的欄數 {v} 超出 1..=8，已忽略該欄數
+note.partition_rows_range = 自訂分區的列數 {v} 超出 1..=8，已忽略該列數
+note.partition_rect_bad = 自訂分區的 {what} [{vals}] 方向相反或沒有面積，已忽略該值
+note.partition_ratio_mismatch = {what} 有 {have} 項，網格需要 {want} 項，已忽略這組權重
+note.partition_ratio_bad = {what} 裡有非正數或非有限值，已忽略這組權重
+note.partition_numlock_outside = NumLock 格 [{r}, {c}] 超出 {rows}x{cols} 網格，已改用預設格

@@ -2019,14 +2019,21 @@ fn read_raw_samples(path: &Path) -> Result<asus_numpad::partition::RawSamples> {
     use asus_numpad::partition::{CornerSamples, RawSamples};
 
     fn pair_at(obj: &serde_json::Value, name: &str) -> Result<(i32, i32)> {
-        let bad = || i18n::tf("calibrate.samples.bad_pair", &[("k", name)]);
+        // anyhow 直接把 String 当错误装进去时 Display 会自带引号
+        // （`Error: "..." ...`），用格式化包一层，报错文案就是语言文件里那句。
+        fn bad(name: &str) -> anyhow::Error {
+            anyhow::anyhow!(
+                "{}",
+                i18n::tf("calibrate.samples.bad_pair", &[("k", name)])
+            )
+        }
         let arr = obj
             .get(name)
             .and_then(|x| x.as_array())
             .filter(|a| a.len() == 2)
-            .ok_or_else(|| anyhow::anyhow!(bad()))?;
-        let x = arr[0].as_i64().ok_or_else(|| anyhow::anyhow!(bad()))?;
-        let y = arr[1].as_i64().ok_or_else(|| anyhow::anyhow!(bad()))?;
+            .ok_or_else(|| bad(name))?;
+        let x = arr[0].as_i64().ok_or_else(|| bad(name))?;
+        let y = arr[1].as_i64().ok_or_else(|| bad(name))?;
         Ok((x as i32, y as i32))
     }
 
@@ -2043,7 +2050,7 @@ fn read_raw_samples(path: &Path) -> Result<asus_numpad::partition::RawSamples> {
         )
     })?;
     let corners = v.get("corners").ok_or_else(|| {
-        anyhow::anyhow!(i18n::tf("calibrate.samples.missing", &[("k", "corners")]))
+        anyhow::anyhow!("{}", i18n::tf("calibrate.samples.missing", &[("k", "corners")]))
     })?;
     Ok(RawSamples {
         corners: CornerSamples {

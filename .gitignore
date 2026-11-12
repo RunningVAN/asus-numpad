@@ -28,3 +28,4 @@ keys-private/
 # abuild-sign shim 的临时目录（CI 里把私钥与待签文件搬进来再挂给容器）
 .apk-sign-key/
 .apk-sign-work/
+/verify-calibrate.txt
