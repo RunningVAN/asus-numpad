@@ -13,6 +13,7 @@ use asus_numpad::partition::{
     solve_calibration, CornerSamples, GridProbe, RawSamples,
 };
 
+use super::calib_view;
 use super::extend::save_snippet;
 use super::{Action, App};
 use crate::theme;
@@ -22,6 +23,8 @@ impl App {
     pub(super) fn draw_calib(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
         let before = self.driver.cfg.clone();
 
+        self.import_dropped_samples(ui);
+        self.refresh_calib_probes();
         self.draw_calib_header(ui, action);
         ui.add_space(10.0);
         self.draw_calib_partition(ui);
@@ -65,6 +68,8 @@ impl App {
             });
             ui.add_space(2.0);
             theme::note(ui, &p, format!("写入：{write_path}"));
+            ui.add_space(6.0);
+            calib_view::status_row(ui, &p, &self.driver.cfg);
             ui.add_space(8.0);
             theme::ctrl_column(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -165,6 +170,38 @@ impl App {
                 }
             }
 
+            // 预览：把当前配置直接画出来。四个角、行列数、权重、NumLock 格填完长什么样，
+            // 只有画出来才能判断对不对——数字全对而网格偏一格，是这页最容易犯的错。
+            theme::block(
+                ui,
+                &p,
+                "预览",
+                Some(
+                    "按当前配置画出的网格，鼠标移上去读每格中心坐标；样本点也画在这张图上。\
+                     底下一整块是触摸板，网格之外就是光标区。",
+                ),
+                |ui| {
+                    let (hover, _err) = calib_view::plate(
+                        ui,
+                        &p,
+                        &self.driver.cfg,
+                        &self.calib_probes,
+                    );
+                    if !self.calib_probes.is_empty() {
+                        let at = self.calib_probes.len();
+                        ui.label(
+                            egui::RichText::new(format!("已画出 {at} 个样本点"))
+                                .size(11.5)
+                                .color(p.text_weak),
+                        );
+                    }
+                    // 读数放在图下面一行：整宽铺开，悬停时换内容而不改行高，图不会跟着跳
+                    let grid = calib_view::resolve(&self.driver.cfg).ok();
+                    let (text, color) = calib_view::readout(&p, grid.as_ref(), hover.as_ref());
+                    ui.label(egui::RichText::new(text).size(11.5).color(color));
+                },
+            );
+
             // 行列：留空跟随键表
             let mut follow_rows = self.driver.cfg.partition.rows.is_none();
             let resp = theme::check_row(
@@ -211,11 +248,112 @@ impl App {
                 Some("默认关闭：网格外的落点属于光标区，按官方行为不产生按键。"),
             );
 
-            theme::note(
+            // 列宽 / 行高权重。改列数行数后长度自动补齐，不然一改列数整段就被判成坏值。
+            let keys = {
+                let table = self.driver.cfg.key_table();
+                (table.cols().max(1), table.rows().len().max(1))
+            };
+            let cols_now = self.driver.cfg.partition.cols.unwrap_or(keys.0).clamp(1, 8);
+            let rows_now = self.driver.cfg.partition.rows.unwrap_or(keys.1).clamp(1, 4);
+            if !self.driver.cfg.partition.col_ratios.is_empty()
+                && self.driver.cfg.partition.col_ratios.len() != cols_now
+            {
+                self.driver.cfg.partition.col_ratios.resize(cols_now, 1.0);
+            }
+            if !self.driver.cfg.partition.row_ratios.is_empty()
+                && self.driver.cfg.partition.row_ratios.len() != rows_now
+            {
+                self.driver.cfg.partition.row_ratios.resize(rows_now, 1.0);
+            }
+
+            let mut col_weights = !self.driver.cfg.partition.col_ratios.is_empty();
+            let resp = theme::check_row(
                 ui,
                 &p,
-                "列宽可不等分：片段里填 col_ratios / row_ratios（长度等于列数/行数，权重自动归一），界面不摆这一栏。",
+                &mut col_weights,
+                "列宽不等分",
+                Some("勾上按权重分配列宽，权重自动归一；全填 1 就是等分。"),
             );
+            if resp.changed() {
+                self.driver.cfg.partition.col_ratios = if col_weights {
+                    vec![1.0; cols_now]
+                } else {
+                    Vec::new()
+                };
+            }
+            if !self.driver.cfg.partition.col_ratios.is_empty() {
+                theme::block(
+                    ui,
+                    &p,
+                    "列宽权重",
+                    Some("从左到右每一列占几份；数字越大这列越宽。"),
+                    |ui| weight_row(ui, &mut self.driver.cfg.partition.col_ratios),
+                );
+            }
+
+            let mut row_weights = !self.driver.cfg.partition.row_ratios.is_empty();
+            let resp = theme::check_row(
+                ui,
+                &p,
+                &mut row_weights,
+                "行高不等分",
+                Some("同上，按行分配高度；触摸板上下留白不等时用它。"),
+            );
+            if resp.changed() {
+                self.driver.cfg.partition.row_ratios = if row_weights {
+                    vec![1.0; rows_now]
+                } else {
+                    Vec::new()
+                };
+            }
+            if !self.driver.cfg.partition.row_ratios.is_empty() {
+                theme::block(
+                    ui,
+                    &p,
+                    "行高权重",
+                    Some("从上到下每一行占几份；数字越大这行越高。"),
+                    |ui| weight_row(ui, &mut self.driver.cfg.partition.row_ratios),
+                );
+            }
+
+            let mut nl_custom = self.driver.cfg.partition.numlock_cell.is_some();
+            let resp = theme::check_row(
+                ui,
+                &p,
+                &mut nl_custom,
+                "指定 NumLock 格",
+                Some("不勾就是第 1 行最后一列，也就是官方布局里那个位置。"),
+            );
+            if resp.changed() {
+                self.driver.cfg.partition.numlock_cell = if nl_custom {
+                    Some([0, cols_now.saturating_sub(1)])
+                } else {
+                    None
+                };
+            }
+            if let Some([row, col]) = self.driver.cfg.partition.numlock_cell {
+                let (mut row, mut col) = (row, col);
+                theme::row_hint(
+                    ui,
+                    &p,
+                    "NumLock 行 / 列",
+                    Some("行列都从 0 数起；预览图上这一格标着 NL。"),
+                    "行 / 列",
+                    |ui| {
+                        theme::pair(
+                            ui,
+                            |ui| theme::pair_num(ui, &mut row, 0..=rows_now.saturating_sub(1)),
+                            |ui| theme::pair_num(ui, &mut col, 0..=cols_now.saturating_sub(1)),
+                        )
+                    },
+                );
+                if [row, col] != self.driver.cfg.partition.numlock_cell.unwrap_or([row, col]) {
+                    self.driver.cfg.partition.numlock_cell = Some([row, col]);
+                }
+            }
+
+            ui.add_space(4.0);
+            calib_view::lint_notes(ui, &p, &self.driver.cfg);
         });
     }
 
@@ -441,6 +579,25 @@ impl App {
                     }
                 }
             }
+
+            // 解算只保证矩形对；样本点究竟落进哪一格，还得单独核一遍。
+            // 点在手边时最常犯的错就是「按到了隔壁格」，数字全对、键全错一格。
+            if let Some(err) = self.calib_probe_msg.clone() {
+                ui.add_space(4.0);
+                theme::note(ui, &p, format!("样本没读成：{err}（预览图上暂时没有样本点）"));
+            } else if !self.calib_probes.is_empty() {
+                if let Ok(grid) = calib_view::resolve(&self.driver.cfg) {
+                    let issues = calib_view::probe_check(&grid, &self.calib_probes);
+                    ui.add_space(4.0);
+                    if issues.is_empty() {
+                        theme::note(ui, &p, "样本点都和网格对得上：每个点都落在它该在的那一格。");
+                    } else {
+                        for line in issues {
+                            theme::note(ui, &p, line);
+                        }
+                    }
+                }
+            }
         });
     }
 
@@ -582,7 +739,61 @@ impl App {
         ));
 
         self.driver.cfg.partition = cal.partition;
+        self.calib_probes = probes_of(&samples, cols, rows);
         (out, false)
+    }
+
+    /// 拖进来的文件直接当样本路径：省掉「翻目录找文件」这一步。
+    fn import_dropped_samples(&mut self, ui: &mut egui::Ui) {
+        let dropped: Vec<std::path::PathBuf> = ui.ctx().input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .map(|file| file.path().to_path_buf())
+                .collect()
+        });
+        let Some(path) = dropped.into_iter().next() else {
+            return;
+        };
+        let text = path.display().to_string();
+        if text == self.calib_samples_path {
+            return;
+        }
+        self.calib_samples_path = text.clone();
+        self.calib_msg = Some((format!("已载入样本文件 {text}"), false));
+    }
+
+    /// 样本路径或行列数一变就重解析：预览图上的点跟着输入框走，不必再点「读取并解算」。
+    ///
+    /// 每帧只比一个字符串，没有 IO；真正读文件只发生在路径或行列数变了以后。
+    fn refresh_calib_probes(&mut self) {
+        let key = format!(
+            "{}|{}x{}",
+            self.calib_samples_path.trim(),
+            self.calib_cols,
+            self.calib_rows
+        );
+        if key == self.calib_probe_path {
+            return;
+        }
+        self.calib_probe_path = key;
+        self.calib_probes.clear();
+        self.calib_probe_msg = None;
+        let path = self.calib_samples_path.trim().to_string();
+        if path.is_empty() {
+            return;
+        }
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(err) => {
+                self.calib_probe_msg = Some(format!("读不到 {path}：{err}"));
+                return;
+            }
+        };
+        match parse_samples(&text) {
+            Ok(samples) => self.calib_probes = probes_of(&samples, self.calib_cols, self.calib_rows),
+            Err(err) => self.calib_probe_msg = Some(err),
+        }
     }
 }
 
@@ -677,6 +888,48 @@ fn apply_calib_fragment(
         touched.push("校准".to_string());
     }
     (format!("已应用：{}", touched.join("、")), false)
+}
+
+
+/// 样本 → 预览图上的点。
+///
+/// 四角只画不判：它们标的是触摸板外框，网格可以只覆盖其中一块，落在网格外属正常。
+/// 格中心那两个才带「该在第几格」，画上去用来自查有没有按偏。
+fn probes_of(samples: &RawSamples, cols: usize, rows: usize) -> Vec<calib_view::Probe> {
+    let cols = cols.clamp(1, 8);
+    let rows = rows.clamp(1, 4);
+    let probe = |raw: (i32, i32), want, label| calib_view::Probe {
+        raw: (raw.0 as f64, raw.1 as f64),
+        want,
+        label,
+    };
+    vec![
+        probe(samples.corners.top_left, None, "左上角"),
+        probe(samples.corners.top_right, None, "右上角"),
+        probe(samples.corners.bottom_left, None, "左下角"),
+        probe(samples.corners.bottom_right, None, "右下角"),
+        probe(samples.first_point, Some((0, 0)), "首格中心"),
+        probe(samples.last_point, Some((rows - 1, cols - 1)), "末格中心"),
+    ]
+}
+
+/// 一行并排的权重数字框：几份就几个，等宽平分控件列，右端与其它控件压同一条线。
+fn weight_row(ui: &mut egui::Ui, values: &mut [f64]) {
+    let count = values.len().max(1) as f32;
+    let gap = ui.spacing().item_spacing.x;
+    let width = ((theme::ctrl_width() - gap * (count - 1.0)) / count).max(40.0);
+    ui.horizontal(|ui| {
+        for (index, value) in values.iter_mut().enumerate() {
+            let resp = ui.add_sized(
+                egui::vec2(width, theme::CTRL_H),
+                egui::DragValue::new(value)
+                    .speed(0.05)
+                    .range(0.05..=10.0)
+                    .max_decimals(2),
+            );
+            theme::tip(resp, format!("第 {} 份的权重", index + 1));
+        }
+    });
 }
 
 #[cfg(test)]

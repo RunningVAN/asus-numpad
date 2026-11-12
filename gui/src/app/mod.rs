@@ -12,6 +12,7 @@
 //! Linux 侧同一份函数，避免两边灯效暗中不一致。
 
 mod calib;
+mod calib_view;
 mod driver;
 mod extend;
 mod full;
@@ -157,6 +158,13 @@ pub struct App {
     calib_rows: usize,
     /// 校准页：回放结果 `(文案, 是否出错)`
     calib_msg: Option<(String, bool)>,
+    /// 校准页：上次解析过的样本路径，与 `calib_samples_path` 不同就重解析，
+    /// 样本点因此能跟着输入框变，不用再点一次「读取并解算」
+    calib_probe_path: String,
+    /// 校准页：样本点（原始坐标 + 应落格），画在预览图上
+    calib_probes: Vec<calib_view::Probe>,
+    /// 校准页：样本文件解析失败的原因
+    calib_probe_msg: Option<String>,
     /// 校准页「配置片段」：partition + calibration 打包
     calib_snippet: String,
     calib_snippet_msg: Option<(String, bool)>,
@@ -215,6 +223,9 @@ impl App {
             calib_cols: 5,
             calib_rows: 4,
             calib_msg: None,
+            calib_probe_path: String::new(),
+            calib_probes: Vec::new(),
+            calib_probe_msg: None,
             calib_snippet: String::new(),
             calib_snippet_msg: None,
             service_enabled,
