@@ -99,7 +99,11 @@ mod tests {
         assert!(!device_lost(Some(ErrorKind::Interrupted), None, 0));
         assert!(!device_lost(Some(ErrorKind::Other), Some(5), 0));
         // 但连续失败到上限就必须兜底退出
-        assert!(device_lost(Some(ErrorKind::Other), Some(5), READ_FAILURE_LIMIT));
+        assert!(device_lost(
+            Some(ErrorKind::Other),
+            Some(5),
+            READ_FAILURE_LIMIT
+        ));
     }
 
     #[test]

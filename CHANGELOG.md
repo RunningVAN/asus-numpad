@@ -7,6 +7,27 @@
 
 ## 未发布
 
+### 结构：大文件按职责拆开（行为零变化）
+
+四个「越改越不敢动」的文件拆成了目录，函数体一个字符没改，只换了归属与可见性。
+判据是一次 `cargo test`：库 185 项、界面 86 项全绿，clippy 零警告，三个自检脚本
+（`verify-service` / `verify-extend` / `verify-calibrate`）分别 26 / 22 / 38 项 PASS。
+
+- **界面主体**：`gui/src/app/mod.rs` 2768 → 483 行。后台任务、命令面板、灯光控制、
+  纯函数工具、动作枚举各成一文件（`tasks` / `command` / `light` / `widgets` / `action`），
+  五张页面的绘制按页落到 `app/pages/`。改一页只用看一个文件，`App` 的状态字段与
+  启动流程留在 `mod.rs` 作总装。
+- **命令行**：`src/main.rs` 2270 → 181 行，只剩启动分流。参数表（`Opts` / `Cmd` /
+  `build_cli`）进 `src/cli/args.rs`，各子命令按名字进 `src/cli/*.rs`。
+  新增子命令不再往 2000 行的文件里塞。
+- **扩展层**：`src/custom.rs` 1668 → `custom/{keys,table,spec,led,pressure,hotkey}`。
+  键名解析、键表、布局增量、点亮报文、压感、热键互不引用，改热键不用重读键表。
+- **配置**：`src/config.rs` 2032 → `config/{levels,sanitize,geometry,io,params}`。
+  档位换算、坏值收敛、几何推导、落盘路径、官方参数表分家；`Config` 结构体与
+  默认值仍是 `mod.rs` 的唯一真源。
+- 顺带修掉三处「文件搬了、自检没搬」：`verify-service.sh` 里指向 `src/main.rs` /
+  `src/config.rs` 的静态检查改指新路径，否则它们会静默 SKIP，而汇总仍是 0 FAIL。
+
 ### 无人值守：服务自己活下来
 
 这一批改的都是「用户不会去动它，但坏了就得手动救」的路径。开发机上没法把这些场景

@@ -1829,12 +1829,8 @@ mod tests {
         // 抬起事件被内核丢掉 = 用户眼里「键盘卡住了」。自愈必须补一次抬起。
         let now = Rc::new(std::cell::Cell::new(0.0));
         let led: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
-        let ((mut e, _p), keys) = engine_raw_numlock(
-            Config::default(),
-            now,
-            led,
-            Some(Box::new(NumLockOn)),
-        );
+        let ((mut e, _p), keys) =
+            engine_raw_numlock(Config::default(), now, led, Some(Box::new(NumLockOn)));
         e.enable();
         // 手动摆成「正按着 KP1」的现场：按下事件已发，抬起丢了
         e.down = true;
@@ -1882,11 +1878,7 @@ mod tests {
             .collect();
         assert_eq!(
             tail,
-            vec![
-                (kc::ABS_MT_SLOT, 2),
-                (kc::ABS_MT_TRACKING_ID, -1),
-                (0, 0),
-            ],
+            vec![(kc::ABS_MT_SLOT, 2), (kc::ABS_MT_TRACKING_ID, -1), (0, 0),],
             "要给虚拟触摸板补 SLOT/TRACKING_ID=-1/SYN 三件套"
         );
         assert!(!e.forwarding, "转发态应结束");
@@ -1941,7 +1933,11 @@ mod tests {
         let before = log.borrow().len();
         e.resync_after_resume();
         assert!(!e.lit);
-        assert_eq!(log.borrow().len(), before, "原本就暗着，唤醒后不该自己亮起来");
+        assert_eq!(
+            log.borrow().len(),
+            before,
+            "原本就暗着，唤醒后不该自己亮起来"
+        );
     }
 
     #[test]
@@ -2138,7 +2134,10 @@ mod tests {
         Rc<std::cell::Cell<Option<bool>>>,
         Rc<std::cell::Cell<f64>>,
     ) {
-        let cfg = Config { numlock: mode, ..Config::default() };
+        let cfg = Config {
+            numlock: mode,
+            ..Config::default()
+        };
         let now = Rc::new(std::cell::Cell::new(1000.0));
         let led_log: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
         let cell = Rc::new(std::cell::Cell::new(state));
@@ -2303,7 +2302,10 @@ mod tests {
     fn failed_lighting_keeps_lit_false_and_retries_next_time() {
         // 通道第一次全失败（亮 + 档位都发不出去）：不能置 lit，
         // 否则后续唤醒/联动全部跳过重试，表现为「灯永远不亮」
-        let cfg = Config { follow_keyboard_brightness: false, ..Config::default() };
+        let cfg = Config {
+            follow_keyboard_brightness: false,
+            ..Config::default()
+        };
         let (mut eng, log, left) = engine_flaky(cfg, 2, false);
         eng.enable();
         assert!(!eng.lit, "下发失败时不应标记为已点亮");
@@ -2319,17 +2321,28 @@ mod tests {
     #[test]
     fn i2c_channel_sends_unlock_before_level() {
         // i2c 直写 EC 走官方两段式：先 0x60 解锁，再下档位/亮
-        let cfg = Config { follow_keyboard_brightness: false, manual_brightness_step: 4, ..Config::default() };
+        let cfg = Config {
+            follow_keyboard_brightness: false,
+            manual_brightness_step: 4,
+            ..Config::default()
+        };
         let (mut eng, log, _left) = engine_flaky(cfg, 0, true);
         eng.enable();
         let sent = log.borrow().clone();
-        assert_eq!(sent.first().copied(), Some(VAL_UNLOCK), "首个字节应为解锁字");
+        assert_eq!(
+            sent.first().copied(),
+            Some(VAL_UNLOCK),
+            "首个字节应为解锁字"
+        );
         assert!(sent.contains(&VAL_ON), "解锁后应下发点亮");
     }
 
     #[test]
     fn hidraw_channel_skips_unlock() {
-        let cfg = Config { follow_keyboard_brightness: false, ..Config::default() };
+        let cfg = Config {
+            follow_keyboard_brightness: false,
+            ..Config::default()
+        };
         let (mut eng, log, _left) = engine_flaky(cfg, 0, false);
         eng.enable();
         assert!(
@@ -2342,7 +2355,10 @@ mod tests {
     fn off_send_failure_still_marks_dark() {
         // 熄灭无论成不成功都必须转成「未点亮」：卡在 lit=true 会让
         // 唤醒逻辑永远提前 return，用户再摸也不会亮
-        let cfg = Config { follow_keyboard_brightness: false, ..Config::default() };
+        let cfg = Config {
+            follow_keyboard_brightness: false,
+            ..Config::default()
+        };
         let (mut eng, _log, left) = engine_flaky(cfg, 0, false);
         eng.enable();
         assert!(eng.lit);

@@ -412,11 +412,11 @@ impl LedSink for NullLed {
 // 探测
 // --------------------------------------------------------------------------- //
 
-use crate::led_policy::OMNI_PID;
 /// ELAN / ASUS vendor 与候选打分统一由跨平台模块 [`crate::led_policy`] 提供，
 /// 避免 Linux 侧与测试侧出现两套逻辑。
 /// 描述符判定与 `uevent` 解析来自跨平台模块，Linux 侧只负责把字节取回来。
 pub use crate::hid_desc::{feature_in_descriptor, FeatureProbe};
+use crate::led_policy::OMNI_PID;
 pub use crate::led_policy::{
     candidate_rank, pick_best, presence_from, NumpadPresence, NumpadProbe, ASUS_VID, ELAN_VID,
     KNOWN_NUMPAD_PIDS, PIXART_VID, RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE,

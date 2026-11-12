@@ -110,7 +110,12 @@ pub enum NumpadPresence {
 ///
 /// `present` 是调用方扫出来的 `(节点路径, vid, pid)` 列表；`None` 表示没找到同型号。
 /// 优先选**同名节点**（编号被同一个设备抢回来，通常就是它）。
-pub fn reattach_channel(dev: &str, vid: u32, pid: u32, present: &[(String, u32, u32)]) -> Option<String> {
+pub fn reattach_channel(
+    dev: &str,
+    vid: u32,
+    pid: u32,
+    present: &[(String, u32, u32)],
+) -> Option<String> {
     let same_model: Vec<&(String, u32, u32)> = present
         .iter()
         .filter(|(_, v, p)| *v == vid && *p == pid)
@@ -276,7 +281,13 @@ mod tests {
             ("/dev/hidraw4".to_string(), ASUS_VID, OMNI_PID),
             ("/dev/hidraw5".to_string(), PIXART_VID, 0x2808),
         ];
-        assert_eq!(reattach_channel("/dev/hidraw3", ELAN_VID, 0x3275, &present), None);
-        assert_eq!(reattach_channel("/dev/hidraw3", ELAN_VID, 0x3275, &[]), None);
+        assert_eq!(
+            reattach_channel("/dev/hidraw3", ELAN_VID, 0x3275, &present),
+            None
+        );
+        assert_eq!(
+            reattach_channel("/dev/hidraw3", ELAN_VID, 0x3275, &[]),
+            None
+        );
     }
 }

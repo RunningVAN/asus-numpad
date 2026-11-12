@@ -28,8 +28,8 @@ pub mod i18n;
 pub mod keycodes;
 pub mod layout;
 pub mod led_policy;
-pub mod lifecycle;
 pub mod led_proto;
+pub mod lifecycle;
 pub mod partition;
 pub mod sku;
 

@@ -255,7 +255,10 @@ impl InputDevice {
         ioctl_ptr(self.fd, eviocgled(buf.len()), buf.as_mut_ptr())?;
         // 位图解析与「空位图 = 未知」的语义统一放在跨平台模块里
         crate::hid_desc::numlock_led_on(&buf).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "EVIOCGLED returned empty bitmap")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "EVIOCGLED returned empty bitmap",
+            )
         })
     }
 

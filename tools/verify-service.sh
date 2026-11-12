@@ -38,7 +38,7 @@ chk "重启间隔 >= 2s（别把日志刷爆）" packaging/common/asus-numpad.se
 
 echo "== 进程侧：退出码与锁 ==" | tee -a "$OUT"
 chk "单实例锁（防两个实例互抢 grab）" src/linux/mod.rs 'fn acquire_single_instance'
-chk "锁失败以非零码退出（否则服务停在 inactive）" src/main.rs 'ServiceExit::Busy => Ok\(75\)'
+chk "锁失败以非零码退出（否则服务停在 inactive）" src/cli/run.rs 'ServiceExit::Busy => Ok\(75\)'
 chk "SIGHUP = 重载而不是停机" src/linux/mod.rs 'RELOAD\.store\(true'
 chk "挂起恢复补灯" src/linux/mod.rs 'resume_detected\('
 chk "grab 运行期重试" src/engine.rs 'should_retry_grab'
@@ -52,10 +52,10 @@ chk "键盘背光 sysfs 路径每次读失败重新解析" src/brightness.rs 'le
 
 echo "== 界面不被后台探测拖住 ==" | tee -a "$OUT"
 chk "平台状态在后台线程读（同步起 systemctl 会卡帧）" gui/src/app/mod.rs 'state_rx: Option<std::sync::mpsc::Receiver<Snapshot>>'
-chk "命令面板在后台线程跑" gui/src/app/mod.rs 'std::thread::spawn\(move \|\| \{'
+chk "命令面板在后台线程跑" gui/src/app/command.rs 'std::thread::spawn\(move \|\| \{'
 chk "服务启停走后台线程（systemctl restart 慢时会卡界面）" gui/src/app/mod.rs 'op_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>'
-chk "服务操作同一时刻只放行一件" gui/src/app/mod.rs '上一步服务操作还没结束'
-chk "状态读取有超时上限（否则重读被永久挡住）" gui/src/app/mod.rs 'STATE_TIMEOUT'
+chk "服务操作同一时刻只放行一件" gui/src/app/tasks.rs '上一步服务操作还没结束'
+chk "状态读取有超时上限（否则重读被永久挡住）" gui/src/app/tasks.rs 'STATE_TIMEOUT'
 chk "原子写先 fsync 临时文件再改名" gui/src/settings.rs 'f\.sync_all\(\)'
 chk "命令输出有采集上限" gui/src/cli_bridge.rs 'MAX_CAPTURE'
 chk "界面设置解析失败时留副本" gui/src/settings.rs 'fn keep_broken_copy'
@@ -63,7 +63,7 @@ chk "档表按亮度排序（否则高档更暗）" gui/src/settings.rs 'kbd_map
 chk "驱动配置保存回显被修正项" gui/src/app/driver.rs '见右侧列表'
 
 echo "== 键位/配置不被静默丢弃 ==" | tee -a "$OUT"
-chk "配置坏字段前移 sanitize" src/config.rs 'fn sanitize'
+chk "配置坏字段前移 sanitize" src/config/sanitize.rs 'fn sanitize'
 chk "片段应用先全量解析" gui/src/app/extend.rs 'apply_fragment'
 
 echo "----------------------------------------------------------------" | tee -a "$OUT"
