@@ -58,6 +58,9 @@ chk "服务操作同一时刻只放行一件" gui/src/app/mod.rs '上一步服�
 chk "状态读取有超时上限（否则重读被永久挡住）" gui/src/app/mod.rs 'STATE_TIMEOUT'
 chk "原子写先 fsync 临时文件再改名" gui/src/settings.rs 'f\.sync_all\(\)'
 chk "命令输出有采集上限" gui/src/cli_bridge.rs 'MAX_CAPTURE'
+chk "界面设置解析失败时留副本" gui/src/settings.rs 'fn keep_broken_copy'
+chk "档表按亮度排序（否则高档更暗）" gui/src/settings.rs 'kbd_map.sort_unstable'
+chk "驱动配置保存回显被修正项" gui/src/app/driver.rs '见右侧列表'
 
 echo "== 键位/配置不被静默丢弃 ==" | tee -a "$OUT"
 chk "配置坏字段前移 sanitize" src/config.rs 'fn sanitize'

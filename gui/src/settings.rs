@@ -66,6 +66,12 @@ impl Settings {
             self.step = self.steps.clamp(1, self.steps);
         }
         crate::kbdmap::sanitize(&mut self.kbd_map);
+        // 档表必须「从暗到亮」。单项合法还不够：手改成 `[0x48, 0x41, 0x43, 0x48]` 时每项
+        // 都在硬件档位内，但第 1 档比第 2 档亮，键盘背光一档档往上按反而变暗。界面直接
+        // 拿这张表下发，驱动那份配置又不会被回头校验，所以在这里排一次序收干净。
+        if !crate::kbdmap::monotonic(&self.kbd_map) {
+            self.kbd_map.sort_unstable();
+        }
         self.poll_ms = self.poll_ms.clamp(100, 5000);
     }
 }
@@ -89,13 +95,73 @@ pub fn config_path() -> PathBuf {
 
 /// 读配置；文件不存在或损坏时返回默认值（不阻断界面启动）。
 pub fn load() -> Settings {
+    load_with_notes().0
+}
+
+/// 解析一份设置文本。坏文本不 panic、不半途而废，退回默认值并给出原因。
+///
+/// 抽成纯函数是为了能直接测「文件坏了会怎样」——这条路径过去没有任何测试，
+/// 而它恰恰是最容易静默吃掉用户设置的地方。
+pub(crate) fn parse_settings(text: &str) -> (Settings, Option<String>) {
+    match serde_json::from_str::<Settings>(text) {
+        Ok(mut settings) => {
+            settings.sanitize();
+            (settings, None)
+        }
+        Err(err) => (Settings::default(), Some(err.to_string())),
+    }
+}
+
+/// 读设置，并把「读不回来」的原因一并交出来。
+///
+/// 过去这里读失败或解析失败一律安静地退回默认值：用户的档位、联动开关、上次选的
+/// 接口全部消失，界面看起来一切正常，下一次保存还会把那份坏文件直接覆盖掉，连
+/// 事后排查的线索都不剩。现在解析失败时先把原文件留一份副本，再把原因交给界面显示。
+pub fn load_with_notes() -> (Settings, Vec<String>) {
     let path = config_path();
-    let mut settings = match std::fs::read_to_string(&path) {
-        Ok(text) => serde_json::from_str::<Settings>(&text).unwrap_or_default(),
-        Err(_) => Settings::default(),
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return (Settings::default(), Vec::new())
+        }
+        Err(err) => {
+            return (
+                Settings::default(),
+                vec![format!(
+                    "读界面设置失败：{err}（本次按默认值显示，保存会覆盖 {}）",
+                    path.display()
+                )],
+            )
+        }
     };
-    settings.sanitize();
-    settings
+    let (settings, err) = parse_settings(&text);
+    let Some(err) = err else {
+        return (settings, Vec::new());
+    };
+    let mut note = format!("界面设置解析失败：{err}（本次按默认值显示）");
+    match keep_broken_copy(&path) {
+        Some(copy) => note.push_str(&format!("，原文件已另存为 {}", copy.display())),
+        None => note.push_str("，但没能另存原文件"),
+    }
+    (settings, vec![note])
+}
+
+/// 把坏掉的原文件另存一份，返回副本路径。
+///
+/// 已有同名副本时不覆盖——用户可能连着几次都起不来，第一份才是原始现场。
+fn keep_broken_copy(path: &std::path::Path) -> Option<PathBuf> {
+    let base = path.to_string_lossy().to_string();
+    let mut candidate = PathBuf::from(format!("{base}.broken"));
+    let mut n = 2;
+    while candidate.exists() {
+        candidate = PathBuf::from(format!("{base}.broken-{n}"));
+        n += 1;
+        if n > 32 {
+            return None;
+        }
+    }
+    std::fs::copy(path, &candidate).ok()?;
+    Some(candidate)
 }
 
 /// 写配置。
@@ -248,5 +314,69 @@ mod tests {
         };
         s.sanitize();
         assert_eq!(s.kbd_map, vec![0x41, 0x41, 0x45, 0x48]);
+    }
+}
+
+#[cfg(test)]
+mod resilience_tests {
+    use super::*;
+    use asus_numpad::config::{VAL_BRIGHTNESS_BASE, VAL_OFF};
+
+    #[test]
+    fn broken_text_falls_back_with_reason() {
+        let (settings, err) = parse_settings("{ 这不是 json");
+        assert!(err.is_some(), "坏文件必须说出原因，不能当作正常");
+        assert_eq!(settings, Settings::default());
+    }
+
+    #[test]
+    fn partial_text_keeps_known_fields() {
+        // 旧版本留下的文件只有一部分字段，其余要落回默认值而不是整份丢掉
+        let (settings, err) = parse_settings(r#"{"step": 2, "steps": 4}"#);
+        assert!(err.is_none());
+        assert_eq!(settings.step, 2);
+        assert_eq!(settings.steps, 4);
+        assert_eq!(settings.poll_ms, Settings::default().poll_ms);
+    }
+
+    #[test]
+    fn out_of_range_values_get_clamped() {
+        let (settings, err) =
+            parse_settings(r#"{"step": 99, "steps": 4, "poll_ms": 1, "kbd_map": [9, 9, 9, 9]}"#);
+        assert!(err.is_none());
+        assert_eq!(settings.step, 4);
+        assert_eq!(settings.poll_ms, 100);
+        // 合法值只有两种：熄灭 0x00，或硬件亮度档 0x41..=0x48
+        assert!(settings.kbd_map.iter().all(|v| *v == VAL_OFF
+            || (VAL_BRIGHTNESS_BASE + 1..=VAL_BRIGHTNESS_BASE + VAL_BRIGHTNESS_MAX).contains(v)));
+    }
+
+    #[test]
+    fn unordered_table_gets_sorted() {
+        // 每项都在硬件档位内，但顺序是乱的：排完必须是单调不递减
+        let (settings, err) =
+            parse_settings(r#"{"kbd_map": [72, 65, 67, 72], "steps": 4, "step": 4}"#);
+        assert!(err.is_none());
+        assert_eq!(settings.kbd_map, vec![65, 67, 72, 72]);
+        assert!(crate::kbdmap::monotonic(&settings.kbd_map));
+    }
+
+    #[test]
+    fn broken_copy_never_overwrites_first_scene() {
+        let dir =
+            std::env::temp_dir().join(format!("asus-numpad-gui-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        std::fs::write(&path, "first").unwrap();
+        let one = keep_broken_copy(&path).unwrap();
+        std::fs::write(&path, "second").unwrap();
+        let two = keep_broken_copy(&path).unwrap();
+        let first = std::fs::read_to_string(&one).unwrap();
+        let second = std::fs::read_to_string(&two).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(first, "first");
+        assert_eq!(second, "second");
+        assert_ne!(one, two, "两份副本不能互相覆盖");
     }
 }

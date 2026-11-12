@@ -62,19 +62,100 @@ impl Draft {
 
     /// 落盘。返回给状态栏用的文案。
     pub fn save(&mut self) -> anyhow::Result<String> {
-        self.cfg.sanitize();
+        // `sanitize` 会把越界 / 装不上的项夹回合法值，并逐条说明原因。过去这里把
+        // 返回值直接丢掉、再把 notes 清空，于是「保存成功」背后可能已经悄悄丢掉一条
+        // 非法热键或者一整个装不上的布局，用户存完看不出任何异常，重启后才发现配置
+        // 不是自己写的那份。现在把这些说明留下来给界面显示，并在结果里点明被改过。
+        let notes = self.cfg.sanitize();
         let text = format!("{}\n", self.cfg.to_json());
         // 复用设置的原子写：临时文件 + rename，写一半崩了也不会把配置文件截断
         crate::settings::write_atomic(&self.write_path, &text)
             .map_err(|err| anyhow::anyhow!("写入 {} 失败：{err}", self.write_path.display()))?;
-        self.notes.clear();
+        let fixed = notes.len();
+        self.notes = notes;
         self.dirty = false;
         self.existed = true;
-        Ok(format!("驱动配置已写入 {}", self.write_path.display()))
+        let path = self.write_path.display();
+        Ok(if fixed == 0 {
+            format!("驱动配置已写入 {path}")
+        } else {
+            // notes 里既有「夹回合法值」也有「这条设定生效后要知道的事」，不细分，统一说成提示
+            format!("驱动配置已写入 {path}，另有 {fixed} 条提示，见右侧列表")
+        })
     }
 
     /// 当前编辑内容的 JSON 预览（与 `asus-numpad --dump-config` 同一份序列化）。
     pub fn json(&self) -> String {
         self.cfg.to_json()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn draft_at(dir: &std::path::Path) -> Draft {
+        let path = dir.join("asus-numpad.json");
+        let mut draft = Draft {
+            path: path.clone(),
+            write_path: path,
+            existed: false,
+            cfg: Config::default(),
+            notes: Vec::new(),
+            dirty: true,
+        };
+        draft.cfg.hotkeys = Vec::new();
+        draft
+    }
+
+    fn tmpdir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "asus-numpad-gui-driver-{tag}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn save_reports_fixed_parameters() {
+        let dir = tmpdir("fixed");
+        let mut draft = draft_at(&dir);
+        // 装不上的热键（只有修饰键）：sanitize 会把它挑出来并夹回可用写法
+        draft.cfg.hotkeys = vec![asus_numpad::custom::HotkeySpec {
+            gesture: "ctrl+".to_string(),
+            action: "on".to_string(),
+        }];
+        let msg = draft.save().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            msg.contains("提示"),
+            "被修正过就要在结果里说明，实际是：{msg}"
+        );
+        assert!(!draft.notes.is_empty(), "修正原因要留给界面显示");
+    }
+
+    #[test]
+    fn save_silent_when_nothing_fixed() {
+        let dir = tmpdir("clean");
+        let mut draft = draft_at(&dir);
+        let msg = draft.save().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!msg.contains("提示"), "没改动就别吓人：{msg}");
+        assert!(draft.notes.is_empty());
+    }
+
+    #[test]
+    fn saved_file_is_readable_back() {
+        let dir = tmpdir("roundtrip");
+        let mut draft = draft_at(&dir);
+        draft.cfg.pressure_switch.enabled = false;
+        draft.save().unwrap();
+        let path = dir.join("asus-numpad.json");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(text.trim().ends_with('}'), "落盘内容应是完整 JSON");
+        assert!(text.contains("pressure_switch"));
     }
 }
