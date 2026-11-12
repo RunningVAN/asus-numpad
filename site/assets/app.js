@@ -345,6 +345,14 @@
   }
   function applyTheme(next, remember) {
     document.documentElement.setAttribute("data-theme", next);
+    // 移动端地址栏着色跟随实际主题：手动切换后 media 查询不再准确，
+    // 所以有 JS 时收敛成一条 meta，只留第一条并改写它的值。
+    var metas = document.querySelectorAll('meta[name="theme-color"]');
+    if (metas.length) {
+      for (var i = metas.length - 1; i > 0; i--) metas[i].remove();
+      metas[0].removeAttribute("media");
+      metas[0].setAttribute("content", next === "dark" ? "#0a0b0f" : "#f7f8fa");
+    }
     if (remember) {
       try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
     }
