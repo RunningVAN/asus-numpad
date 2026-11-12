@@ -5,30 +5,30 @@ Origin: asus-numpad
 Label: asus-numpad
 Suite: stable
 Codename: stable
-Version: 1.0.2
+Version: 1.0.3
 Architectures: amd64
 Components: main
 Description: ASUS NumberPad userspace driver for Linux
-Date: Fri, 06 Nov 2026 13:07:56 UTC
+Date: Thu, 12 Nov 2026 03:39:02 UTC
 SHA256:
- 1c1c49884d704d0571b407ff4c12d9fec3b8202616fe427784b3fcbd657a1500 2046 main/binary-amd64/Packages
- 4ce9e91c4cfa70e60b7ac179dd79ee5aa7b8053fe5c262a02fb615bd503e80b9 752 main/binary-amd64/Packages.gz
+ 37fc6a4d6314c403132a533c2bad6ddfe9cfcb6db57fa45dcfc22c7217453d95 2728 main/binary-amd64/Packages
+ 4ac7e4b78ee0154ea1ddbe019ef991cbca414a95bd7e84939e3569502c8f2156 865 main/binary-amd64/Packages.gz
 MD5Sum:
- 31d1b727ab14991e6e5c7e118770fae4 2046 main/binary-amd64/Packages
- 9496076778cb90609229d5ba244ef820 752 main/binary-amd64/Packages.gz
+ 9092b507a4ca40db6e765b8168a762b4 2728 main/binary-amd64/Packages
+ 5f38fc240bf7d8fb1303cb6df10a8297 865 main/binary-amd64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCgAdFiEEefKCFX8tP/jjxoBjFMK/YRmG4WgFAmrt0SwACgkQFMK/YRmG
-4WhiFA//RoRvDjvzWDTUC7poR0cwVSZH/AQvR79t+nUHuA7n7cqvv86Xk2Z5Knru
-SiXni0hitD8oiSgXDXtsbB7l+9GD1I4UjGhbZFIug1hHzz+EO+Narp0xhRDIVIOg
-lkUD7NtpDtIc0Vq3uC6IoMVjleHHquSs077ZEsI94+JLIfpI809etYogAroH/oGF
-N7ZqKP/OUTQnOsAjMsi/BfGHJcVrcB/eX3QUvpjkH56JqdlsAfqnYqifYH1L5th4
-GYfRwccduzrE+npc8CR2qyx4KqUA60MQBrS2KTCrgyik480RFDX2zZEx6jaQDuDu
-X9wFaFMHNyJgz9CuwZtteUaomorqkAgM7tW6PCWX9zAPfUFOks4XSoeOgGxMej7r
-hM+fm9L0Suv1z2xBb2/ortR5oikVsL5gJLgqONkPlaCW/8bhtX3mwRI2gFcYOGIt
-JF2GZPV79V2qXK6U99Wk4hRT4FQF8rSUClmJ3MSGuZGrOAcCYpKukCa8Fga+cAvH
-0rBbQsgyy6dthCnajlhH56ugWW4shhoYs+To+0+ftQlhXd+fVJ2SjjJMAL27hhge
-VotzFpA+MT1Bh6jm+dHs5T2UYB0hihAXyOHrNOLpttAsFlQ0/6+64NV9wBJd42Kv
-Cjw7MBPng2ssXNRPJGZkUb8UtKYS+QLBBpsJjZFVFolWHcsE0Hg=
-=Gk8l
+iQIzBAEBCgAdFiEEefKCFX8tP/jjxoBjFMK/YRmG4WgFAmr1NNYACgkQFMK/YRmG
+4WhIfw//Y7uSMJF623xKdOFj4tIE4+se4PQBLicfZQb48Gso+7GPWVz77Qy3faBa
+1eCh7dRWj06r61OIe0JJ61CEyX9Cgwyfowng0+zj8DH8dgy2ZEk2WTzDZHJbPn0T
+BABKwzFtwxzpeDjGhCL5kCwhzRJoql2rdw8ZPre86Ng9CgpLCK5FK26nMaOWbNWG
+xA4NGC1zGAZRLbF2q42SCxYaRoudC0agTjFNoRF3L+UMs02BiEgInqgX5seYK/Kp
+CBDmINpcTLy+9YRG3SJC5nfqzfq2CcMtfs0ZDVOXZe94221fOVN0fWrwczeiRSq/
+FZfO2g5DIsh/KcQFCS9h60wKZkcSa+J0w1vicXyc5c2KYZf7eK/VBoAWvVUUZ7Xa
+Ycc+tkh/QVF5X2/hBQyDV4WTcN6OSLQz47iI1xV4pB5kVb7UyYzrGwRSSVKcr2En
+tRw10ahdFDZdTYhB3CBL3us/ZK7DLdh33MPCWMraqEvicXuXcns8VQW4+uWzDOkD
+DcQjeWNXyCchMkIyTmyyWDHhsgs4cl9h9pSIi/opqTFeFEn+9bE0ohc5b1dw2O8v
+WOOvRHxYTi4oBBf4+UqWjQ6072aFhLw5UB7rTLsEumRKlWe/8ei68qLWIrKvrMG5
+xzwHxU1wElszV9HxmEw9FROaEmvDCEbACOOK8Ov2+KZft5bU8mU=
+=5/TU
 -----END PGP SIGNATURE-----

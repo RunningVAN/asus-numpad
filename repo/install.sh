@@ -128,7 +128,7 @@ install_pacman() {
         log "已写入源，未安装"
         return 0
     fi
-    pacman -Syu --noconfirm "$PKG"
+    pacman -Sy --noconfirm "$PKG"
 }
 
 install_apk() {
@@ -136,9 +136,8 @@ install_apk() {
     if [ "$SIGNED" = 1 ]; then
         fetch "$BASE/keys/asus-numpad-apk.rsa.pub" > /etc/apk/keys/asus-numpad-apk.rsa.pub
     fi
-    arch="$(apk --print-arch)"
-    if ! grep -qxF "$BASE/alpine/$arch" /etc/apk/repositories; then
-        echo "$BASE/alpine/$arch" >> /etc/apk/repositories
+    if ! grep -qxF "$BASE/alpine" /etc/apk/repositories; then
+        echo "$BASE/alpine" >> /etc/apk/repositories
     fi
     if [ "$MODE" = "--repo-only" ]; then
         log "已写入源，未安装"
