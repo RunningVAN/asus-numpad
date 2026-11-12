@@ -528,6 +528,31 @@ impl App {
                         let len = self.ext_snippet.len();
                         self.ext_snippet_msg = Some((format!("已生成 {len} 字节的片段"), false));
                     }
+                    // 复制走系统剪贴板：片段是给人转发的，还得让人自己去框里选中再 Ctrl+C 太笨。
+                    let resp = theme::secondary(ui, &p, "复制");
+                    let resp = theme::tip(resp, "把框里的片段放进系统剪贴板，直接发给同机型的人。");
+                    if resp.clicked() {
+                        if self.ext_snippet.trim().is_empty() {
+                            self.ext_snippet_msg =
+                                Some(("框里还是空的，先点「导出」".to_string(), true));
+                        } else {
+                            ui.ctx().copy_text(self.ext_snippet.clone());
+                            let len = self.ext_snippet.len();
+                            self.ext_snippet_msg =
+                                Some((format!("已复制 {len} 字节到剪贴板"), false));
+                        }
+                    }
+                    let resp = theme::secondary(ui, &p, "存成文件");
+                    let resp = theme::tip(
+                        resp,
+                        "把片段写成一份 .json 放进下载目录，重复导出不会覆盖上一份。",
+                    );
+                    if resp.clicked() {
+                        self.ext_snippet_msg = Some(match save_snippet(&self.ext_snippet) {
+                            Ok(path) => (format!("已写入 {}", path.display()), false),
+                            Err(err) => (err, true),
+                        });
+                    }
                     let resp = theme::secondary(ui, &p, "应用");
                     let resp = theme::tip(
                         resp,
@@ -551,6 +576,46 @@ impl App {
             }
         });
     }
+}
+
+/// 片段落盘：优先写进下载目录，没有这个目录就写到家目录。
+///
+/// 只新建、不覆盖——连点两次导出不该把上一份盖掉，那样等于没有留底。
+fn save_snippet(text: &str) -> Result<std::path::PathBuf, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err("框里还是空的，先点「导出」".to_string());
+    }
+    let home = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| "找不到家目录，没法定位保存位置".to_string())?;
+    let dir = if home.join("Downloads").is_dir() {
+        home.join("Downloads")
+    } else {
+        home
+    };
+    save_snippet_in(&dir, text)
+}
+
+/// 在给定目录里挑一个没被占用的文件名写下去。
+fn save_snippet_in(dir: &std::path::Path, text: &str) -> Result<std::path::PathBuf, String> {
+    if text.trim().is_empty() {
+        return Err("片段是空的，没什么可写".to_string());
+    }
+    for round in 1..100 {
+        let name = if round == 1 {
+            "asus-numpad-extend.json".to_string()
+        } else {
+            format!("asus-numpad-extend-{round}.json")
+        };
+        let path = dir.join(name);
+        if path.exists() {
+            continue;
+        }
+        std::fs::write(&path, text).map_err(|err| format!("写不进去：{err}"))?;
+        return Ok(path);
+    }
+    Err("同名文件太多了，先去下载目录清一下".to_string())
 }
 
 /// 四项扩展打包成一段 JSON 文本（同机型对拷用）。
@@ -1512,5 +1577,35 @@ mod tests {
             issues.iter().any(|line| line.contains("ASUE1416")),
             "{issues:?}"
         );
+    }
+
+    /// 两次导出不能互相覆盖：留底的意义就在于第一份还在。
+    #[test]
+    fn snippet_file_never_overwrites() {
+        let dir = std::env::temp_dir().join(format!("numpad-snippet-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = save_snippet_in(&dir, "{\"a\":1}").unwrap();
+        let second = save_snippet_in(&dir, "{\"a\":2}").unwrap();
+        assert_ne!(first, second);
+        assert_eq!(std::fs::read_to_string(&first).unwrap(), "{\"a\":1}");
+        assert_eq!(std::fs::read_to_string(&second).unwrap(), "{\"a\":2}");
+        assert_eq!(
+            first.file_name().unwrap().to_string_lossy(),
+            "asus-numpad-extend.json"
+        );
+        std::fs::remove_file(&first).ok();
+        std::fs::remove_file(&second).ok();
+        std::fs::remove_dir(&dir).ok();
+    }
+
+    /// 空框点「存成文件」要报错，不能悄悄写一份空文件出去。
+    #[test]
+    fn snippet_file_rejects_blank() {
+        let dir = std::env::temp_dir().join(format!("numpad-blank-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(save_snippet_in(&dir, "   ").is_err());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+        assert!(save_snippet("").is_err());
+        std::fs::remove_dir(&dir).ok();
     }
 }

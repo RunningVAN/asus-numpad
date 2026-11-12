@@ -368,6 +368,8 @@ snippet carries only `custom_layouts` / `led_proto` / `pressure_switch` / `hotke
 per-machine bits (frame cadence, geometry fallback, UI language), which need redoing when the machine
 changes anyway. Import is all-or-nothing: if any of the four fails to parse, nothing is written, so you
 never end up with a half-applied config. A template that isn't a valid report is rejected by name.
+Besides the box, Copy puts the snippet on the system clipboard to forward as-is, and Save to file
+writes a `.json` into the download folder without overwriting an earlier export.
 
 ### Checking an extension config
 
