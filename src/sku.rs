@@ -2,7 +2,7 @@
 //!
 //! ## 为什么不再按机型分包
 //!
-//! 早期做法是按机型出多个包（`asus-numpad-g614` 之类），每个包在
+//! 早期做法是按机型出多个包（`numdeck-g614` 之类），每个包在
 //! 编译期把机型写死，装错包就退出码 3 拒绝启动。这带来三个问题：
 //!
 //! * 用户必须先查清自己是哪台机器才能装——查 DMI、对表、挑包，全是多余步骤；
@@ -29,7 +29,7 @@
 //!
 //! 两条提示分开给：厂商字段明确不是 ASUS 时报「不是 ASUS 机器」，其余报「本机不在
 //! 支持列表」。读不到 DMI 的机器（虚拟机、白牌机箱、BIOS 占位串）靠手动指定
-//! `--sku` / `asus-numpad sku <id>` 放行，那是唯一的逃生通道。
+//! `--sku` / `numdeck sku <id>` 放行，那是唯一的逃生通道。
 //!
 //! ## 机型表不收的机器：幻16 系列
 //!
@@ -86,9 +86,11 @@ pub struct Sku {
 /// 分组只影响「自动识别」的 DMI 白名单，运行期选哪套键表仍由实际 HID 模组名决定，
 /// 所以分组不改变保守性：模组不在 `HID_LAYOUTS` 里，照样拒绝启动。
 ///
-/// 历史机型包名（`asus-numpad-g614` 等）由统一包 Obsoletes 掉，老用户
+/// 历史机型包名（`numdeck-g614` 等）由统一包 Obsoletes 掉，老用户
 /// `dnf upgrade` 会自动接管，不需要先手工卸载旧机型包。
-pub const SKUS: &[Sku] = &[
+/// 华硕机型表。**ARM64 构建里不编进去**——见 [`SKUS`]。
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+const ASUS_SKUS: &[Sku] = &[
     Sku {
         id: "g533",
         display: "ASUS 枪神6 / 魔霸6，15 英寸，2022（G533Z* / G513R*）",
@@ -133,6 +135,34 @@ pub const SKUS: &[Sku] = &[
     },
 ];
 
+/// ARM64 构建的「机型表」只有这一条：不认机型、不做硬件闸门，布局与报文全交给
+/// 自定义配置（`custom_layouts` + 扩展页）。
+///
+/// 依据：华硕原生带 NumberPad / DialPad 触摸板的机器全是 x86_64（Intel / AMD），
+/// aarch64 上没有一台。把机型表编进 ARM 包，除了让 `numdeck sku` 列出五条永远命中
+/// 不了的华硕机型、让启动闸门把每一台 ARM 机器都挡在「不在支持列表」之外，没有别的
+/// 作用。
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const CUSTOM_SKU: Sku = Sku {
+    id: "custom",
+    display: "未收录机型：布局与报文全部按自定义处理（ARM64 构建）",
+    // 空表 = 不做 DMI 校验 / 不做模组校验，见 [`resolve`] 的 ARM64 分支
+    models: &[],
+    excludes: &[],
+    modules: &[],
+    note: "ARM64 构建不含华硕机型表。华硕原生触摸板机型均为 x86_64，aarch64 上不存在可自动识别的 NumberPad 模组，因此本包不做机型与硬件闸门：启动即按自定义模式运行，键表在扩展页的「自定义布局」里配（按触摸板 HID 模组 ID 绑定），报文与 LED 协议同理。配好之前不会有键位输出",
+};
+
+/// 机型配置表。x86_64 上是华硕机型表，ARM64 上只有 `custom` 一条（见 [`CUSTOM_SKU`]）。
+///
+/// 索引 `[0]` 在 ARM64 上恒为 `custom`，[`resolve`] 依赖这一点。
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+pub const SKUS: &[Sku] = ASUS_SKUS;
+
+/// 机型配置表（ARM64 版：只有 `custom`）。
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+pub const SKUS: &[Sku] = &[CUSTOM_SKU];
+
 /// 机型配置是怎么选出来的——输出里要说清「凭什么判定是这台」。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkuSource {
@@ -142,6 +172,8 @@ pub enum SkuSource {
     Dmi,
     /// 触摸板模组名命中（DMI 读不出型号时的第二判据）
     Hardware,
+    /// ARM64 构建：没有机型表，一切按自定义处理（见 [`CUSTOM_SKU`]）
+    Custom,
 }
 
 impl Sku {
@@ -165,6 +197,7 @@ impl SkuSource {
             SkuSource::Manual => "manual",
             SkuSource::Dmi => "dmi",
             SkuSource::Hardware => "hardware",
+            SkuSource::Custom => "custom",
         }
     }
 
@@ -174,6 +207,7 @@ impl SkuSource {
             SkuSource::Manual => "sku.source.manual",
             SkuSource::Dmi => "sku.source.dmi",
             SkuSource::Hardware => "sku.source.hardware",
+            SkuSource::Custom => "sku.source.custom",
         }
     }
 }
@@ -215,7 +249,7 @@ pub struct Unsupported {
 impl std::fmt::Display for Unsupported {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.non_asus {
-            Some(vendor) => write!(f, "not an ASUS machine ({vendor})"),
+            Some(vendor) => write!(f, "vendor {vendor} is not in the model list"),
             None => f.write_str("no supported model matched"),
         }
     }
@@ -257,6 +291,9 @@ pub fn known_ids() -> Vec<&'static str> {
 ///
 /// 第 4 步刻意不留兜底：认不出机型就不跑，避免用别人的参数在未知硬件上「看起来跑起来了」。
 /// 读不到 DMI 的机器靠手动指定放行，不必依赖兜底。
+///
+/// **ARM64 构建例外**：表里只有 `custom` 一条，manual 校验通过后直接返回 `Custom`，
+/// 第 2～4 步整段不参与编译——没有机型表，也就无从「认不出」。
 pub fn resolve(
     identity: &DmiIdentity,
     hw: &HardwareProbe,
@@ -275,30 +312,48 @@ pub fn resolve(
         }
     }
 
-    if let Some((sku, model)) = dmi_hit(identity) {
-        return Ok(Resolved {
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    {
+        // 没有机型表可查，DMI 与模组都不参与判定：直接按自定义跑。
+        let _ = (identity, hw);
+        let sku = &SKUS[0];
+        Ok(Resolved {
             sku,
-            source: SkuSource::Dmi,
-            detail: Some(model.to_string()),
-        });
+            source: SkuSource::Custom,
+            detail: Some(sku.id.to_string()),
+        })
     }
 
-    for sku in SKUS.iter().filter(|s| !s.modules.is_empty()) {
-        if let Some(module) = hw.first_hit(sku) {
+    #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+    {
+        if let Some((sku, model)) = dmi_hit(identity) {
             return Ok(Resolved {
                 sku,
-                source: SkuSource::Hardware,
-                detail: Some(module.to_string()),
+                source: SkuSource::Dmi,
+                detail: Some(model.to_string()),
             });
         }
-    }
 
-    Err(ResolveError::Unsupported(Unsupported {
-        non_asus: non_asus_vendor(identity),
-    }))
+        for sku in SKUS.iter().filter(|s| !s.modules.is_empty()) {
+            if let Some(module) = hw.first_hit(sku) {
+                return Ok(Resolved {
+                    sku,
+                    source: SkuSource::Hardware,
+                    detail: Some(module.to_string()),
+                });
+            }
+        }
+
+        Err(ResolveError::Unsupported(Unsupported {
+            non_asus: non_asus_vendor(identity),
+        }))
+    }
 }
 
 /// 厂商字段明确表明不是 ASUS 时返回厂商名，否则 `None`。
+///
+/// 只服务 x86_64 的机型判定；ARM64 构建没有华硕机型表，这个函数不参与编译。
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
 fn non_asus_vendor(identity: &DmiIdentity) -> Option<String> {
     if identity.is_asus() != Some(false) {
         return None;
@@ -323,6 +378,9 @@ pub fn current(manual: Option<&str>) -> Result<Resolved, ResolveError> {
 ///
 /// 多条同时命中时取 `model` 最长的那个：`G614` 与 `G614JY` 都在表里时，
 /// 更长的代号更精确。
+///
+/// ARM64 构建没有机型表，这个函数不参与编译。
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
 fn dmi_hit(identity: &DmiIdentity) -> Option<(&'static Sku, &'static str)> {
     let pools = identity.haystacks();
     if pools.is_empty() {
@@ -650,6 +708,9 @@ pub fn model_tokens(text: &str) -> Vec<String> {
 ///   （`G614JY` / `G614JVR` 归 `G614`；`G6140` 不会被 `G614` 吃）；
 /// * 某个字段整串抽不出 token（纯营销名，如 `ROG STRIX SCAR 16`）→ 退回旧的
 ///   整体子串匹配，宁可宽松也不误判这种读不出代号的机器。
+///
+/// 只有 `dmi_hit` 用它；ARM64 构建没有机型表，跟着一起不参与编译。
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
 fn matches_model(model: &str, pools: &[String], pool_tokens: &[Vec<String>]) -> bool {
     let up = model.to_ascii_uppercase();
     if !up.is_ascii() || up.is_empty() {
@@ -736,7 +797,9 @@ pub fn dmi_identity_at(root: &Path) -> DmiIdentity {
     identity_at(root)
 }
 
-#[cfg(test)]
+/// 华硕机型表的用例。ARM64 构建不含这张表，这些断言在那边没有对象可断——
+/// ARM 侧的约定另见 `arm_custom_tests`。
+#[cfg(all(test, not(all(target_os = "linux", target_arch = "aarch64"))))]
 mod tests {
     use super::*;
 
@@ -1089,7 +1152,7 @@ mod tests {
 
     #[test]
     fn dmi_file_read_and_auto_selection() {
-        let root = std::env::temp_dir().join("asus-numpad-dmi-selftest");
+        let root = std::env::temp_dir().join("numdeck-dmi-selftest");
         let dir = root.join("class/dmi/id");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
@@ -1213,5 +1276,53 @@ mod tests {
                 );
             }
         }
+    }
+}
+
+/// ARM64 构建的机型表约定：只有 `custom` 一条，且 `resolve` 不看 DMI / 模组。
+///
+/// 这类构建不跑上面那组华硕机型表用例（表根本不存在），只验证「自定义」这一条路。
+#[cfg(all(test, target_os = "linux", target_arch = "aarch64"))]
+mod arm_custom_tests {
+    use super::*;
+
+    /// 表里只留 `custom`，不残留任何华硕机型条目。
+    #[test]
+    fn arm_build_ships_only_the_custom_entry() {
+        assert_eq!(SKUS.len(), 1, "ARM64 构建只应有一条机型条目");
+        assert_eq!(SKUS[0].id, "custom");
+        assert_eq!(known_ids(), vec!["custom"]);
+        // 空 models / modules 就是「不校验」的意思，别被后人填上
+        assert!(SKUS[0].models.is_empty());
+        assert!(SKUS[0].modules.is_empty());
+    }
+
+    /// 不指定 `--sku` 也照样命中 `custom`：ARM 上没有「不在支持列表」这条出路。
+    #[test]
+    fn arm_build_resolves_to_custom_without_any_match() {
+        let identity = DmiIdentity::default();
+        let resolved =
+            resolve(&identity, &HardwareProbe::default(), None).expect("ARM64 构建不应拒绝启动");
+        assert_eq!(resolved.id(), "custom");
+        assert_eq!(resolved.source, SkuSource::Custom);
+        assert_eq!(resolved.source.as_str(), "custom");
+    }
+
+    /// 显式 `--sku custom` 仍按「手动指定」报，其余 id 一律不认识。
+    #[test]
+    fn arm_build_only_knows_the_custom_id() {
+        let identity = DmiIdentity::default();
+        let hw = HardwareProbe::default();
+        let manual = resolve(&identity, &hw, Some("custom")).expect("custom 必须可用");
+        assert_eq!(manual.source, SkuSource::Manual);
+        let err =
+            resolve(&identity, &hw, Some("g614")).expect_err("华硕机型 id 在 ARM 包里不该存在");
+        assert_eq!(err, ResolveError::UnknownId(UnknownSku("g614".to_string())));
+    }
+
+    /// 没有模组表，反查键表必须落空（调用方据此走自定义布局，而不是套 G634 的键表）。
+    #[test]
+    fn arm_build_pins_no_layout_from_a_model_table() {
+        assert_eq!(layout_name_for(&SKUS[0]), None);
     }
 }

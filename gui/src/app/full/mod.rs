@@ -4,16 +4,16 @@
 //! 混合模式、手势阈值、背光通道、跟灯参数、时序参数、语言。改完点保存即落盘，
 //! 「保存并重启服务」再多做一步 `systemctl --user restart`，让后台服务读到新配置。
 //!
-//! 做法是直接读改写 [`asus_numpad::config::Config`] 的 JSON，而不是拼命令行参数：
+//! 做法是直接读改写 [`numdeck::config::Config`] 的 JSON，而不是拼命令行参数：
 //! 命令行只覆盖了其中一部分（`sku` / `layout` / `lang` / `bright`），而阈值与通道这
 //! 类参数只有配置文件一条路；界面里两者落在同一份文件上，不会出现「界面一套、CLI 一套」。
 
 use eframe::egui;
 
-use asus_numpad::config::{CalcMode, MixedMode, NumLockMode};
-use asus_numpad::custom;
-use asus_numpad::layout::{KeyMode, LayoutSupport, LAYOUTS};
-use asus_numpad::sku::{self, SKUS};
+use numdeck::config::{CalcMode, MixedMode, NumLockMode};
+use numdeck::custom;
+use numdeck::layout::{KeyMode, LayoutSupport, LAYOUTS};
+use numdeck::sku::{self, SKUS};
 
 use super::{field, small, Action, App, WARN};
 use crate::theme;

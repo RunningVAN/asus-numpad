@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use anyhow::Result;
-use asus_numpad::config::{Config, VAL_OFF};
-use asus_numpad::i18n::{self};
+use numdeck::config::{Config, VAL_OFF};
+use numdeck::i18n::{self};
 
 use super::*;
 
@@ -20,7 +20,7 @@ pub(crate) fn brightness_report(cfg: &Config) -> String {
             ],
         );
     }
-    let mut follower = asus_numpad::brightness::BrightnessFollower::new(
+    let mut follower = numdeck::brightness::BrightnessFollower::new(
         &cfg.keyboard_brightness_dir,
         levels.clone(),
     );
@@ -107,7 +107,7 @@ pub(crate) fn print_bright_status(cfg: &Config) {
         )
     );
 
-    let mut follower = asus_numpad::brightness::BrightnessFollower::new(
+    let mut follower = numdeck::brightness::BrightnessFollower::new(
         &cfg.keyboard_brightness_dir,
         cfg.manual_levels(),
     );

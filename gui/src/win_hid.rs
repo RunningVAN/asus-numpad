@@ -34,7 +34,7 @@ use windows::Win32::Storage::FileSystem::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_NUMLOCK};
 
-use asus_numpad::led_proto::LED_FEATURE_REPORT_ID;
+use numdeck::led_proto::LED_FEATURE_REPORT_ID;
 
 use crate::backend::{mark_best, Backend, DeviceInfo};
 
@@ -170,7 +170,7 @@ fn feature_caps(handle: HANDLE) -> Option<(bool, u16)> {
         // 拿不到 value caps 时退一步：只要 FEATURE 报告足够长就认为可写，
         // 真正的可用性由写报文时的返回值决定。
         return Some((
-            caps.FeatureReportByteLength as usize >= asus_numpad::led_proto::LED_FEATURE_LEN,
+            caps.FeatureReportByteLength as usize >= numdeck::led_proto::LED_FEATURE_LEN,
             caps.FeatureReportByteLength,
         ));
     }
@@ -263,7 +263,7 @@ impl Backend for WindowsHid {
     fn write(
         &mut self,
         device: &DeviceInfo,
-        frame: [u8; asus_numpad::led_proto::LED_FEATURE_LEN],
+        frame: [u8; numdeck::led_proto::LED_FEATURE_LEN],
     ) -> Result<()> {
         // 每次重开句柄：不让本程序长期占住 EC 通路
         let handle = open_path(&device.path)?;

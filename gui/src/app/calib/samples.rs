@@ -12,7 +12,7 @@ impl App {
                 &p,
                 "样本回放",
                 Some(
-                    "采集要在真机上按住触摸板，界面里做不了：在终端跑 `asus-numpad calibrate --samples s.json` \
+                    "采集要在真机上按住触摸板，界面里做不了：在终端跑 `numdeck calibrate --samples s.json` \
                      采一份，或者手写一份样本文件，回到这里解算。",
                 ),
             );

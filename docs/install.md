@@ -7,32 +7,32 @@ Alpine 的 apk，以及 Gentoo、Nix/NixOS 和任意发行版都能用的静态 
 
 - **走软件源**（推荐）：加一条仓库配置，之后 `apt upgrade` / `dnf upgrade` /
   `zypper update` / `pacman -Syu` 一同升级。
-- **直接装包**：从 [Releases](https://github.com/asus-numpad/asus-numpad/releases) 下载本机格式安装一次，升级要自己重复。
+- **直接装包**：从 [Releases](https://github.com/numdeck-dev/numdeck/releases) 下载本机格式安装一次，升级要自己重复。
 
 只有一个包，机型配置由程序在运行期自动识别，装之前不必查机型表，也不会装错包。表里对不上的
 机器会拒绝启动（退出码 `3`，并打印支持机型），不使用其他机型的参数运行。装完想确认识别结果：
 
 ```bash
-asus-numpad sku          # 识别到哪套配置、依据是什么
+numdeck sku          # 识别到哪套配置、依据是什么
 ```
 
 硬件信息读不准（虚拟机、白牌机箱、BIOS 占位串）时手动指定，写进配置长期生效：
 
 ```bash
-asus-numpad sku list     # 可选机型 id
-asus-numpad sku g614     # 手动指定
-asus-numpad sku auto     # 恢复自动识别
+numdeck sku list     # 可选机型 id
+numdeck sku g614     # 手动指定
+numdeck sku auto     # 恢复自动识别
 ```
 
 机型与模组、键表的对应见 [README 机型表](../README.md#支持机型) 与 [machines.md](machines.md)。
 
-项目已迁到 `asus-numpad` 组织，版本号从 1.0.0 重编。旧源（`RunningVAN/asus-numpad`）里 1.2.4
-及更早的包不能就地升级到 1.0.0，换源前先卸一次再装：`sudo dnf remove asus-numpad` /
-`sudo apt remove asus-numpad`。
+项目已迁到 `numdeck` 组织，版本号从 1.0.0 重编。旧源（`RunningVAN/numdeck`）里 1.2.4
+及更早的包不能就地升级到 1.0.0，换源前先卸一次再装：`sudo dnf remove numdeck` /
+`sudo apt remove numdeck`。
 
 ## 软件源
 
-仓库地址是 `https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo`，
+仓库地址是 `https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo`，
 由 CI 在每次发版后自动重建，每个生态保留最近 3 个版本。索引带 GPG 签名：apt 是
 `InRelease`，dnf / zypper 开 `repo_gpgcheck`，pacman 走 `pacman-key`，apk 用 RSA 成员签名。
 公钥随索引发布在 `repo/keys/` 下，`install.sh` 先导入公钥再按各生态的校验路径装包，没有
@@ -47,11 +47,22 @@ bookworm / trixie）、rpm 出 3 份（el9 / fc44 / suse），但那几份的二
 
 | 生态 | 包 | 编自 | 覆盖范围 |
 | --- | --- | --- | --- |
-| apt | `asus-numpad_<ver>_amd64.deb` | Ubuntu 22.04（glibc 2.35） | Ubuntu 22.04 / 24.04、Debian 12 / 13、Mint 21+ |
-| rpm | `asus-numpad-<ver>-1.el9.x86_64.rpm` | AlmaLinux 9（glibc 2.34） | RHEL / Rocky / Alma 9 与 10、Fedora、openSUSE Leap 16 / Tumbleweed |
-| pacman | `asus-numpad-<ver>-1-x86_64.pkg.tar.zst` | Arch | Arch / Manjaro / EndeavourOS |
-| apk | `asus-numpad-<ver>-r0.apk` | Alpine（musl） | Alpine 3.19+ |
-| AUR | `asus-numpad-rs`（源码包） | 你自己 makepkg | Arch / Manjaro，随滚动版一起更新 |
+| apt | `numdeck_<ver>_amd64.deb` / `_arm64.deb` | Ubuntu 22.04（glibc 2.35） | Ubuntu 22.04 / 24.04、Debian 12 / 13、Mint 21+ |
+| rpm | `numdeck-<ver>-1.el9.x86_64.rpm` / `.aarch64.rpm` | AlmaLinux 9（glibc 2.34） | RHEL / Rocky / Alma 9 与 10、Fedora、openSUSE Leap 16 / Tumbleweed |
+| pacman | `numdeck-<ver>-1-x86_64.pkg.tar.zst` | Arch | Arch / Manjaro / EndeavourOS |
+| apk | `numdeck-<ver>-r0.apk` | Alpine（musl） | Alpine 3.19+ |
+| tarball | `numdeck-<ver>-<arch>.tar.gz` | 静态 musl | 任意 x86_64 / aarch64 Linux |
+| AUR | `numdeck`（源码包） | 你自己 makepkg | Arch / Manjaro，随滚动版一起更新 |
+
+除 pacman 外每个生态都出两种架构：`x86_64`（amd64）与 `ARM64`（aarch64）。ARM64
+那份在原生 arm 机器/容器里构建，覆盖 RTX Spark、骁龙 X 这类 ARM64 笔记本。pacman
+只有 x86_64——Arch Linux ARM 是独立生态，自己的仓库和签名，官方仓库不提供 aarch64
+包；ArchLinuxARM 用户用 PKGBUILD 自己编，里面已经声明了 `aarch64`。
+
+两种架构的**功能面不同**：华硕原生 NumberPad 机型全是 x86_64，因此 ARM64 包里不含机型表，
+不读 DMI、不认触摸板模组、启动时也不拦机型，只走自定义布局——装完先在配置文件
+`/etc/numdeck/numdeck.json` 的 `custom_layouts` 里加一条（`hid_ids` 绑触摸板、`keys`
+录键位），或用图形界面的扩展页添加，否则会以「未配置自定义布局」停下。
 
 Arch 与 Alpine 不存在「跨版本通用」这回事——Arch 是滚动版，Alpine 走 musl 独立
 体系，这两份是各自的原生包，不算重复。
@@ -64,12 +75,12 @@ Fedora / openSUSE Leap 16 / Tumbleweed，逐个执行 `--version`，有一处装
 
 ```bash
 sudo install -d -m 0755 /usr/share/keyrings
-curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.gpg \
-  | sudo tee /usr/share/keyrings/asus-numpad.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
+curl -fsSL https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.gpg \
+  | sudo tee /usr/share/keyrings/numdeck.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/numdeck.gpg] https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/numdeck.list
 sudo apt update
-sudo apt install asus-numpad
+sudo apt install numdeck
 ```
 
 `signed-by` 把公钥钉在这一个源上：`apt` 只认这把钥签的 `Release` / `InRelease`，
@@ -79,17 +90,17 @@ sudo apt install asus-numpad
 ### Fedora / RHEL / Rocky / Alma
 
 ```bash
-sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
-sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
-[asus-numpad]
-name=asus-numpad
-baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
+sudo rpm --import https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc
+sudo tee /etc/yum.repos.d/numdeck.repo >/dev/null <<'EOF'
+[numdeck]
+name=numdeck
+baseurl=https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/rpm/$basearch
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+gpgkey=https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc
 EOF
-sudo dnf install asus-numpad
+sudo dnf install numdeck
 ```
 
 `gpgcheck=1` 校验包签名，`repo_gpgcheck=1` 校验 `repomd.xml` 的签名：索引被改过、
@@ -100,10 +111,10 @@ sudo dnf install asus-numpad
 仓库是 rpm-md，zypper 直接读，不需要另编一份 SUSE 包：
 
 ```bash
-sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+sudo rpm --import https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc
 sudo zypper addrepo --refresh \
-  "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
-sudo zypper install asus-numpad
+  "https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/rpm/$(uname -m)" numdeck
+sudo zypper install numdeck
 ```
 
 `rpm --import` 之后 zypper 走默认的签名校验，和 dnf 侧同一个 rpm-md 源、同一把钥。源里和 Release 里就只有
@@ -118,16 +129,16 @@ Arch、Alpine）里实际安装并执行 `--version`，有一个装不上就不�
 ### Arch / Manjaro
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc -o /tmp/asus-numpad.asc
-sudo pacman-key --add /tmp/asus-numpad.asc
+curl -fsSL https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc -o /tmp/numdeck.asc
+sudo pacman-key --add /tmp/numdeck.asc
 sudo pacman-key --lsign-key 79F282157F2D3FF8E3C6806314C2BF611986E168
 sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 
-[asus-numpad]
+[numdeck]
 SigLevel = Required DatabaseRequired
-Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
+Server = https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/arch/$arch
 EOF
-sudo pacman -Syu asus-numpad
+sudo pacman -Syu numdeck
 ```
 
 `Required DatabaseRequired` 要求包与数据库都必须有有效签名：`.sig` 缺失、钥没导入都对不上。
@@ -136,18 +147,18 @@ sudo pacman -Syu asus-numpad
 
 ### Arch / Manjaro：AUR
 
-不想加第三方 pacman 源、或者想随系统滚动版更新，用源码包 `asus-numpad-rs`：
+不想加第三方 pacman 源、或者想随系统滚动版更新，用源码包 `numdeck`：
 
 ```bash
-# 立刻可用：从 Release 下 PKGBUILD 与 asus-numpad-rs.install 到空目录
-mkdir asus-numpad-rs && cd asus-numpad-rs
-curl -fLO https://github.com/asus-numpad/asus-numpad/releases/latest/download/PKGBUILD
-curl -fLO https://github.com/asus-numpad/asus-numpad/releases/latest/download/asus-numpad-rs.install
+# 立刻可用：从 Release 下 PKGBUILD 与 numdeck.install 到空目录
+mkdir numdeck && cd numdeck
+curl -fLO https://github.com/numdeck-dev/numdeck/releases/latest/download/PKGBUILD
+curl -fLO https://github.com/numdeck-dev/numdeck/releases/latest/download/numdeck.install
 makepkg -si
 ```
 
-包名带 `-rs` 是因为 AUR 上的 `asus-numpad` 已被另一个 Python 实现的项目占用；
-二进制名仍是 `asus-numpad`，PKGBUILD 用 `provides` / `conflicts` 声明了替代关系。
+包名带 `-rs` 是因为 AUR 上的 `numdeck` 已被另一个 Python 实现的项目占用；
+二进制名仍是 `numdeck`，PKGBUILD 用 `provides` / `conflicts` 声明了替代关系。
 
 AUR 包是**源码包**：`makepkg` 直接拉 GitHub 的 tag tarball 现编，所以装出来的
 是针对你本机工具链的原生二进制。每次发版 CI 都会在 Arch 容器里用同一个
@@ -156,51 +167,55 @@ PKGBUILD 实际构建安装并执行 `--version` 并校验 systemd 单元与 ude
 ### Alpine
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
-  | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" \
+curl -fsSL https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-apk.rsa.pub \
+  | sudo tee /etc/apk/keys/numdeck-apk.rsa.pub >/dev/null
+echo "https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/alpine/$(apk --print-arch)" \
   | sudo tee -a /etc/apk/repositories
 sudo apk update
-sudo apk add asus-numpad
+sudo apk add numdeck
 ```
 
-`apk` 认 `/etc/apk/keys/` 里的公钥，文件名必须与签名成员名 `.SIGN.RSA.asus-numpad-apk.rsa.pub`
+`apk` 认 `/etc/apk/keys/` 里的公钥，文件名必须与签名成员名 `.SIGN.RSA.numdeck-apk.rsa.pub`
 对上——所以公钥落盘时不能改名。
 
 ## 直接装包
 
 从 Releases 下载对应文件，文件名里的版本号以页面为准：
 
+`uname -m` 是 `x86_64` 就取文件名里带 `amd64` / `x86_64` 的那份，是 `aarch64`
+（ARM64 笔记本）就取带 `arm64` / `aarch64` 的那份。
+
 | 发行版 | 文件 |
 | --- | --- |
-| Debian / Ubuntu / Mint | `asus-numpad_<ver>_amd64.deb` |
-| Fedora / RHEL / openSUSE Leap 16 / Tumbleweed | `asus-numpad-<ver>-1.el9.x86_64.rpm` |
-| Arch / Manjaro | `asus-numpad-<ver>-1-x86_64.pkg.tar.zst` |
+| Debian / Ubuntu / Mint | `numdeck_<ver>_amd64.deb`、`numdeck_<ver>_arm64.deb` |
+| Fedora / RHEL / openSUSE Leap 16 / Tumbleweed | `numdeck-<ver>-1.el9.x86_64.rpm`、`.aarch64.rpm` |
+| Arch / Manjaro | `numdeck-<ver>-1-x86_64.pkg.tar.zst`（仅 x86_64） |
 | Arch / Manjaro（源码） | `PKGBUILD` + `.SRCINFO`（AUR 包的同一份） |
-| Alpine | `asus-numpad-<ver>-r0.apk` |
-| 任意 x86_64 | `asus-numpad-<ver>-x86_64.tar.gz` |
+| Alpine | `numdeck-<ver>-r0.apk`（按架构各一份） |
+| 任意 Linux | `numdeck-<ver>-x86_64.tar.gz`、`numdeck-<ver>-aarch64.tar.gz` |
 
 ```bash
-sudo apt install ./asus-numpad_<ver>_amd64.deb
-sudo dnf install ./asus-numpad-<ver>-1.el9.x86_64.rpm
-sudo pacman -U asus-numpad-<ver>-1-x86_64.pkg.tar.zst
-sudo apk add ./asus-numpad-1.0.0-r0.apk   # 已按上一节导入公钥；没导入时加 --allow-untrusted
+sudo apt install ./numdeck_<ver>_amd64.deb      # ARM64: _arm64.deb
+sudo dnf install ./numdeck-<ver>-1.el9.x86_64.rpm   # ARM64: .aarch64.rpm
+sudo pacman -U numdeck-<ver>-1-x86_64.pkg.tar.zst
+sudo apk add ./numdeck-1.0.0-r0.apk   # 已按上一节导入公钥；没导入时加 --allow-untrusted
 ```
 
 发版同时产出 `SHA256SUMS`，校验方式：
 
 ```bash
-sha256sum -c asus-numpad-1.2.4-SHA256SUMS --ignore-missing
+sha256sum -c numdeck-1.2.4-SHA256SUMS --ignore-missing
 ```
 
 ## tarball（任意发行版）
 
-静态链接（musl）的 tarball 不依赖 glibc 版本，可运行于任意 x86_64 Linux；
-包里带安装脚本，不经过包管理器：
+静态链接（musl）的 tarball 不依赖 glibc 版本，x86_64 与 aarch64 各一份，任何
+发行版都能跑；包里带安装脚本，不经过包管理器：
 
 ```bash
-tar xzf asus-numpad-<ver>-x86_64.tar.gz
-cd asus-numpad-1.2.4
+ARCH=$(uname -m)                # x86_64 或 aarch64
+tar xzf numdeck-<ver>-$ARCH.tar.gz
+cd numdeck-1.2.4
 sudo ./install.sh --dry-run     # 先看它要做什么
 sudo ./install.sh
 ```
@@ -222,45 +237,45 @@ sudo ./install.sh
 ```bash
 sudo mkdir -p /etc/portage/repos.conf
 # 用本地 overlay 即可：
-sudo mkdir -p /var/db/repos/asus-numpad/sys-apps/asus-numpad
-sudo cp packaging/gentoo/asus-numpad-1.0.3.ebuild /var/db/repos/asus-numpad/sys-apps/asus-numpad/
-cd /var/db/repos/asus-numpad && sudo repoman manifest 2>/dev/null || sudo pkgdev manifest
-sudo emerge -av sys-apps/asus-numpad
+sudo mkdir -p /var/db/repos/numdeck/sys-apps/numdeck
+sudo cp packaging/gentoo/numdeck-1.0.3.ebuild /var/db/repos/numdeck/sys-apps/numdeck/
+cd /var/db/repos/numdeck && sudo repoman manifest 2>/dev/null || sudo pkgdev manifest
+sudo emerge -av sys-apps/numdeck
 ```
 
-`asus-numpad-9999.ebuild` 是 live 版，直接跟 main 分支。
+`numdeck-9999.ebuild` 是 live 版，直接跟 main 分支。
 
 ## Nix / NixOS
 
 ```bash
 # 临时运行
-nix run github:asus-numpad/asus-numpad
+nix run github:numdeck-dev/numdeck
 
 # 装进 profile
-nix profile install github:asus-numpad/asus-numpad
+nix profile install github:numdeck-dev/numdeck
 
 # NixOS（flake）
 {
-  inputs.asus-numpad.url = "github:asus-numpad/asus-numpad";
+  inputs.numdeck.url = "github:numdeck-dev/numdeck";
   # 在某个 nixosSystem 的 modules 里：
-  # { imports = [ inputs.asus-numpad.nixosModules.default ];
-  #   services.asus-numpad.enable = true; }
+  # { imports = [ inputs.numdeck.nixosModules.default ];
+  #   services.numdeck.enable = true; }
 }
 ```
 
 ## 源码构建
 
 ```bash
-git clone https://github.com/asus-numpad/asus-numpad
-cd asus-numpad
+git clone https://github.com/numdeck-dev/numdeck
+cd numdeck
 cargo build --release --locked
-sudo install -Dm755 target/release/asus-numpad /usr/bin/asus-numpad
-sudo install -Dm644 packaging/common/asus-numpad.service /usr/lib/systemd/user/
-sudo install -Dm644 packaging/common/99-asus-numpad.rules /usr/lib/udev/rules.d/
+sudo install -Dm755 target/release/numdeck /usr/bin/numdeck
+sudo install -Dm644 packaging/common/numdeck.service /usr/lib/systemd/user/
+sudo install -Dm644 packaging/common/99-numdeck.rules /usr/lib/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=hidraw --action=change
 sudo udevadm settle
-systemctl --user enable --now asus-numpad
+systemctl --user enable --now numdeck
 ```
 
 `udevadm trigger --subsystem-match=hidraw` 这步别省：hidraw 节点在装包前就存在，
@@ -269,8 +284,8 @@ systemctl --user enable --now asus-numpad
 ## 装完自检
 
 ```bash
-asus-numpad check          # 机型、设备、几何换算、背光候选，只读
-systemctl --user status asus-numpad
+numdeck check          # 机型、设备、几何换算、背光候选，只读
+systemctl --user status numdeck
 getfacl /dev/hidraw* | grep -E 'user|group'   # 应看到 uaccess 授权
 ```
 
@@ -280,10 +295,10 @@ getfacl /dev/hidraw* | grep -E 'user|group'   # 应看到 uaccess 授权
 
 | 方式 | 升级 | 卸载 |
 | --- | --- | --- |
-| apt | `sudo apt upgrade` | `sudo apt remove asus-numpad` |
-| dnf / zypper | `sudo dnf upgrade` | `sudo dnf remove asus-numpad` |
-| pacman | `sudo pacman -Syu` | `sudo pacman -R asus-numpad` |
-| apk | `sudo apk upgrade` | `sudo apk del asus-numpad` |
+| apt | `sudo apt upgrade` | `sudo apt remove numdeck` |
+| dnf / zypper | `sudo dnf upgrade` | `sudo dnf remove numdeck` |
+| pacman | `sudo pacman -Syu` | `sudo pacman -R numdeck` |
+| apk | `sudo apk upgrade` | `sudo apk del numdeck` |
 | tarball | 换用新 tarball 重新执行 `install.sh` | `sudo ./uninstall.sh` |
 
-配置文件 `~/.config/asus-numpad/asus-numpad.json` 不会随卸载删除，需要重置就手动删掉。
+配置文件 `/etc/numdeck/numdeck.json` 不会随卸载删除，需要重置就手动删掉。

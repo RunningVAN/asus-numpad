@@ -1,6 +1,6 @@
 //! 表单命令的后台执行。
 //!
-//! 界面把 `CommandForm` 拼成一行 `asus-numpad <args>`，交给线程跑；读 DMI、等 systemd
+//! 界面把 `CommandForm` 拼成一行 `numdeck <args>`，交给线程跑；读 DMI、等 systemd
 //! 重启都可能几百毫秒，同步跑会把界面卡住。这里的职责只有三件：起进程、收结果、
 //! 把结果翻成日志与状态文案。
 
@@ -9,7 +9,7 @@ use crate::cli_bridge::{self, Completion};
 use super::App;
 
 impl App {
-    /// 把表单拼成 `asus-numpad <args>` 交给后台线程跑。
+    /// 把表单拼成 `numdeck <args>` 交给后台线程跑。
     ///
     /// 不在这里直接 `Command::output()`：读 DMI、等 systemd 重启服务都可能要几百毫秒，
     /// 同步执行会把界面卡住。
@@ -19,7 +19,7 @@ impl App {
         }
         let Some(bin) = self.cmd_bin.clone() else {
             self.set_status(
-                "找不到 asus-numpad 可执行文件：装好驱动包后点「重新查找」，或设置 ASUS_NUMPAD_BIN"
+                "找不到 numdeck 可执行文件：装好驱动包后点「重新查找」，或设置 NUMDECK_BIN"
                     .to_string(),
                 true,
             );
@@ -43,10 +43,10 @@ impl App {
         self.cmd_running = true;
         let note = match timeout {
             Some(limit) => format!(
-                "正在执行 asus-numpad {label} ……（{} 秒后自动收工）",
+                "正在执行 numdeck {label} ……（{} 秒后自动收工）",
                 limit.as_secs()
             ),
-            None => format!("正在执行 asus-numpad {label} ……"),
+            None => format!("正在执行 numdeck {label} ……"),
         };
         self.set_status(note, false);
     }
@@ -81,7 +81,7 @@ impl App {
         let label = if done.argv.len() > 1 {
             done.argv[1..].join(" ")
         } else {
-            "asus-numpad".to_string()
+            "numdeck".to_string()
         };
         let mut note = done
             .error
@@ -109,7 +109,7 @@ impl App {
         } else {
             note.clone()
         };
-        self.set_status(format!("asus-numpad {label}：{verdict}"), !ok);
+        self.set_status(format!("numdeck {label}：{verdict}"), !ok);
 
         // 写配置的子命令会改机型 / 布局 / 档位 / 语言，界面上的状态跟着重读一次
         if ok && wrote {

@@ -53,8 +53,8 @@ log "布置 deb 目录树"
 install_common_files "$ROOT" "$PKGROOT"
 
 # 配置文件放进 /etc，conffiles 让 dpkg 在升级时保留用户改过的版本
-install -d "$PKGROOT/etc/asus-numpad"
-cat > "$PKGROOT/etc/asus-numpad/asus-numpad.json" <<'JSON'
+install -d "$PKGROOT/etc/numdeck"
+cat > "$PKGROOT/etc/numdeck/numdeck.json" <<'JSON'
 {
   "numlock": "sync",
   "calc_gesture": true,
@@ -78,13 +78,13 @@ Architecture: $DEB_ARCH
 Depends: libc6 (>= 2.31)
 Recommends: systemd
 Installed-Size: $(du -sk --exclude=DEBIAN "$PKGROOT" | cut -f1)
-Maintainer: asus-numpad maintainers <maintainers@example.invalid>
+Maintainer: numdeck maintainers <maintainers@example.invalid>
 Homepage: $PKG_URL
 Description: $PKG_SUMMARY
 $(deb_indent_desc)
 EOF
 
-printf '/etc/asus-numpad/asus-numpad.json\n' > "$PKGROOT/DEBIAN/conffiles"
+printf '/etc/numdeck/numdeck.json\n' > "$PKGROOT/DEBIAN/conffiles"
 
 # 校验：漏掉 section 的 control 会被 lintian 拦下，这里先自己挡
 grep -q '^Package: ' "$PKGROOT/DEBIAN/control" || die "control 生成异常"

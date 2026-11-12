@@ -4,33 +4,39 @@
 //!
 //! * **内置即兜底**：三份语言文件用 `include_str!` 编进二进制，即使 `/usr/share` 下的
 //!   语言文件被删光也能正常输出，不会出现空白提示。
-//! * **可翻译**：安装到 `/usr/share/asus-numpad/lang/*.lang`，用户可整份替换或只放
-//!   自己关心的键；`/etc/asus-numpad/lang/` 与 `$ASUS_NUMPAD_LANG_DIR` 优先级更高，
+//! * **可翻译**：安装到 `/usr/share/numdeck/lang/*.lang`，用户可整份替换或只放
+//!   自己关心的键；`/etc/numdeck/lang/` 与 `$NUMDECK_LANG_DIR` 优先级更高，
 //!   便于本地化翻译不碰包里文件。
 //! * **键值格式**：`key = 文案`，`#` 开头为注释，值里支持 `\n` 换行转义。
 //!   缺键时按「当前语言文件 → 该语言内置 → 英文内置 → 键名」逐级回落。
-//! * **切换**：`asus-numpad lang <code|auto>` 写入配置；`--lang` 与
-//!   `$ASUS_NUMPAD_LANG` 可临时覆盖，不改配置。
+//! * **切换**：`numdeck lang <code|auto>` 写入配置；`--lang` 与
+//!   `$NUMDECK_LANG` 可临时覆盖，不改配置。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-/// 内置语言文件（与安装到 `/usr/share/asus-numpad/lang/` 的是同一份）
+/// 内置语言文件（与安装到 `/usr/share/numdeck/lang/` 的是同一份）
 pub const EMBED_ZH_CN: &str = include_str!("../lang/zh_CN.lang");
 pub const EMBED_ZH_TW: &str = include_str!("../lang/zh_TW.lang");
 pub const EMBED_EN: &str = include_str!("../lang/en.lang");
 
 /// 临时覆盖语言的环变量（优先级最高，仅影响本次进程）
-pub const LANG_ENV: &str = "ASUS_NUMPAD_LANG";
+pub const LANG_ENV: &str = "NUMDECK_LANG";
 /// 追加语言文件搜索目录
-pub const LANG_DIR_ENV: &str = "ASUS_NUMPAD_LANG_DIR";
+pub const LANG_DIR_ENV: &str = "NUMDECK_LANG_DIR";
 
 /// 语言文件的系统搜索目录（前者优先，便于本机覆盖）
 ///
-/// 用户级目录 `~/.config/asus-numpad/lang` 由 [`user_lang_dir`] 动态拼出，
+/// 用户级目录 `~/.config/numdeck/lang` 由 [`user_lang_dir`] 动态拼出，
 /// 排在系统目录之前——普通用户不写 `/etc` 也能覆盖文案。
-pub const LANG_DIRS: [&str; 2] = ["/etc/asus-numpad/lang", "/usr/share/asus-numpad/lang"];
+pub const LANG_DIRS: [&str; 4] = [
+    "/etc/numdeck/lang",
+    "/usr/share/numdeck/lang",
+    // 更名前装的包把语言文件放在旧目录下，升级未清理前继续认
+    "/etc/asus-numpad/lang",
+    "/usr/share/asus-numpad/lang",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lang {
@@ -134,7 +140,7 @@ pub fn detect_system() -> Lang {
     Lang::En
 }
 
-/// 环境变量 `ASUS_NUMPAD_LANG` 指定的语言（无则 None）。
+/// 环境变量 `NUMDECK_LANG` 指定的语言（无则 None）。
 pub fn detect_env_override() -> Option<Lang> {
     env_nonempty(LANG_ENV).and_then(|v| Lang::parse(&v))
 }
@@ -145,7 +151,7 @@ pub fn search_dirs() -> Vec<PathBuf> {
     if let Some(d) = env_nonempty(LANG_DIR_ENV) {
         dirs.push(PathBuf::from(d));
     }
-    // 用户级覆盖（免 root）：~/.config/asus-numpad/lang，写自己的家目录就能改文案
+    // 用户级覆盖（免 root）：~/.config/numdeck/lang，写自己的家目录就能改文案
     if let Some(d) = user_lang_dir() {
         dirs.push(d);
     }
@@ -155,13 +161,13 @@ pub fn search_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-/// 用户级语言目录：`$XDG_CONFIG_HOME/asus-numpad/lang` 或 `~/.config/asus-numpad/lang`。
+/// 用户级语言目录：`$XDG_CONFIG_HOME/numdeck/lang` 或 `~/.config/numdeck/lang`。
 pub fn user_lang_dir() -> Option<PathBuf> {
     let base = match env_nonempty("XDG_CONFIG_HOME") {
         Some(x) => PathBuf::from(x),
         None => PathBuf::from(env_nonempty("HOME")?).join(".config"),
     };
-    Some(base.join("asus-numpad").join("lang"))
+    Some(crate::compat::pick_user_dir(&base, "numdeck").join("lang"))
 }
 
 /// 解析 `.lang` 文本：`key = value`，`#` 注释，空行忽略，值支持 `\n` / `\t` 转义。
@@ -218,6 +224,26 @@ pub struct Catalog {
     source: Option<PathBuf>,
 }
 
+/// ARM64 构建不含机型表，语言包里那些「某机型用什么触摸板、哪代没 NumberPad」的
+/// 说明文案一并丢弃：本构建认不出任何华硕机型，留着只会出现在 `sku list` 与自检里。
+/// 只保留 `sku.custom.*`（自定义布局自己的说明）与 `sku.source.*` 这类通用键。
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+fn drop_model_copy(map: &mut HashMap<String, String>) {
+    map.retain(|k, _| {
+        let Some(rest) = k.strip_prefix("sku.") else {
+            return true;
+        };
+        let Some((id, field)) = rest.rsplit_once('.') else {
+            return true;
+        };
+        id == "custom" || (field != "display" && field != "note")
+    });
+}
+
+/// 非 ARM64 构建原样保留机型文案。
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+fn drop_model_copy(_map: &mut HashMap<String, String>) {}
+
 impl Catalog {
     /// 加载某个语言：内置为基础，再按 `search_dirs()` 顺序覆盖（高优先级目录先覆盖）。
     pub fn load(lang: Lang) -> Catalog {
@@ -233,20 +259,27 @@ impl Catalog {
                 source = Some(path);
             }
         }
+        let mut en = parse_lang_text(EMBED_EN);
+        drop_model_copy(&mut map);
+        drop_model_copy(&mut en);
         Catalog {
             lang,
             map,
-            en: parse_lang_text(EMBED_EN),
+            en,
             source,
         }
     }
 
     /// 纯离线构造（测试用，不读文件系统）。
     pub fn from_text(lang: Lang, text: &str) -> Catalog {
+        let mut map = parse_lang_text(text);
+        let mut en = parse_lang_text(EMBED_EN);
+        drop_model_copy(&mut map);
+        drop_model_copy(&mut en);
         Catalog {
             lang,
-            map: parse_lang_text(text),
-            en: parse_lang_text(EMBED_EN),
+            map,
+            en,
             source: None,
         }
     }
@@ -546,5 +579,42 @@ mod tests {
         assert!(text.contains("/sys/x"), "{text}");
         assert!(text.contains("500"), "{text}");
         assert!(!text.contains("{dir}"), "{text}");
+    }
+}
+
+/// ARM64 构建专属：机型说明文案必须被丢掉，自定义布局的说明必须留着。
+#[cfg(all(test, target_os = "linux", target_arch = "aarch64"))]
+mod arm_copy_tests {
+    use super::*;
+
+    #[test]
+    fn model_copy_is_dropped() {
+        let text = "sku.g614.display = ASUS 枪神7\nsku.g614.note = ASUE1416\n\
+                    sku.custom.display = 自定义布局\nsku.source.custom = 按自定义布局运行\n";
+        let cat = Catalog::from_text(Lang::ZhCn, text);
+        // 机型文案取不到 → 回落键名本身
+        assert_eq!(cat.get("sku.g614.display"), "sku.g614.display");
+        assert_eq!(cat.get("sku.g614.note"), "sku.g614.note");
+        // 自定义布局自己的文案不受影响
+        assert_eq!(cat.get("sku.custom.display"), "自定义布局");
+        assert_eq!(cat.get("sku.source.custom"), "按自定义布局运行");
+    }
+
+    #[test]
+    fn builtin_pack_has_no_model_copy() {
+        for lang in Lang::ALL {
+            let cat = Catalog::from_text(lang, lang.embedded());
+            for id in ["g614", "g615", "g634", "g713", "g834"] {
+                let key = format!("sku.{id}.display");
+                assert_eq!(cat.get(&key), key.as_str(), "{} 里残留 {key}", lang.code());
+            }
+        }
+    }
+
+    #[test]
+    fn arm_help_keys_exist() {
+        let cat = Catalog::from_text(Lang::ZhCn, Lang::ZhCn.embedded());
+        assert!(cat.get("cli.sku.help.arm").starts_with("本构建不含机型表"));
+        assert!(cat.get("cli.cmd.sku.long.arm").contains("自定义布局"));
     }
 }

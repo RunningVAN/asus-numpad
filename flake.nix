@@ -1,5 +1,5 @@
 {
-  description = "asus-numpad — ASUS 触摸板数字小键盘 Linux 驱动";
+  description = "numdeck — ASUS 触摸板数字小键盘 Linux 驱动";
 
   # 不用 flake-utils：只支持 Linux 两个架构，手写 genAttrs 更少一层依赖。
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -12,12 +12,12 @@
     {
       packages = eachSystem (pkgs: {
         default = pkgs.callPackage ./packaging/nix/package.nix { };
-        asus-numpad = self.packages.${pkgs.system}.default;
+        numdeck = self.packages.${pkgs.system}.default;
       });
 
-      # NixOS 模块：services.asus-numpad.enable = true;
+      # NixOS 模块：services.numdeck.enable = true;
       nixosModules.default = ./packaging/nix/module.nix;
-      nixosModules.asus-numpad = self.nixosModules.default;
+      nixosModules.numdeck = self.nixosModules.default;
 
       formatter = eachSystem (pkgs: pkgs.nixpkgs-fmt);
 

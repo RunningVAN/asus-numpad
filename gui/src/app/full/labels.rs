@@ -15,6 +15,8 @@ pub(super) fn source_label(source: sku::SkuSource) -> &'static str {
         sku::SkuSource::Manual => "手动指定",
         sku::SkuSource::Dmi => "DMI 机型",
         sku::SkuSource::Hardware => "触摸板模组",
+        // ARM64 构建不带机型表，机型恒为自定义布局
+        sku::SkuSource::Custom => "自定义布局（无机型表）",
     }
 }
 

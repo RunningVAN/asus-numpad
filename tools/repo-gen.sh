@@ -32,7 +32,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST="$ROOT/dist"
 OUT="$ROOT/repo"
 KEEP=3
-BASE_URL="https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo"
+BASE_URL="https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo"
 
 # 签名密钥。CI 里通过环境变量注入，本地不给就是未签名仓库。
 GPG_KEY="${REPO_GPG_KEY:-}"
@@ -59,11 +59,11 @@ done
 [[ -d "$DIST" ]] || die "产物目录不存在: $DIST"
 
 # 版本从 deb/rpm 文件名里取，四个生态共用同一套版本号
-# deb 名字有两种：带改版号（asus-numpad_1.0.0-1_amd64.deb）和不带（asus-numpad_1.0.0_amd64.deb）
+# deb 名字有两种：带改版号（numdeck_1.0.0-1_amd64.deb）和不带（numdeck_1.0.0_amd64.deb）
 VERSION="$(ls "$DIST" | sed -n \
-    -e 's/^asus-numpad_\([0-9][^-]*\)_[a-z0-9]*\.deb$/\1/p' \
-    -e 's/^asus-numpad_\([0-9][^-]*\)-[0-9][^-]*_[a-z0-9]*\.deb$/\1/p' \
-    -e 's/^asus-numpad-\([0-9][^-]*\)-[0-9]*\..*\.rpm$/\1/p' \
+    -e 's/^numdeck_\([0-9][^-]*\)_[a-z0-9]*\.deb$/\1/p' \
+    -e 's/^numdeck_\([0-9][^-]*\)-[0-9][^-]*_[a-z0-9]*\.deb$/\1/p' \
+    -e 's/^numdeck-\([0-9][^-]*\)-[0-9]*\..*\.rpm$/\1/p' \
   | sort -V | tail -1)"
 [[ -n "$VERSION" ]] || warn "推不出版本号，索引里的 Date 用当天"
 VERSION="${VERSION:-0.0.0}"
@@ -77,8 +77,10 @@ log "版本 ${VERSION}，产物 ${DIST}，输出 $OUT"
 # 被当成"最旧"直接删掉，索引里只剩旧版本，而脚本照样以成功退出。发布侧看不出异常，
 # 装的人却拿到旧包。这里宁可让流水线红掉，也不产出这种索引。
 existing_versions=()
-for d in "$OUT/apt/pool/main/a/asus-numpad" "$OUT/rpm/x86_64" \
-         "$OUT/arch/x86_64" "$OUT/alpine/x86_64"; do
+for d in "$OUT/apt/pool/main/a/numdeck" \
+         "$OUT/rpm/x86_64" "$OUT/rpm/aarch64" \
+         "$OUT/arch/x86_64" "$OUT/arch/aarch64" \
+         "$OUT/alpine/x86_64" "$OUT/alpine/aarch64"; do
     [[ -d "$d" ]] || continue
     for f in "$d"/*; do
         [[ -e "$f" ]] || continue
@@ -151,7 +153,7 @@ fi
 SRC="$DIST"
 STAGE=""
 if ((GPG_SIG || APK_SIG)); then
-    STAGE="$(mktemp -d "${TMPDIR:-/tmp}/asus-numpad-repo.XXXXXX")"
+    STAGE="$(mktemp -d "${TMPDIR:-/tmp}/numdeck-repo.XXXXXX")"
     trap 'rm -rf -- "$STAGE"' EXIT
     cp -a "$DIST"/. "$STAGE"/
     SRC="$STAGE"
@@ -164,9 +166,9 @@ fi
 # 按「版本」保留最近 KEEP 个，而不是按文件名整串保留 KEEP 个。
 #
 # 老写法有两个坑，pacman 那条线都被踩到了：
-#   1. '*.pkg.tar.*' 会把 asus-numpad-1.0.1-1-x86_64.pkg.tar.zst.sig 也算一个包，
+#   1. '*.pkg.tar.*' 会把 numdeck-1.0.1-1-x86_64.pkg.tar.zst.sig 也算一个包，
 #      计数虚高，drop 数量算多了；
-#   2. sort -V 排整串时 'asus-numpad-1.0.1-...' 排在 'asus-numpad-debug-1.0.1-...'
+#   2. sort -V 排整串时 'numdeck-1.0.1-...' 排在 'numdeck-debug-1.0.1-...'
 #      前面，最新正式包反而被当成最旧的一批删掉，repo-add 于是只索引到 debug 包，
 #      pacman 端就是 target not found。
 # 现在先按版本号分组（同一版本的正式包 / debug 包 / 各生态包同进同退），
@@ -220,11 +222,11 @@ prune() {
 # APT
 # --------------------------------------------------------------------------- #
 do_apt() {
-    local debs; shopt -s nullglob; debs=("$SRC"/asus-numpad_*.deb); shopt -u nullglob
+    local debs; shopt -s nullglob; debs=("$SRC"/numdeck_*.deb); shopt -u nullglob
     ((${#debs[@]})) || { log "跳过 apt（没有 .deb）"; return 0; }
 
     log "布置 apt 仓库"
-    local pool="$OUT/apt/pool/main/a/asus-numpad"
+    local pool="$OUT/apt/pool/main/a/numdeck"
     mkdir -p "$pool" "$OUT/apt/dists/stable/main"
     cp -f "${debs[@]}" "$pool/"
     prune "$pool"
@@ -259,18 +261,18 @@ do_apt() {
     archs="${archs# }"
 
     {
-        printf 'Origin: asus-numpad\n'
-        printf 'Label: asus-numpad\n'
+        printf 'Origin: numdeck\n'
+        printf 'Label: numdeck\n'
         printf 'Suite: stable\n'
         printf 'Codename: stable\n'
         printf 'Version: %s\n' "$VERSION"
         printf 'Architectures: %s\n' "${archs:-amd64}"
         printf 'Components: main\n'
-        printf 'Description: ASUS NumberPad userspace driver for Linux\n'
+        printf 'Description: Touchpad numeric keypad userspace driver for Linux\n'
         printf 'Date: %s\n' "$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S UTC')"
         # 路径必须相对 dists/stable/。以前写成 dists/stable/main/...，apt 认不出这是
         # 本仓库索引，update 静默跳过（退出码 0、无任何输出），装包时才报
-        # E: Unable to locate package asus-numpad。
+        # E: Unable to locate package numdeck。
         printf 'SHA256:\n'
         ( cd "$OUT/apt/dists/stable" && find main -name 'Packages*' -type f | sort | while read -r f; do
             printf ' %s %s %s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$(wc -c < "$f" | tr -d ' ')" "$f"
@@ -299,7 +301,7 @@ do_apt() {
 # --------------------------------------------------------------------------- #
 do_rpm() {
     shopt -s nullglob
-    local rpms=("$SRC"/asus-numpad-*.rpm)
+    local rpms=("$SRC"/numdeck-*.rpm)
     shopt -u nullglob
     ((${#rpms[@]})) || { log "跳过 rpm（没有 .rpm）"; return 0; }
 
@@ -369,7 +371,7 @@ do_rpm() {
 # --------------------------------------------------------------------------- #
 do_arch() {
     shopt -s nullglob
-    local pkgs=("$SRC"/asus-numpad-*.pkg.tar.*)
+    local pkgs=("$SRC"/numdeck-*.pkg.tar.*)
     shopt -u nullglob
     ((${#pkgs[@]})) || { log "跳过 arch（没有 .pkg.tar.*）"; return 0; }
 
@@ -403,28 +405,28 @@ do_arch() {
     for d in "$OUT"/arch/*/; do
         [[ -d "$d" ]] || continue
         prune "$d"
-        ( cd "$d" && rm -f asus-numpad.db* asus-numpad.files* )
+        ( cd "$d" && rm -f numdeck.db* numdeck.files* )
         if have repo-add; then
             log "生成 pacman 数据库: $(basename "$d")"
             local files=() mains=0
             while IFS= read -r f; do
                 files+=("$(basename "$f")")
-                [[ "${f##*/}" == asus-numpad-debug-* ]] || mains=$((mains + 1))
-            done < <(find "$d" -maxdepth 1 -name 'asus-numpad-*.pkg.tar.zst' ! -name '*.sig' | sort)
+                [[ "${f##*/}" == numdeck-debug-* ]] || mains=$((mains + 1))
+            done < <(find "$d" -maxdepth 1 -name 'numdeck-*.pkg.tar.zst' ! -name '*.sig' | sort)
             # 只剩 debug 包说明 prune 把正式包删了，直接失败，不要等用户装不上才发现。
             ((mains)) || die "pacman 仓库里没有正式包（只剩 debug 或为空）: $d"
-            ( cd "$d" && repo-add -q asus-numpad.db.tar.gz "${files[@]}" >/dev/null )
+            ( cd "$d" && repo-add -q numdeck.db.tar.gz "${files[@]}" >/dev/null )
             if ((GPG_SIG)); then
                 # 不用 repo-add --sign：CI 里 repo-add 是从 Arch 容器借来的，
                 # 容器里既没有 gpg 也没有私钥。建完库由宿主机签，顺序也更稳——
                 # 签完不能再动 db，否则 pacman 端一律 sig invalid。
-                rm -f "$d/asus-numpad.db.tar.gz.sig" "$d/asus-numpad.db.sig" "$d/asus-numpad.files.sig"
-                if gpg_detach "$d/asus-numpad.db.tar.gz" "$d/asus-numpad.db.tar.gz.sig"; then
-                    # pacman -Sy 取的是「库名 + .sig」，也就是 asus-numpad.db.sig；
+                rm -f "$d/numdeck.db.tar.gz.sig" "$d/numdeck.db.sig" "$d/numdeck.files.sig"
+                if gpg_detach "$d/numdeck.db.tar.gz" "$d/numdeck.db.tar.gz.sig"; then
+                    # pacman -Sy 取的是「库名 + .sig」，也就是 numdeck.db.sig；
                     # 只签 db.tar.gz.sig 的话它请求会 404，直接
                     # failed to synchronize all databases。db / files 本来就是
                     # repo-add 建的符号链接，这里同规格指过去，共用同一份签名。
-                    for base_name in asus-numpad.db asus-numpad.files; do
+                    for base_name in numdeck.db numdeck.files; do
                         [[ -e "$d/$base_name.tar.gz.sig" ]] \
                             && ln -sf "$base_name.tar.gz.sig" "$d/$base_name.sig"
                     done
@@ -521,12 +523,12 @@ if [[ -d "$KEYS_SRC" ]]; then
         cp -f "$f" "$OUT/keys/"
     done
     if ((GPG_SIG)); then
-        [[ -f "$OUT/keys/asus-numpad-repo.asc" ]] \
-            || warn "签名开着，但 tools/keys/ 里没有 asus-numpad-repo.asc：用户拿不到公钥"
+        [[ -f "$OUT/keys/numdeck-repo.asc" ]] \
+            || warn "签名开着，但 tools/keys/ 里没有 numdeck-repo.asc：用户拿不到公钥"
     fi
     if ((APK_SIG)); then
-        [[ -f "$OUT/keys/asus-numpad-apk.rsa.pub" ]] \
-            || warn "apk 签名开着，但 tools/keys/ 里没有 asus-numpad-apk.rsa.pub"
+        [[ -f "$OUT/keys/numdeck-apk.rsa.pub" ]] \
+            || warn "apk 签名开着，但 tools/keys/ 里没有 numdeck-apk.rsa.pub"
     fi
     log "公钥已随仓库发布: $(ls "$OUT/keys" | tr '\n' ' ')"
 else
@@ -541,70 +543,70 @@ log "生成 index.html"
 
 if ((APT_SIGNED)); then
 APT_CMD="sudo install -d -m 0755 /usr/share/keyrings
-curl -fsSL ${BASE_URL}/keys/asus-numpad-repo.gpg \\
-  | sudo tee /usr/share/keyrings/asus-numpad.gpg >/dev/null
-echo \"deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] ${BASE_URL}/apt stable main\" \\
-  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
-sudo apt update && sudo apt install asus-numpad"
+curl -fsSL ${BASE_URL}/keys/numdeck-repo.gpg \\
+  | sudo tee /usr/share/keyrings/numdeck.gpg >/dev/null
+echo \"deb [signed-by=/usr/share/keyrings/numdeck.gpg] ${BASE_URL}/apt stable main\" \\
+  | sudo tee /etc/apt/sources.list.d/numdeck.list
+sudo apt update && sudo apt install numdeck"
 else
 APT_CMD="echo \"deb [trusted=yes] ${BASE_URL}/apt stable main\" \\
-  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
-sudo apt update && sudo apt install asus-numpad"
+  | sudo tee /etc/apt/sources.list.d/numdeck.list
+sudo apt update && sudo apt install numdeck"
 fi
 
 if ((RPM_SIGNED)); then
-RPM_CMD="sudo rpm --import ${BASE_URL}/keys/asus-numpad-repo.asc
-sudo tee /etc/yum.repos.d/asus-numpad.repo <<'EOF'
-[asus-numpad]
-name=asus-numpad
+RPM_CMD="sudo rpm --import ${BASE_URL}/keys/numdeck-repo.asc
+sudo tee /etc/yum.repos.d/numdeck.repo <<'EOF'
+[numdeck]
+name=numdeck
 baseurl=${BASE_URL}/rpm/\$basearch
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=${BASE_URL}/keys/asus-numpad-repo.asc
+gpgkey=${BASE_URL}/keys/numdeck-repo.asc
 EOF
-sudo dnf install asus-numpad"
+sudo dnf install numdeck"
 else
-RPM_CMD="sudo tee /etc/yum.repos.d/asus-numpad.repo <<'EOF'
-[asus-numpad]
-name=asus-numpad
+RPM_CMD="sudo tee /etc/yum.repos.d/numdeck.repo <<'EOF'
+[numdeck]
+name=numdeck
 baseurl=${BASE_URL}/rpm/\$basearch
 enabled=1
 gpgcheck=0
 EOF
-sudo dnf install asus-numpad"
+sudo dnf install numdeck"
 fi
 
 if ((ARCH_SIGNED)); then
-ARCH_CMD="curl -fsSL ${BASE_URL}/keys/asus-numpad-repo.asc -o /tmp/asus-numpad.asc
-sudo pacman-key --add /tmp/asus-numpad.asc
+ARCH_CMD="curl -fsSL ${BASE_URL}/keys/numdeck-repo.asc -o /tmp/numdeck.asc
+sudo pacman-key --add /tmp/numdeck.asc
 sudo pacman-key --lsign-key ${GPG_FPR}
 sudo tee -a /etc/pacman.conf <<'EOF'
 
-[asus-numpad]
+[numdeck]
 SigLevel = Required DatabaseRequired
 Server = ${BASE_URL}/arch/\$arch
 EOF
-sudo pacman -Sy asus-numpad"
+sudo pacman -Sy numdeck"
 else
 ARCH_CMD="sudo tee -a /etc/pacman.conf <<'EOF'
 
-[asus-numpad]
+[numdeck]
 SigLevel = Optional TrustAll
 Server = ${BASE_URL}/arch/\$arch
 EOF
-sudo pacman -Sy asus-numpad"
+sudo pacman -Sy numdeck"
 fi
 
 if ((APK_SIGNED)); then
-APK_CMD="curl -fsSL ${BASE_URL}/keys/asus-numpad-apk.rsa.pub \\
-  | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
+APK_CMD="curl -fsSL ${BASE_URL}/keys/numdeck-apk.rsa.pub \\
+  | sudo tee /etc/apk/keys/numdeck-apk.rsa.pub >/dev/null
 echo \"${BASE_URL}/alpine\" | sudo tee -a /etc/apk/repositories
-sudo apk update && sudo apk add asus-numpad"
+sudo apk update && sudo apk add numdeck"
 else
 APK_CMD="echo \"${BASE_URL}/alpine\" \\
   | sudo tee -a /etc/apk/repositories
-sudo apk update && sudo apk add --allow-untrusted asus-numpad"
+sudo apk update && sudo apk add --allow-untrusted numdeck"
 fi
 
 if ((APT_SIGNED || RPM_SIGNED || ARCH_SIGNED || APK_SIGNED)); then
@@ -619,7 +621,7 @@ cat > "$OUT/index.html" <<HTML
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>asus-numpad ${VERSION} 软件源</title>
+<title>numdeck ${VERSION} 软件源</title>
 <style>
   :root { color-scheme: light dark; }
   body { font: 15px/1.65 -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
@@ -635,8 +637,8 @@ cat > "$OUT/index.html" <<HTML
 </style>
 </head>
 <body>
-<h1>asus-numpad ${VERSION}</h1>
-<p class="sub">ASUS 触摸板数字小键盘（NumberPad）的 Linux 用户态驱动 · GPL-3.0-or-later</p>
+<h1>numdeck ${VERSION}</h1>
+<p class="sub">触摸板数字小键盘（NumberPad 类）的 Linux 用户态驱动 · GPL-3.0-or-later</p>
 
 <p>本页是软件源根地址：<code>${BASE_URL}</code>。${SIGN_LINE}</p>
 <p class="fp">签名指纹：${GPG_FPR:-无（未签名仓库）}</p>
@@ -658,24 +660,25 @@ cat > "$OUT/index.html" <<HTML
 <pre><code>${APK_CMD//&/&amp;}</code></pre>
 
 <h2>Nix / NixOS</h2>
-<pre><code>nix run github:asus-numpad/asus-numpad
-# NixOS: services.asus-numpad.enable = true;</code></pre>
+<pre><code>nix run github:numdeck-dev/numdeck
+# NixOS: services.numdeck.enable = true;</code></pre>
 
 <h2>其它发行版</h2>
-<p>用 Release 里的通用 tarball（musl 静态链接，任意 x86_64 Linux 可跑）：</p>
-<pre><code>tar xzf asus-numpad-${VERSION}-x86_64.tar.gz
-cd asus-numpad-${VERSION} &amp;&amp; sudo ./install.sh</code></pre>
+<p>用 Release 里的通用 tarball（musl 静态链接，x86_64 与 ARM64 各一份，按 <code>uname -m</code> 选）：</p>
+<pre><code>ARCH=$(uname -m)   # x86_64 或 aarch64
+tar xzf numdeck-${VERSION}-$ARCH.tar.gz
+cd numdeck-${VERSION} &amp;&amp; sudo ./install.sh</code></pre>
 
 <h2>内容</h2>
 <table>
 <tr><th>路径</th><th>说明</th></tr>
 <tr><td><code>apt/</code></td><td>APT 仓库（dists/stable + pool）</td></tr>
 <tr><td><code>rpm/&lt;arch&gt;/</code></td><td>RPM 仓库（含 repodata）</td></tr>
-<tr><td><code>arch/&lt;arch&gt;/</code></td><td>Pacman 仓库（asus-numpad.db）</td></tr>
+<tr><td><code>arch/&lt;arch&gt;/</code></td><td>Pacman 仓库（numdeck.db）</td></tr>
 <tr><td><code>alpine/&lt;arch&gt;/</code></td><td>Alpine 仓库（APKINDEX）</td></tr>
 <tr><td><code>keys/</code></td><td>公钥：apt 用 .gpg、dnf 与 pacman 用 .asc、apk 用 .rsa.pub</td></tr>
 </table>
-<p class="sub">每个生态只保留最近 ${KEEP} 个版本；更早的版本仍可从 GitHub Releases 取。</p>
+<p class="sub">仓库同时收录 x86_64 与 aarch64（ARM64）两个架构；每个生态只保留最近 ${KEEP} 个版本，更早的版本仍可从 GitHub Releases 取。</p>
 </body>
 </html>
 HTML
@@ -693,20 +696,20 @@ fi
 
 cat > "$OUT/install.sh" <<'INSTALL_SH'
 #!/bin/sh
-# asus-numpad 一键安装：导入公钥 → 写入软件源 → 安装 → 版本自检
+# numdeck 一键安装：导入公钥 → 写入软件源 → 安装 → 版本自检
 #
 #   curl -fsSL @@BASE_URL@@/install.sh | sudo sh
 #
 # 换仓库地址（镜像、本地目录等）：
-#   curl -fsSL @@BASE_URL@@/install.sh | sudo ASUS_NUMPAD_BASE=https://... sh
+#   curl -fsSL @@BASE_URL@@/install.sh | sudo NUMDECK_BASE=https://... sh
 #
 # 只写源不装：上面命令末尾加 --repo-only
 set -eu
 
-BASE="${ASUS_NUMPAD_BASE:-@@BASE_URL@@}"
+BASE="${NUMDECK_BASE:-@@BASE_URL@@}"
 SIGNED=@@SIGNED@@
 FPR="@@GPG_FPR@@"
-PKG=asus-numpad
+PKG=numdeck
 MODE="${1:-install}"
 
 log() { printf '==> %s\n' "$*"; }
@@ -726,12 +729,12 @@ install_deb() {
     log "Debian 系：写 apt 源"
     install -d -m 0755 /usr/share/keyrings
     if [ "$SIGNED" = 1 ]; then
-        fetch "$BASE/keys/asus-numpad-repo.gpg" > /usr/share/keyrings/asus-numpad.gpg
-        echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] $BASE/apt stable main" \
-            > /etc/apt/sources.list.d/asus-numpad.list
+        fetch "$BASE/keys/numdeck-repo.gpg" > /usr/share/keyrings/numdeck.gpg
+        echo "deb [signed-by=/usr/share/keyrings/numdeck.gpg] $BASE/apt stable main" \
+            > /etc/apt/sources.list.d/numdeck.list
     else
         echo "deb [trusted=yes] $BASE/apt stable main" \
-            > /etc/apt/sources.list.d/asus-numpad.list
+            > /etc/apt/sources.list.d/numdeck.list
     fi
     if [ "$MODE" = "--repo-only" ]; then
         log "已写入源，未安装"
@@ -745,23 +748,23 @@ install_rpm() {
     mgr="$1"
     log "${mgr}：写 rpm 源"
     if [ "$SIGNED" = 1 ]; then
-        fetch "$BASE/keys/asus-numpad-repo.asc" > /tmp/asus-numpad.asc
-        rpm --import /tmp/asus-numpad.asc
+        fetch "$BASE/keys/numdeck-repo.asc" > /tmp/numdeck.asc
+        rpm --import /tmp/numdeck.asc
     fi
     {
-        echo "[asus-numpad]"
-        echo "name=asus-numpad"
+        echo "[numdeck]"
+        echo "name=numdeck"
         echo "baseurl=$BASE/rpm/\$basearch"
         echo "enabled=1"
         if [ "$SIGNED" = 1 ]; then
             echo "gpgcheck=1"
             echo "repo_gpgcheck=1"
-            echo "gpgkey=$BASE/keys/asus-numpad-repo.asc"
+            echo "gpgkey=$BASE/keys/numdeck-repo.asc"
         else
             echo "gpgcheck=0"
             echo "repo_gpgcheck=0"
         fi
-    } > /etc/yum.repos.d/asus-numpad.repo
+    } > /etc/yum.repos.d/numdeck.repo
     if [ "$MODE" = "--repo-only" ]; then
         log "已写入源，未安装"
         return 0
@@ -772,12 +775,12 @@ install_rpm() {
 install_zypper() {
     log "openSUSE：写 zypper 源"
     if [ "$SIGNED" = 1 ]; then
-        fetch "$BASE/keys/asus-numpad-repo.asc" > /tmp/asus-numpad.asc
-        rpm --import /tmp/asus-numpad.asc
+        fetch "$BASE/keys/numdeck-repo.asc" > /tmp/numdeck.asc
+        rpm --import /tmp/numdeck.asc
     fi
     {
-        echo "[asus-numpad]"
-        echo "name=asus-numpad"
+        echo "[numdeck]"
+        echo "name=numdeck"
         echo "enabled=1"
         echo "autorefresh=1"
         echo "type=rpm-md"
@@ -785,31 +788,31 @@ install_zypper() {
         if [ "$SIGNED" = 1 ]; then
             echo "gpgcheck=1"
             echo "repo_gpgcheck=1"
-            echo "gpgkey=$BASE/keys/asus-numpad-repo.asc"
+            echo "gpgkey=$BASE/keys/numdeck-repo.asc"
         else
             echo "gpgcheck=0"
             echo "repo_gpgcheck=0"
         fi
-    } > /etc/zypp/repos.d/asus-numpad.repo
+    } > /etc/zypp/repos.d/numdeck.repo
     if [ "$MODE" = "--repo-only" ]; then
         log "已写入源，未安装"
         return 0
     fi
-    zypper --gpg-auto-import-keys --non-interactive refresh asus-numpad
+    zypper --gpg-auto-import-keys --non-interactive refresh numdeck
     zypper --non-interactive install "$PKG"
 }
 
 install_pacman() {
     log "Arch 系：写 pacman 源"
     if [ "$SIGNED" = 1 ]; then
-        fetch "$BASE/keys/asus-numpad-repo.asc" > /tmp/asus-numpad.asc
-        pacman-key --add /tmp/asus-numpad.asc
+        fetch "$BASE/keys/numdeck-repo.asc" > /tmp/numdeck.asc
+        pacman-key --add /tmp/numdeck.asc
         pacman-key --lsign-key "$FPR"
     fi
-    if ! grep -q '^\[asus-numpad\]' /etc/pacman.conf; then
+    if ! grep -q '^\[numdeck\]' /etc/pacman.conf; then
         {
             echo ""
-            echo "[asus-numpad]"
+            echo "[numdeck]"
             if [ "$SIGNED" = 1 ]; then
                 echo "SigLevel = Required DatabaseRequired"
             else
@@ -828,7 +831,7 @@ install_pacman() {
 install_apk() {
     log "Alpine：写 apk 源"
     if [ "$SIGNED" = 1 ]; then
-        fetch "$BASE/keys/asus-numpad-apk.rsa.pub" > /etc/apk/keys/asus-numpad-apk.rsa.pub
+        fetch "$BASE/keys/numdeck-apk.rsa.pub" > /etc/apk/keys/numdeck-apk.rsa.pub
     fi
     if ! grep -qxF "$BASE/alpine" /etc/apk/repositories; then
         echo "$BASE/alpine" >> /etc/apk/repositories

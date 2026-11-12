@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use asus_numpad::config::Config;
-use asus_numpad::i18n::{self};
+use numdeck::config::Config;
+use numdeck::i18n::{self};
 
 pub(crate) fn parse_addr(s: &str) -> Option<u8> {
     let s = s.trim();
@@ -67,7 +67,7 @@ pub(crate) fn persist_config_keys(
     Ok(backup)
 }
 
-/// 若 asus-numpad 服务正在运行，就重启它让新配置立即生效；未运行时只提示，不主动拉起。
+/// 若 numdeck 服务正在运行，就重启它让新配置立即生效；未运行时只提示，不主动拉起。
 /// 当前是否在图形/登录会话里（`systemd --user` 可用）。
 pub(crate) fn has_user_bus() -> bool {
     std::env::var_os("XDG_RUNTIME_DIR")
@@ -85,12 +85,26 @@ pub(crate) fn systemctl(args: &[&str]) -> bool {
     cmd.status().map(|s| s.success()).unwrap_or(false)
 }
 
+/// 当前在跑的服务单元名。
+///
+/// 更名前装的服务叫 `asus-numpad`，升级后用户在换包前可能还在跑旧的，
+/// 这时 `restart` 得打到旧单元上，否则「重启服务」会报没这个单元。
+fn running_service_unit() -> &'static str {
+    for unit in ["numdeck", numdeck::compat::LEGACY_SERVICE] {
+        if systemctl(&["is-active", "--quiet", unit]) {
+            return unit;
+        }
+    }
+    "numdeck"
+}
+
 pub(crate) fn try_restart_service() {
-    if !systemctl(&["is-active", "--quiet", "asus-numpad"]) {
+    let unit = running_service_unit();
+    if !systemctl(&["is-active", "--quiet", unit]) {
         println!("{}", i18n::t("svc.not_running"));
         return;
     }
-    if systemctl(&["restart", "asus-numpad"]) {
+    if systemctl(&["restart", unit]) {
         println!("{}", i18n::t("svc.restarted"));
     } else {
         println!("{}", i18n::t("svc.restart_failed"));

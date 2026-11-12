@@ -34,5 +34,5 @@ TITLES="$(awk -v v="$V" '
     echo "- 详见 CHANGELOG"
   fi
   echo
-  echo "完整变更见 [CHANGELOG.md](https://github.com/asus-numpad/asus-numpad/blob/main/CHANGELOG.md)。"
+  echo "完整变更见 [CHANGELOG.md](https://github.com/numdeck-dev/numdeck/blob/main/CHANGELOG.md)。"
 } > "${OUT:-/dev/stdout}"

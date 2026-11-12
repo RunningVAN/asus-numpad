@@ -7,8 +7,8 @@
 
 | 用途 | 算法 | 标识 | 公钥文件 |
 | --- | --- | --- | --- |
-| apt / dnf / pacman 共用 | GPG RSA 4096，`[SC]`，无到期日 | 指纹 `79F282157F2D3FF8E3C6806314C2BF611986E168`，`uid` 为 `asus-numpad repository signing key <repo@asus-numpad.github.io>` | `tools/keys/asus-numpad-repo.asc`（文本）、`tools/keys/asus-numpad-repo.gpg`（二进制，给 apt 的 `signed-by` 用） |
-| Alpine apk | RSA 4096 | 由私钥文件名决定签名成员名：`.SIGN.RSA.asus-numpad-apk.rsa.pub` | `tools/keys/asus-numpad-apk.rsa.pub` |
+| apt / dnf / pacman 共用 | GPG RSA 4096，`[SC]`，无到期日 | 指纹 `79F282157F2D3FF8E3C6806314C2BF611986E168`，`uid` 为 `numdeck repository signing key <repo@numdeck-dev.github.io>` | `tools/keys/numdeck-repo.asc`（文本）、`tools/keys/numdeck-repo.gpg`（二进制，给 apt 的 `signed-by` 用） |
+| Alpine apk | RSA 4096 | 由私钥文件名决定签名成员名：`.SIGN.RSA.numdeck-apk.rsa.pub` | `tools/keys/numdeck-apk.rsa.pub` |
 
 公钥随索引一起发布在 `repo/keys/` 下，所以下面的安装命令都能直接从仓库里取到公钥，不需要
 用户去别处下载。私钥不进仓库，只存在于本地 `keys-private/`（已被 `.gitignore` 排除）和
@@ -20,8 +20,8 @@
 
 | Secret | 内容 |
 | --- | --- |
-| `REPO_GPG_PRIVATE_KEY` | `asus-numpad-repo.secret.asc` 的完整内容，含 `-----BEGIN PGP PRIVATE KEY BLOCK-----` 与结尾行 |
-| `REPO_APK_PRIVATE_KEY` | `asus-numpad-apk.rsa` 的完整内容，PEM 格式，含 `-----BEGIN RSA PRIVATE KEY-----` 与结尾行 |
+| `REPO_GPG_PRIVATE_KEY` | `numdeck-repo.secret.asc` 的完整内容，含 `-----BEGIN PGP PRIVATE KEY BLOCK-----` 与结尾行 |
+| `REPO_APK_PRIVATE_KEY` | `numdeck-apk.rsa` 的完整内容，PEM 格式，含 `-----BEGIN RSA PRIVATE KEY-----` 与结尾行 |
 
 两条都可缺省，缺省时该生态退回不校验签名（见下），流水线不会因此失败：
 
@@ -39,7 +39,7 @@
 | --- | --- | --- |
 | apt | `dists/stable/Release` | `Release.gpg`（二进制分离签名）+ `InRelease`（明文签名） |
 | rpm-md | `repodata/repomd.xml` | `repomd.xml.asc`；包本身由 `rpm --addsign` 加签名头 |
-| pacman | `asus-numpad.db.tar.gz`、每个包 | `<db>.sig`、`<包>.sig` |
+| pacman | `numdeck.db.tar.gz`、每个包 | `<db>.sig`、`<包>.sig` |
 | apk | 每个 `.apk`、`APKINDEX.tar.gz` | 签名追加在文件尾部，或进 tar 成为 `.SIGN.RSA.*` 成员 |
 
 包必须签在索引之前：索引里存的是包的校验和，先建索引再签包会让校验和对不上。脚本因此先把包
@@ -59,7 +59,7 @@ CI 里 `repo-add` 与 `abuild-sign` 是从 Arch / Alpine 容器借来的工具�
 
 私钥泄露或需要定期换钥时：
 
-1. 生成新钥（GPG：`gpg --quick-generate-key "asus-numpad repository signing key <repo@asus-numpad.github.io>" rsa4096 sign never`；apk：`openssl genrsa -out asus-numpad-apk.rsa 4096` 再 `openssl rsa -in ... -pubout -out asus-numpad-apk.rsa.pub`）。
+1. 生成新钥（GPG：`gpg --quick-generate-key "numdeck repository signing key <repo@numdeck-dev.github.io>" rsa4096 sign never`；apk：`openssl genrsa -out numdeck-apk.rsa 4096` 再 `openssl rsa -in ... -pubout -out numdeck-apk.rsa.pub`）。
 2. 覆盖 `tools/keys/` 下的公钥，更新上面的 Secrets。
 3. 发一个补丁版本。索引会用新钥重签，用户端需重新导入一次公钥——安装命令已包含该步骤，
    所以用户重抄一次命令即可，`trusted=yes` 之类的回退不需要。

@@ -1,6 +1,6 @@
-# asus-numpad
+# numdeck
 
-[English](README.md) | [简体中文](README.zh-CN.md) | 繁體中文 · [官網](https://asus-numpad.github.io/)
+[English](README.md) | [简体中文](README.zh-CN.md) | 繁體中文 · [官網](https://numdeck-dev.github.io/)
 
 ASUS NumberPad 的 Linux 使用者空間驅動程式。透過 evdev 獨佔觸控板，把觸點換算成小鍵盤格位，
 再經 uinput 注入按鍵。不替換核心模組，不修改 ACPI 表，解除安裝即回復原狀。
@@ -12,102 +12,107 @@ ASUS NumberPad 的 Linux 使用者空間驅動程式。透過 evdev 獨佔觸控
 ```bash
 # Debian / Ubuntu
 sudo install -d -m 0755 /usr/share/keyrings
-curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.gpg \
-  | sudo tee /usr/share/keyrings/asus-numpad.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
-sudo apt update && sudo apt install asus-numpad
+curl -fsSL https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.gpg \
+  | sudo tee /usr/share/keyrings/numdeck.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/numdeck.gpg] https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/numdeck.list
+sudo apt update && sudo apt install numdeck
 
 # Fedora / RHEL / Rocky / Alma
-sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
-sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
-[asus-numpad]
-name=asus-numpad
-baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
+sudo rpm --import https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc
+sudo tee /etc/yum.repos.d/numdeck.repo >/dev/null <<'EOF'
+[numdeck]
+name=numdeck
+baseurl=https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/rpm/$basearch
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+gpgkey=https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc
 EOF
-sudo dnf install asus-numpad
+sudo dnf install numdeck
 
 # openSUSE Leap / Tumbleweed，同一個 rpm-md 來源，zypper 直接讀
-sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+sudo rpm --import https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc
 sudo zypper addrepo --refresh \
-  "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
-sudo zypper install asus-numpad
+  "https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/rpm/$(uname -m)" numdeck
+sudo zypper install numdeck
 
 # Arch / Manjaro
-curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc -o /tmp/asus-numpad.asc
-sudo pacman-key --add /tmp/asus-numpad.asc
+curl -fsSL https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc -o /tmp/numdeck.asc
+sudo pacman-key --add /tmp/numdeck.asc
 sudo pacman-key --lsign-key 79F282157F2D3FF8E3C6806314C2BF611986E168
 sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 
-[asus-numpad]
+[numdeck]
 SigLevel = Required DatabaseRequired
-Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
+Server = https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/arch/$arch
 EOF
-sudo pacman -Syu asus-numpad
+sudo pacman -Syu numdeck
 
 # Alpine
-curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
-  | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
-sudo apk update && sudo apk add asus-numpad
+curl -fsSL https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-apk.rsa.pub \
+  | sudo tee /etc/apk/keys/numdeck-apk.rsa.pub >/dev/null
+echo "https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
+sudo apk update && sudo apk add numdeck
 ```
 
 每個生態各一個套件。deb 在 Ubuntu 22.04 上建置，涵蓋 22.04 至 24.04 與 Debian 12、13。rpm 在
 AlmaLinux 9 上建置，涵蓋 RHEL、AlmaLinux、Rocky 9 至 10、Fedora、openSUSE Leap 16 與
 Tumbleweed：spec 只用標準巨集，執行期僅相依 glibc 與 systemd，倉庫格式為 rpm-md，zypper 直接
 讀取，不按發行版各編一份。原生套件也在
-[Releases](https://github.com/asus-numpad/asus-numpad/releases)：deb、rpm、pkg.tar.zst、附
+[Releases](https://github.com/numdeck-dev/numdeck/releases)：deb、rpm、pkg.tar.zst、附
 .SRCINFO 的 PKGBUILD、apk、靜態 tarball。手動建置 PKGBUILD：把 `PKGBUILD` 與
-`asus-numpad-rs.install` 放進同一目錄，執行 `makepkg -si`。Alpine、Gentoo、NixOS 與手動 tarball
-步驟見 [docs/install.md](docs/install.md)。倉庫與 release 附件只提供 x86_64，其餘架構需自行建置。
+`numdeck.install` 放進同一目錄，執行 `makepkg -si`。Alpine、Gentoo、NixOS 與手動 tarball
+步驟見 [docs/install.md](docs/install.md)。倉庫與 release 附件同時提供 `x86_64`/`amd64` 與 `ARM64`/`aarch64` 兩種架構，其餘架構需自行建置。
 
 `ci.yml` 每次推送都為每個生態建置套件並檢查套件中介資料；`release.yml` 另在每個目標發行版的
-乾淨容器中安裝每個套件並執行 `asus-numpad --version`，裝不起來的套件會擋下發佈。
+乾淨容器中安裝每個套件並執行 `numdeck --version`，裝不起來的套件會擋下發佈。
 
 套件只有一個，機型在執行期辨識：同一份二進位檔讀取 DMI 型號與觸控板模組，據此選擇參數與鍵表。
 表中對不上的機器不啟動：以結束碼 3 結束並列出支援機型，不使用其他機型的參數。硬體資訊讀不準（虛擬機、白牌機殼、BIOS 佔位字串）時可
 手動指定，見[機型辨識](#機型辨識)。執行期相依：glibc，Alpine 上為 musl。
 
+ARM64 套件是例外：華碩原生 NumberPad 機型全為 x86_64，ARM 上沒有可辨識的機型，因此 ARM64
+建置裡直接**不含機型表**——不讀 DMI、不辨識觸控板模組、也不依廠商過濾觸控板，啟動時不擋機型，
+只走自訂佈局這條路（需自行在 `custom_layouts` 裡綁觸控板並錄入鍵位，見[自訂佈局](#自訂佈局)）。
+反過來，`x86_64` 套件裡沒有為 ARM 預留任何備援。
+
 ## 使用
 
 ```bash
-asus-numpad check          # 唯讀自我檢查：裝置、佈局換算、背光候選
-asus-numpad dump           # 原始事件流
-asus-numpad run            # 前景執行，由 systemd 單元啟動
-asus-numpad --dump-config  # 目前生效設定
+numdeck check          # 唯讀自我檢查：裝置、佈局換算、背光候選
+numdeck dump           # 原始事件流
+numdeck run            # 前景執行，由 systemd 單元啟動
+numdeck --dump-config  # 目前生效設定
 ```
 
 ```bash
-asus-numpad bright 0..N         # 檔位，0 為關（關閉跟隨）；N 為檔數，預設 4
-asus-numpad bright up|down|cycle
-asus-numpad bright follow on|off
-asus-numpad bright status
+numdeck bright 0..N         # 檔位，0 為關（關閉跟隨）；N 為檔數，預設 4
+numdeck bright up|down|cycle
+numdeck bright follow on|off
+numdeck bright status
 ```
 
 ```bash
-asus-numpad levels              # 檔位表：每一檔寫入的位元組
-asus-numpad levels 2 0x46       # 第 2 檔寫 0x46（取值 0x00 或 0x41..0x48）
-asus-numpad levels reset        # 回復預設四檔
-asus-numpad led on|off|0x41     # 繞過狀態機，直接送出一個背光位元組
-asus-numpad layout              # 目前鍵表、全部已收錄鍵表與支援等級
-asus-numpad layout --ids        # 模組名對應鍵表的清單
-asus-numpad layout auto         # 回復自動選擇
+numdeck levels              # 檔位表：每一檔寫入的位元組
+numdeck levels 2 0x46       # 第 2 檔寫 0x46（取值 0x00 或 0x41..0x48）
+numdeck levels reset        # 回復預設四檔
+numdeck led on|off|0x41     # 繞過狀態機，直接送出一個背光位元組
+numdeck layout              # 目前鍵表、全部已收錄鍵表與支援等級
+numdeck layout --ids        # 模組名對應鍵表的清單
+numdeck layout auto         # 回復自動選擇
 ```
 
 ```bash
-asus-numpad lang [zh-CN|zh-TW|en|auto]
-asus-numpad --lang en check     # 僅本次生效
+numdeck lang [zh-CN|zh-TW|en|auto]
+numdeck --lang en check     # 僅本次生效
 ```
 
-語言優先順序：`ASUS_NUMPAD_LANG`、`--lang`、設定檔中的 `language`、系統 locale。
+語言優先順序：`NUMDECK_LANG`、`--lang`、設定檔中的 `language`、系統 locale。
 
 ## 設定
 
-`~/.config/asus-numpad/asus-numpad.json`，以 root 執行時為 `/etc/asus-numpad/`。未寫入的鍵取廠商
+`~/.config/numdeck/numdeck.json`，以 root 執行時為 `/etc/numdeck/`。未寫入的鍵取廠商
 預設值。
 
 | 鍵 | 取值 | 含義 |
@@ -151,9 +156,9 @@ asus-numpad --lang en check     # 僅本次生效
 （Strix G16 2025 → 2026、SCAR 16 2025 → 2026，其中 `G615` 為標準版、`G635` 為 SCAR 版）。
 2026 年沒有更換代號，機型表因此不必新增一列。
 
-這張表就是支援範圍。機型 id 用來手動切換參數（`asus-numpad sku <id>`），並讓自動辨識的結果
+這張表就是支援範圍。機型 id 用來手動切換參數（`numdeck sku <id>`），並讓自動辨識的結果
 看得見；表外的機器拒絕啟動。每一列的歸屬依觸控板模組資料與鍵表對應判定，不按整機型號逐台驗證；
-各機型目前的相容情況詳見[官網](https://asus-numpad.github.io/)。
+各機型目前的相容情況詳見[官網](https://numdeck-dev.github.io/)。
 
 機型 id 命中不等於這台有硬體。同一機型的部分零售配置搭的是 4 區 RGB 觸控板、沒有
 NumberPad，且 DMI 前綴與帶 NumberPad 的配置完全相同（`G614JV…-0EAGX…` 有，
@@ -170,8 +175,8 @@ NumberPad，且 DMI 前綴與帶 NumberPad 的配置完全相同（`G614JV…-0E
 `sku` 優先於兩者。代號在不同區域產品線之間同樣會重用：`G614P*` 在中國市場以 2025 年款魔霸 10 /
 魔霸 9 銷售，上表的逐配置統計沒有涵蓋這些產品線，鍵表仍由觸控板模組決定。
 
-以 DMI 中的機型代碼為準，市場名稱僅供對照。舊版按機型拆分的套件名稱（`asus-numpad-g614`
-等）留在 `Obsoletes` 中，升級時由 `asus-numpad` 接手。
+以 DMI 中的機型代碼為準，市場名稱僅供對照。舊版按機型拆分的套件名稱（`numdeck-g614`
+等）留在 `Obsoletes` 中，升級時由 `numdeck` 接手。
 
 | | |
 | --- | --- |
@@ -208,10 +213,10 @@ Zephyrus Duo 與 Zenbook Duo 的 C 面被副螢幕佔去一半，觸控板豎排
 讀不到正確硬體資訊時手動指定：
 
 ```bash
-asus-numpad sku            # 看辨識到哪一套設定、憑什麼
-asus-numpad sku list       # 列出可選機型 id
-asus-numpad sku g614       # 手動指定，寫進設定長期生效
-asus-numpad sku auto       # 回復自動辨識
+numdeck sku            # 看辨識到哪一套設定、憑什麼
+numdeck sku list       # 列出可選機型 id
+numdeck sku g614       # 手動指定，寫進設定長期生效
+numdeck sku auto       # 回復自動辨識
 ```
 
 設定中的 `sku` 鍵優先於自動辨識，`--sku g614` 只對本次執行生效。
@@ -231,7 +236,7 @@ asus-numpad sku auto       # 回復自動辨識
 只涵蓋鍵表，與機型 id 無關。
 
 ```bash
-asus-numpad --allow-unverified run    # 或在設定中設 allow_unverified_layout: true
+numdeck --allow-unverified run    # 或在設定中設 allow_unverified_layout: true
 ```
 
 ## 擴充：給表外的機型補一套小鍵盤
@@ -247,7 +252,7 @@ asus-numpad --allow-unverified run    # 或在設定中設 allow_unverified_layo
 | 觸控板會報壓力軸 | `pressure_switch` 用力按切換 | 不影響 |
 | 想直接用實體鍵盤開關小鍵盤 | `hotkeys` 綁組合鍵 | 不影響 |
 
-四樣相互獨立，缺哪樣配哪樣；都配在同一個 `asus-numpad.json` 裡，介面「擴充」頁也在改同一份檔案。
+四樣相互獨立，缺哪樣配哪樣；都配在同一個 `numdeck.json` 裡，介面「擴充」頁也在改同一份檔案。
 
 ### 自訂佈局
 
@@ -363,7 +368,7 @@ asus-numpad --allow-unverified run    # 或在設定中設 allow_unverified_layo
 - 另有兩個鍵沒有對應控制項：`rect_mm`（用面板左上角起的公釐寫同一個矩形，原始單位與實測對不上時
   用它）與 `numlock_cell`（NumLock 圖示所在格 `[列, 欄]`，預設第 0 列最後一欄）。
 
-量比猜準：`asus-numpad calibrate --samples samples.json` 收四角按壓加兩個對角格中心，直接解出
+量比猜準：`numdeck calibrate --samples samples.json` 收四角按壓加兩個對角格中心，直接解出
 矩形與格尺寸；加 `--write` 落檔，並把上一份存成 `.bak`。校準頁的「樣本回放」把同一份樣本餵給
 同一個解算函式，真機上採一次，介面裡就能反覆解。底部「設定片段」把 `partition` + `calibration`
 打包，方便搬給同機型的人；片段不含鍵表，鍵表在 `custom_layouts` 裡。
@@ -504,20 +509,20 @@ Linux 上是全套，分七個頁籤：
 | 頁籤 | 內容 |
 | --- | --- |
 | 燈光 | 介面清單、鍵盤四檔 → 觸控板亮度對映（逐檔可改、可試亮、可與驅動設定互相同步）、點亮 / 熄滅、跟隨 NumLock 與鍵盤背光、報文日誌 |
-| 驅動設定 | 驅動設定（`~/.config/asus-numpad/asus-numpad.json`，root 下 `/etc/asus-numpad/asus-numpad.json`）的每個欄位都做成控制項：機型、佈局、鍵碼風格、NumLock 策略、手勢閾值、背光通道與跟燈輪詢、手動檔位表、時序常數、驅動語言 |
+| 驅動設定 | 驅動設定（`~/.config/numdeck/numdeck.json`，root 下 `/etc/numdeck/numdeck.json`）的每個欄位都做成控制項：機型、佈局、鍵碼風格、NumLock 策略、手勢閾值、背光通道與跟燈輪詢、手動檔位表、時序常數、驅動語言 |
 | 系統狀態 | 設定檔路徑、機型、佈局、hidraw 通道、單元狀態，可啟動 / 停止 / 重啟 |
 | 擴充 | 給表外機型補自訂佈局、換點亮報文、壓感切換開關、綁全域熱鍵，以及可轉發的設定片段 |
 | 校準 | 給表外機型自訂網格分區（矩形、欄數、比例）與軸校準，附樣本回放與設定片段 |
-| 命令列 | 每個 `asus-numpad` 子命令一張表單，執行時跑同一個執行檔 |
+| 命令列 | 每個 `numdeck` 子命令一張表單，執行時跑同一個執行檔 |
 | 設定 | 檔位數、跟隨 NumLock、輪詢間隔、開機自啟 |
 
 ![Linux 控制中心](site/assets/screenshots/gui-main.webp)
 
-改動在按下儲存之前只停在記憶體裡；「儲存並重啟」會寫檔並重啟 `asus-numpad` 使用者單元，一步到位。
+改動在按下儲存之前只停在記憶體裡；「儲存並重啟」會寫檔並重啟 `numdeck` 使用者單元，一步到位。
 介面上不重寫一遍 CLI 的邏輯：命令頁執行的就是真二進位，輸出原樣貼回。
 
 ```bash
-cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
+cargo run -p numdeck-gui      # 或 cargo build --release -p numdeck-gui
 ```
 
 執行條件、設定檔位置與排錯見 `gui/README.md`。
@@ -545,7 +550,7 @@ cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
 | `src/linux/` | evdev、uinput、hidraw、i2c 後端 |
 | `gui/` | egui 視窗：Windows 只管燈光，Linux 是完整控制中心 |
 | `lang/` | zh-CN、zh-TW、en 文案 |
-| `site/` | 官網原始碼，發佈到 https://asus-numpad.github.io/ |
+| `site/` | 官網原始碼，發佈到 https://numdeck-dev.github.io/ |
 | `tools/` | `push-site.sh`（官網同步）、`repo-gen.sh`（倉庫索引） |
 | `packaging/` | deb、rpm、Arch、Alpine、Gentoo、Nix、tarball 腳本與倉庫工具 |
 
@@ -555,8 +560,8 @@ cargo run -p asus-numpad-gui      # 或 cargo build --release -p asus-numpad-gui
 
 ```bash
 ./tools/build-cross.sh            # 兩個都建
-./tools/build-cross.sh windows    # target/x86_64-pc-windows-gnu/release/asus-numpad.exe
-./tools/build-cross.sh linux      # target/x86_64-unknown-linux-gnu/release/asus-numpad
+./tools/build-cross.sh windows    # x86_64-pc-windows-gnu + aarch64-pc-windows-gnullvm
+./tools/build-cross.sh linux      # x86_64-unknown-linux-gnu + aarch64-unknown-linux-gnu
 ```
 
 腳本會自己下載 zig（它內建 `windows-gnu` / `linux-gnu` 要用的 MinGW 與 glibc，不用裝
@@ -579,11 +584,11 @@ RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes" \
 並把 `repo/` 提交回 `main`。
 
 官網原始碼就在本倉的 `site/`：`./tools/push-site.sh` 將它同步到
-`asus-numpad/asus-numpad.github.io` 倉庫，由該倉庫提供 https://asus-numpad.github.io/ 。
+`numdeck-dev/numdeck-dev.github.io` 倉庫，由該倉庫提供 https://numdeck-dev.github.io/ 。
 `docs/` 只放專案文件，`docs/index.html` 是讓舊的專案站台網址繼續可用的轉向頁。
 
 ## 授權
 
 GPL-3.0-or-later，見 [LICENSE](LICENSE)。
 
-Copyright (C) 2026 the asus-numpad authors
+Copyright (C) 2026 the numdeck authors

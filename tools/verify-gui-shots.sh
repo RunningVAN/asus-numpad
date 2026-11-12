@@ -32,7 +32,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-BIN="target/debug/asus-numpad-gui"
+BIN="target/debug/numdeck-gui"
 OUT="target/gui-shots"
 PASS=0
 FAIL=0
@@ -127,11 +127,11 @@ for page in $PAGES; do
     for theme in light dark; do
         shot="$OUT/${page}-${theme}.ppm"
         rm -f "$shot"
-        # ASUS_NUMPAD_GUI_THEME 存在与否都要能跑：不认这个变量时就是默认配色
-        if ASUS_NUMPAD_GUI_FULL=1 \
-           ASUS_NUMPAD_GUI_PAGE="$page" \
-           ASUS_NUMPAD_GUI_THEME="$theme" \
-           ASUS_NUMPAD_GUI_SHOT="$PWD/$shot" \
+        # NUMDECK_GUI_THEME 存在与否都要能跑：不认这个变量时就是默认配色
+        if NUMDECK_GUI_FULL=1 \
+           NUMDECK_GUI_PAGE="$page" \
+           NUMDECK_GUI_THEME="$theme" \
+           NUMDECK_GUI_SHOT="$PWD/$shot" \
            "$BIN" >"$OUT/${page}-${theme}.log" 2>&1; then
             :
         else

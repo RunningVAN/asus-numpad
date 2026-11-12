@@ -2,15 +2,15 @@
 # Distributed under the terms of the GNU General Public License v2
 
 # 跟随仓库主干的 live ebuild：直接拉最新提交编译，用于在提交合入前试用。
-# 复制到 overlay 后 `sudo emerge -av =sys-apps/asus-numpad-9999`。
+# 复制到 overlay 后 `sudo emerge -av =sys-apps/numdeck-9999`。
 
 EAPI=8
 
 inherit git-r3 systemd udev
 
-DESCRIPTION="ASUS NumberPad userspace driver for Linux (official AlgoParameters aligned)"
-HOMEPAGE="https://github.com/asus-numpad/asus-numpad"
-EGIT_REPO_URI="https://github.com/asus-numpad/asus-numpad.git"
+DESCRIPTION="Touchpad numeric keypad userspace driver for Linux (ASUS NumberPad lineage, official AlgoParameters aligned)"
+HOMEPAGE="https://github.com/numdeck-dev/numdeck"
+EGIT_REPO_URI="https://github.com/numdeck-dev/numdeck.git"
 EGIT_BRANCH="main"
 
 LICENSE="GPL-3.0-or-later"
@@ -34,20 +34,20 @@ src_compile() {
 }
 
 src_install() {
-	dobin target/release/asus-numpad
-	doman packaging/common/asus-numpad.1
+	dobin target/release/numdeck
+	doman packaging/common/numdeck.1
 
-	insinto /usr/share/asus-numpad/lang
+	insinto /usr/share/numdeck/lang
 	doins lang/zh_CN.lang lang/zh_TW.lang lang/en.lang
 
-	udev_dorules packaging/common/99-asus-numpad.rules
+	udev_dorules packaging/common/99-numdeck.rules
 
 	if use systemd; then
-		systemd_douserunit packaging/common/asus-numpad.service
+		systemd_douserunit packaging/common/numdeck.service
 	fi
 
-	insinto /etc/asus-numpad
-	newins - asus-numpad.json <<-EOF
+	insinto /etc/numdeck
+	newins - numdeck.json <<-EOF
 		{
 		  "numlock": "sync",
 		  "calc_gesture": true,
@@ -65,6 +65,6 @@ src_install() {
 
 pkg_postinst() {
 	udev_reload
-	elog "启用用户级服务：systemctl --user enable --now asus-numpad.service"
-	elog "自检：asus-numpad check"
+	elog "启用用户级服务：systemctl --user enable --now numdeck.service"
+	elog "自检：numdeck check"
 }

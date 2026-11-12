@@ -1,14 +1,14 @@
 //! 命令行入口：`run` / `check` / `dump` / `bright` / `lang` / `--dump-config`。
 //!
 //! 界面文案全部走 `i18n`（简中 / 繁中 / 英文），语言按
-//! `ASUS_NUMPAD_LANG` > `--lang` > 配置 `language` > 系统 locale 的优先级确定。
+//! `NUMDECK_LANG` > `--lang` > 配置 `language` > 系统 locale 的优先级确定。
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use anyhow::Result;
-use asus_numpad::config::Config;
-use asus_numpad::i18n::{self, Lang, LangSource};
+use numdeck::config::Config;
+use numdeck::i18n::{self, Lang, LangSource};
 
 mod cli;
 
@@ -123,6 +123,9 @@ fn main() -> Result<()> {
     // `Abort trap: 6` 而不是安静退出。CLI 恢复系统默认行为即可。
     #[cfg(unix)]
     reset_sigpipe();
+
+    // 更名前用户脚本里写的是 ASUS_NUMPAD_*，先继承过来再看后面的读取点
+    numdeck::compat::adopt_legacy_env();
 
     // 语言必须在任何输出之前定下来：先扫原始参数与环境变量，再读配置
     let argv: Vec<String> = std::env::args().collect();

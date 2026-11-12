@@ -1,6 +1,6 @@
 {
-  "name": "asus-numpad — NumberPad on Linux",
-  "short_name": "asus-numpad",
+  "name": "numdeck — NumberPad on Linux",
+  "short_name": "numdeck",
   "description": "Userspace driver for the ASUS NumberPad touchpad numpad. Stock kernel, stock ACPI.",
   "start_url": "/",
   "scope": "/",

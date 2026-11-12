@@ -1,5 +1,5 @@
 #!/bin/sh
-# asus-numpad 通用卸载脚本（仅针对 install.sh 装的文件；deb/rpm/arch 包请用包管理器卸）
+# numdeck 通用卸载脚本（仅针对 install.sh 装的文件；deb/rpm/arch 包请用包管理器卸）
 #
 #   sudo ./uninstall.sh
 #   sudo ./uninstall.sh --prefix /usr/local --purge
@@ -38,35 +38,35 @@ if [ "$DRY_RUN" -eq 0 ]; then
         uid=$(id -u "$u" 2>/dev/null) || continue
         [ -d "/run/user/$uid" ] || continue
         su "$u" -s /bin/sh -c \
-            "XDG_RUNTIME_DIR=/run/user/$uid systemctl --user disable --now asus-numpad.service" \
+            "XDG_RUNTIME_DIR=/run/user/$uid systemctl --user disable --now numdeck.service" \
             >/dev/null 2>&1 || true
     done
-    systemctl --global disable asus-numpad.service >/dev/null 2>&1 || true
+    systemctl --global disable numdeck.service >/dev/null 2>&1 || true
 fi
 
 say "删除文件"
 for f in \
-    "$PREFIX/usr/bin/asus-numpad" \
-    "$PREFIX/usr/lib/systemd/system/asus-numpad.service" \
-    "$PREFIX/usr/lib/udev/rules.d/99-asus-numpad.rules" \
-    "$PREFIX/usr/share/man/man1/asus-numpad.1" \
-    "$PREFIX/usr/share/asus-numpad/lang/zh_CN.lang" \
-    "$PREFIX/usr/share/asus-numpad/lang/zh_TW.lang" \
-    "$PREFIX/usr/share/asus-numpad/lang/en.lang" \
-    "$PREFIX/usr/share/doc/asus-numpad/README.md" \
-    "$PREFIX/usr/share/doc/asus-numpad/copyright"
+    "$PREFIX/usr/bin/numdeck" \
+    "$PREFIX/usr/lib/systemd/system/numdeck.service" \
+    "$PREFIX/usr/lib/udev/rules.d/99-numdeck.rules" \
+    "$PREFIX/usr/share/man/man1/numdeck.1" \
+    "$PREFIX/usr/share/numdeck/lang/zh_CN.lang" \
+    "$PREFIX/usr/share/numdeck/lang/zh_TW.lang" \
+    "$PREFIX/usr/share/numdeck/lang/en.lang" \
+    "$PREFIX/usr/share/doc/numdeck/README.md" \
+    "$PREFIX/usr/share/doc/numdeck/copyright"
 do
     [ -e "$f" ] && run rm -f "$f"
 done
-run rmdir "$PREFIX/usr/share/asus-numpad/lang" 2>/dev/null || true
-run rmdir "$PREFIX/usr/share/asus-numpad" 2>/dev/null || true
-run rmdir "$PREFIX/usr/share/doc/asus-numpad" 2>/dev/null || true
+run rmdir "$PREFIX/usr/share/numdeck/lang" 2>/dev/null || true
+run rmdir "$PREFIX/usr/share/numdeck" 2>/dev/null || true
+run rmdir "$PREFIX/usr/share/doc/numdeck" 2>/dev/null || true
 
 if [ "$PURGE" -eq 1 ]; then
     say "删除配置（--purge）"
-    run rm -rf "$PREFIX/etc/asus-numpad"
+    run rm -rf "$PREFIX/etc/numdeck"
 else
-    say "保留配置 $PREFIX/etc/asus-numpad（要删加 --purge）"
+    say "保留配置 $PREFIX/etc/numdeck（要删加 --purge）"
 fi
 
 if [ "$DRY_RUN" -eq 0 ] && command -v udevadm >/dev/null 2>&1; then

@@ -80,8 +80,8 @@ else
 
     PKGROOT="$WORK/pkgroot"
     install_common_files "$ROOT" "$PKGROOT"
-    install -d "$PKGROOT/etc/asus-numpad"
-    cat > "$PKGROOT/etc/asus-numpad/asus-numpad.json" <<'JSON'
+    install -d "$PKGROOT/etc/numdeck"
+    cat > "$PKGROOT/etc/numdeck/numdeck.json" <<'JSON'
 {
   "numlock": "sync",
   "calc_gesture": true,
@@ -98,12 +98,12 @@ pkgver = $VERSION-1
 pkgdesc = $PKG_SUMMARY
 url = $PKG_URL
 builddate = $(date +%s)
-packager = asus-numpad maintainers <maintainers@example.invalid>
+packager = numdeck maintainers <maintainers@example.invalid>
 size = $(du -sb "$PKGROOT" | cut -f1 | tr -d ' ')
 arch = $(arch_pkg)
 license = $PKG_LICENSE
 depend = glibc
-backup = etc/asus-numpad/asus-numpad.json
+backup = etc/numdeck/numdeck.json
 EOF
 
     pkgfile="$OUT_DIR/${PKG_NAME}-${VERSION}-1-$(arch_pkg).pkg.tar.zst"

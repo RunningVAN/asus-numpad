@@ -3,24 +3,24 @@ members = [".", "gui"]
 resolver = "2"
 
 [package]
-name = "asus-numpad"
-version = "1.0.3"
+name = "numdeck"
+version = "2.0.0"
 edition = "2021"
 rust-version = "1.75"
-description = "ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动，官方 AlgoParameters 对齐"
+description = "把笔记本触摸板上的数字小键盘接到 Linux：ASUS NumberPad 起家，兼顾采用同类触摸板数字区的机型，x86_64 / ARM64 双架构"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/asus-numpad/asus-numpad"
-homepage = "https://asus-numpad.github.io/"
-keywords = ["asus", "numpad", "touchpad", "numberpad"]
+repository = "https://github.com/numdeck-dev/numdeck"
+homepage = "https://numdeck-dev.github.io/"
+keywords = ["numpad", "touchpad", "numberpad", "linux", "hid"]
 categories = ["hardware-support"]
 readme = "README.md"
 
 [[bin]]
-name = "asus-numpad"
+name = "numdeck"
 path = "src/main.rs"
 
 [lib]
-name = "asus_numpad"
+name = "numdeck"
 path = "src/lib.rs"
 
 [dependencies]

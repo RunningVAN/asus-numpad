@@ -85,7 +85,7 @@ impl App {
 }
 
 /// 分区 + 校准打包成一段 JSON 文本。
-pub(super) fn calib_fragment_of(cfg: &asus_numpad::config::Config) -> String {
+pub(super) fn calib_fragment_of(cfg: &numdeck::config::Config) -> String {
     let value = serde_json::json!({
         "partition": cfg.partition,
         "calibration": cfg.calibration,
@@ -95,7 +95,7 @@ pub(super) fn calib_fragment_of(cfg: &asus_numpad::config::Config) -> String {
 
 /// 片段写回配置：两段先都解析成功，再一次性写回。
 pub(super) fn apply_calib_fragment(
-    cfg: &mut asus_numpad::config::Config,
+    cfg: &mut numdeck::config::Config,
     text: &str,
 ) -> (String, bool) {
     let text = text.trim();

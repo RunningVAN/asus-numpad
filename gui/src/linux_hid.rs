@@ -1,15 +1,15 @@
 //! Linux 后端：hidraw + `HIDIOCSFEATURE`。
 //!
-//! 探测直接用驱动侧的 [`asus_numpad::linux::probe_candidates`]（读 sysfs 里的
+//! 探测直接用驱动侧的 [`numdeck::linux::probe_candidates`]（读 sysfs 里的
 //! 报告描述符，判有没有 FEATURE `0x0d`），写入直接用驱动侧的
-//! [`asus_numpad::linux::led::HidrawLed`]——和 `asus-numpad led` 命令行是同一条
+//! [`numdeck::linux::led::HidrawLed`]——和 `numdeck led` 命令行是同一条
 //! 代码路径，界面不会变成「另一套实现」。
 
 use anyhow::{anyhow, Result};
 
-use asus_numpad::engine::LedSink;
-use asus_numpad::led_proto::LED_FEATURE_LEN;
-use asus_numpad::linux::led::{probe_candidates, HidrawLed};
+use numdeck::engine::LedSink;
+use numdeck::led_proto::LED_FEATURE_LEN;
+use numdeck::linux::led::{probe_candidates, HidrawLed};
 
 use crate::backend::{mark_best, Backend, DeviceInfo};
 

@@ -1,5 +1,5 @@
 /* ============================================================
-   asus-numpad — site script
+   numdeck — site script
    ============================================================ */
 (function () {
   "use strict";
@@ -40,15 +40,15 @@
     "feat.1.t": "不动系统组件",
     "feat.1.d": "输入取自 evdev，输出经 uinput。不替换厂商模块，不覆盖 ACPI 对象，内核升级不受影响，卸载后恢复原状。",
     "feat.2.t": "每种包格式单独构建",
-    "feat.2.d": "deb 在 glibc 2.35 上编译，覆盖 Ubuntu 22.04–24.04 与 Debian 12/13；rpm 在 el9 上编译，覆盖 RHEL 9–10、Fedora 与 openSUSE。发版前 CI 在对应发行版容器里各自构建一次，并校验产物元数据。仓库与 release 附件仅提供 x86_64。",
+    "feat.2.d": "deb 在 glibc 2.35 上编译，覆盖 Ubuntu 22.04–24.04 与 Debian 12/13；rpm 在 el9 上编译，覆盖 RHEL 9–10、Fedora 与 openSUSE。发版前 CI 在对应发行版容器里各自构建一次，并校验产物元数据。仓库与 release 附件提供 x86_64 与 ARM64（aarch64）两种架构；ARM64 包不带机型表，只按自定义布局运行。",
     "feat.3.t": "运行期识别机型",
-    "feat.3.d": "由 DMI 字段与触摸板模组决定格位中心与键表，包名不含机型，因此不存在装错包的问题。<code>asus-numpad sku</code> 会说明识别结果和依据。",
+    "feat.3.d": "由 DMI 字段与触摸板模组决定格位中心与键表，包名不含机型，因此不存在装错包的问题。<code>numdeck sku</code> 会说明识别结果和依据。机型表与 <code>0x0d</code> 探测只属于 x86_64 构建；ARM64 包按触摸板上报的能力直接用，走 <code>custom_layouts</code>。",
     "feat.4.t": "四档背光与亮度跟随",
     "feat.4.d": "默认通过 hidraw FEATURE <code>0x0d</code> 跟随键盘背光；档位值在 0x41–0x48 内可改写，手动模式提供 <code>bright up|down|cycle</code>。",
     "feat.5.t": "布局校验",
     "feat.5.d": "44 个触摸板模组映射到厂商 INF 里的键表，每份标注 verified / family / unsupported。表里没有的模组默认在启动阶段即被拒绝，自己配一份键表（<code>custom_layouts</code>）就能跑起来。",
     "feat.6.t": "英文与两种中文",
-    "feat.6.d": "界面与提示分 en、zh-CN、zh-TW 三套，man 页只有英文。取值顺序为 <code>ASUS_NUMPAD_LANG</code>、<code>--lang</code>、配置文件、系统语言环境。",
+    "feat.6.d": "界面与提示分 en、zh-CN、zh-TW 三套，man 页只有英文。取值顺序为 <code>NUMDECK_LANG</code>、<code>--lang</code>、配置文件、系统语言环境。",
     "feat.7.t": "表外机型也能用",
     "feat.7.d": "自定义键表、改写点亮报文、压感切换与全局热键都在同一份配置里，分别是 <code>custom_layouts</code>、<code>led_proto</code>、<code>pressure_switch</code>、<code>hotkeys</code>。键表可以继承内置表，只改对不上的那几格。",
 
@@ -67,15 +67,15 @@
     "models.mgx": "冰刃双屏、冰刃 6 双屏、冰刃 7 双屏（Duo 15 / Duo 15 SE / Duo 16，2020–2023）：GX550、GX551、GX650",
     "models.mux": "灵耀 X 双屏、灵耀 X 双屏 Pro（UX482 / UX582，2020–2021）：UX582、UX482",
     "models.title": "支持机型",
-    "models.sub": "下列机型构成支持范围。机型 id 用于手动切换参数；表外机型在启动时被拒绝，表内但无 NumberPad 硬件的机型同样被拒绝。",
+    "models.sub": "下列机型构成支持范围。机型 id 用于手动切换参数；表外机型在启动时被拒绝，表内但无 NumberPad 硬件的机型同样被拒绝。此表只随 x86_64 构建发布。",
     "models.n533": "2021 款不带 NumberPad，不参与匹配",
     "models.n614": "已在 <code>G634JY</code> 真机验证；国行「魔霸新锐」为 4 区 RGB 版，不带此硬件",
     "models.n615": "2026 款沿用同一代号；国行「魔霸新锐 2025」为 4 区 RGB 版，不带此硬件",
     "models.ngx": "侧置触摸板，数字模式由键盘专用键切换",
     "models.nux": "侧置触摸板，数字模式由键盘专用键切换",
     "models.shots": "产品图取自华硕官网产品页，与上列机型一一对应。",
-    "models.fine": "DMI 里的机型代号为准，宣传名称仅供参考。硬件读不准时用 <code>asus-numpad sku g614</code> 手动指定，<code>asus-numpad sku auto</code> 恢复自动识别。",
-    "models.gate": "最终判据是触摸板硬件本身。机型代号匹配之后，驱动仍要在 HID 里找到 FEATURE 报告 <code>0x0d</code>，找不到就不启动：同型号的 4 区 RGB 配置用的是同一块触摸板模组，但没有图标区，画不出数字键。",
+    "models.fine": "DMI 里的机型代号为准，宣传名称仅供参考。硬件读不准时用 <code>numdeck sku g614</code> 手动指定，<code>numdeck sku auto</code> 恢复自动识别。机型 id 只存在于 x86_64 构建。",
+    "models.gate": "最终判据是触摸板硬件本身。机型代号匹配之后，驱动仍要在 HID 里找到 FEATURE 报告 <code>0x0d</code>，找不到就不启动：同型号的 4 区 RGB 配置用的是同一块触摸板模组，但没有图标区，画不出数字键。上面两道检查（机型表、<code>0x0d</code> 探测）都属于 x86_64 构建；ARM64 包两道都不做，触摸板按上报的能力直接用。",
 
     "inst.title": "安装",
     "inst.sub": "软件源只需添加一次，之后随包管理器升级。索引带 GPG 签名，公钥随索引一起发布。",
@@ -83,11 +83,11 @@
     "inst.apt.n": "Debian 12/13、Ubuntu 22.04–24.04、Mint 21+",
     "inst.dnf.n": "Fedora、RHEL / Rocky / Alma 9–10",
     "inst.zypper.n": "openSUSE Leap 16 与 Tumbleweed 直接读同一个 rpm-md 源",
-    "inst.pacman.n": "Arch、Manjaro、EndeavourOS，AUR 源码包名为 <code>asus-numpad-rs</code>",
+    "inst.pacman.n": "Arch、Manjaro、EndeavourOS，AUR 源码包名为 <code>numdeck</code>",
     "inst.apk.n": "Alpine 3.19+（musl 构建）",
     "inst.nix.n": "Flake，无需添加源",
-    "inst.arch": "这些软件源目前只提供 <code>x86_64</code> / <code>amd64</code>；其他架构请从源码构建：<code>cargo build --release</code>。",
-    "inst.notice": "从旧仓库 <code>RunningVAN/asus-numpad</code> 过来的用户：包名相同但来源不同，无法就地升级，换源前先执行一次 <code>sudo apt remove asus-numpad</code>（rpm 用 <code>dnf remove</code>）。这里的源只发布 1.0.0 起，版本号低于旧的 1.2.4，包管理器不会提示升级。",
+    "inst.arch": "这些软件源同时提供 <code>x86_64</code>/<code>amd64</code> 与 <code>ARM64</code>/<code>aarch64</code>；其他架构请从源码构建：<code>cargo build --release</code>。ARM64 包不带机型表，首次 <code>run</code> 前需在 <code>/etc/numdeck/numdeck.json</code> 的 <code>custom_layouts</code> 里绑定触摸板模组与键位。",
+    "inst.notice": "从旧仓库 <code>RunningVAN/numdeck</code> 过来的用户：包名相同但来源不同，无法就地升级，换源前先执行一次 <code>sudo apt remove numdeck</code>（rpm 用 <code>dnf remove</code>）。这里的源只发布 1.0.0 起，版本号低于旧的 1.2.4，包管理器不会提示升级。",
     "inst.other1.t": "Gentoo 与静态 tarball",
     "inst.other1.d": "Releases 里有适合 ebuild 的静态 tarball，也有 deb、rpm、pkg.tar.zst、apk 供离线安装。",
     "inst.other1.a": "前往 Releases",
@@ -96,7 +96,7 @@
 
     "use.title": "常用命令",
     "use.sub": "守护进程由 systemd 启动，命令行用于排查与调参。",
-    "use.gui": "可选的 egui 窗口（<code>asus-numpad-gui</code>）写的是同一份 FEATURE <code>0x0d</code> 报文。Linux 上它是完整的控制中心，分七个页签：灯光（含键盘四档到触摸板亮度的映射，逐档可改）、驱动配置的全部字段、系统状态与服务启停、每个 <code>asus-numpad</code> 子命令的表单、扩展（自定义布局、点亮报文、压感切换、全局热键）、给表外机型做网格分区与手动落点校准的校准页，以及窗口自身的设置。命令页执行的是同一个可执行文件，不重写逻辑，也就不会漂移。界面按卡片分组，跟随系统的深浅色主题；亮度用逐档的档位条而不是滑块，一格一档。",
+    "use.gui": "可选的 egui 窗口（<code>numdeck-gui</code>）写的是同一份 FEATURE <code>0x0d</code> 报文。Linux 上它是完整的控制中心，分七个页签：灯光（含键盘四档到触摸板亮度的映射，逐档可改）、驱动配置的全部字段、系统状态与服务启停、每个 <code>numdeck</code> 子命令的表单、扩展（自定义布局、点亮报文、压感切换、全局热键）、给表外机型做网格分区与手动落点校准的校准页，以及窗口自身的设置。命令页执行的是同一个可执行文件，不重写逻辑，也就不会漂移。界面按卡片分组，跟随系统的深浅色主题；亮度用逐档的档位条而不是滑块，一格一档。",
     "use.guiWin": "Windows 上只做灯光：接口、档位、跟随 NumLock、写入日志。小键盘输入交给官方驱动。",
     "use.shot1": "扩展页：自定义布局、重写点亮报文、压感切换、全局热键。",
     "use.shot2": "校准页：分区、手动校准、样本回放，以及对应的配置片段。",
@@ -105,7 +105,7 @@
     "use.b.t": "背光",
     "use.c.t": "布局与语言",
     "use.d.t": "机型与校准",
-    "use.fine": "配置位于 <code>~/.config/asus-numpad/asus-numpad.json</code>，以 root 运行时读 <code>/etc/asus-numpad/</code>。未写的键沿用厂商默认值：<code>numlock</code>、<code>mixed_mode</code>、<code>grab</code>、<code>follow_keyboard_brightness</code>、<code>allow_unverified_layout</code> 以及两张亮度表。",
+    "use.fine": "配置位于 <code>~/.config/numdeck/numdeck.json</code>，以 root 运行时读 <code>/etc/numdeck/</code>。未写的键沿用厂商默认值：<code>numlock</code>、<code>mixed_mode</code>、<code>grab</code>、<code>follow_keyboard_brightness</code>、<code>allow_unverified_layout</code> 以及两张亮度表。",
 
     "faq.title": "常见问题",
     "faq.1.q": "会替代 asusctl 或内核的 hid-asus 吗？",
@@ -113,7 +113,7 @@
     "faq.2.q": "触摸板的指针功能会失效吗？",
     "faq.2.d": "仅在数字模式开启时抓取。关闭 <code>grab</code> 后，点击事件仍发送到桌面；开启 <code>mixed_mode</code> 且 <code>/dev/uinput</code> 可用时，数字键和指针可以同时用。",
     "faq.3.q": "我的机型不在表里，或者没有 NumberPad，能用吗？",
-    "faq.3.d": "机型代号无匹配项时拒绝启动：以退出码 3 退出并列出支持的机型，不沿用其他机型的参数。<code>--sku</code> 或 <code>asus-numpad sku &lt;id&gt;</code> 可跳过机型校验，<code>asus-numpad check</code> 会列出需要反馈的信息。机型在表中但无此硬件的，同样以退出码 3 拒绝启动：驱动要求 HID 的 FEATURE 报告 <code>0x0d</code>，4 区 RGB 配置不具备该报告。",
+    "faq.3.d": "机型代号无匹配项时拒绝启动：以退出码 3 退出并列出支持的机型，不沿用其他机型的参数。<code>--sku</code> 或 <code>numdeck sku &lt;id&gt;</code> 可跳过机型校验，<code>numdeck check</code> 会列出需要反馈的信息。机型在表中但无此硬件的，同样以退出码 3 拒绝启动：驱动要求 HID 的 FEATURE 报告 <code>0x0d</code>，4 区 RGB 配置不具备该报告。以上规则不适用于 ARM64 构建：它没有机型表可缺，也不做 <code>0x0d</code> 探测，表外机型不会被拒绝。",
     "faq.4.q": "签名公钥在哪，怎么核对？",
     "faq.4.d": "apt、rpm、pacman 的索引共用一个 GPG 公钥，Alpine 的包另用一个 RSA 公钥；两个公钥均随索引放在仓库的 <code>keys/</code> 下，由 <code>install.sh</code> 导入，无需另行下载。指纹：<code>79F2 8215 7F2D 3FF8 E3C6 8063 14C2 BF61 1986 E168</code>，细节见 <code>docs/signing.md</code>。",
     "faq.5.q": "冰刃双屏、灵耀双屏这类机型呢？",
@@ -134,7 +134,7 @@
     "foot.install": "安装指南",
     "foot.verify": "发布记录",
     "foot.src": "纯静态页面 · 无追踪",
-    "foot.right": "© 2026 asus-numpad · GPL-3.0-or-later"
+    "foot.right": "© 2026 numdeck · GPL-3.0-or-later"
   };
 
   var ZH_TW = {
@@ -172,15 +172,15 @@
     "feat.1.t": "不動系統元件",
     "feat.1.d": "輸入取自 evdev，輸出經 uinput。不替換廠商模組，不覆寫 ACPI 物件，核心升級不受影響，移除套件後回復原狀。",
     "feat.2.t": "每種套件格式分開建置",
-    "feat.2.d": "deb 在 glibc 2.35 上編譯，涵蓋 Ubuntu 22.04–24.04 與 Debian 12/13；rpm 在 el9 上編譯，涵蓋 RHEL 9–10、Fedora 與 openSUSE。發版前 CI 在對應發行版容器裡各自建置一次，並校驗產物中繼資料。倉庫與 release 附件僅提供 x86_64。",
+    "feat.2.d": "deb 在 glibc 2.35 上編譯，涵蓋 Ubuntu 22.04–24.04 與 Debian 12/13；rpm 在 el9 上編譯，涵蓋 RHEL 9–10、Fedora 與 openSUSE。發版前 CI 在對應發行版容器裡各自建置一次，並校驗產物中繼資料。倉庫與 release 附件提供 x86_64 與 ARM64（aarch64）兩種架構；ARM64 套件不帶機型表，僅按自訂佈局執行。",
     "feat.3.t": "執行期辨識機型",
-    "feat.3.d": "由 DMI 欄位與觸控板模組決定格位中心與鍵表，套件名稱不含機型，因此不存在裝錯套件的問題。<code>asus-numpad sku</code> 會說明辨識結果與依據。",
+    "feat.3.d": "由 DMI 欄位與觸控板模組決定格位中心與鍵表，套件名稱不含機型，因此不存在裝錯套件的問題。<code>numdeck sku</code> 會說明辨識結果與依據。機型表與 <code>0x0d</code> 探測只屬於 x86_64 建置；ARM64 套件按觸控板回報的能力直接用，走 <code>custom_layouts</code>。",
     "feat.4.t": "四段背光與亮度跟隨",
     "feat.4.d": "預設透過 hidraw FEATURE <code>0x0d</code> 跟隨鍵盤背光；檔位值可在 0x41–0x48 內改寫，手動模式提供 <code>bright up|down|cycle</code>。",
     "feat.5.t": "佈局校驗",
     "feat.5.d": "44 個觸控板模組對應到廠商 INF 裡的鍵表，每份標註 verified / family / unsupported。表裡沒有的模組預設在啟動階段即被拒絕，自己配一份鍵表（<code>custom_layouts</code>）就能跑起來。",
     "feat.6.t": "英文與兩種中文",
-    "feat.6.d": "介面與提示分 en、zh-CN、zh-TW 三套，man 頁只有英文。優先順序為 <code>ASUS_NUMPAD_LANG</code>、<code>--lang</code>、設定檔、系統語言環境。",
+    "feat.6.d": "介面與提示分 en、zh-CN、zh-TW 三套，man 頁只有英文。優先順序為 <code>NUMDECK_LANG</code>、<code>--lang</code>、設定檔、系統語言環境。",
     "feat.7.t": "表外機型也能用",
     "feat.7.d": "自訂鍵表、改寫點亮報文、壓感切換與全域熱鍵都在同一份設定裡，分別是 <code>custom_layouts</code>、<code>led_proto</code>、<code>pressure_switch</code>、<code>hotkeys</code>。鍵表可以繼承內建表，只改對不上的那幾格。",
 
@@ -199,15 +199,15 @@
     "models.mgx": "ROG Zephyrus Duo 15 / Duo 15 SE / Duo 16（西風之神，2020–2023）：GX550、GX551、GX650",
     "models.mux": "ASUS Zenbook Duo 14 / Zenbook Pro Duo 15 OLED（2020–2021）：UX582、UX482",
     "models.title": "支援機型",
-    "models.sub": "下列機型構成支援範圍。機型 id 用於手動切換參數；表外機型在啟動時被拒絕，表內但無 NumberPad 硬體的機型同樣被拒絕。",
+    "models.sub": "下列機型構成支援範圍。機型 id 用於手動切換參數；表外機型在啟動時被拒絕，表內但無 NumberPad 硬體的機型同樣被拒絕。此表僅隨 x86_64 建置發佈。",
     "models.n533": "2021 年款不含 NumberPad，不參與比對",
     "models.n614": "已在 <code>G634JY</code> 實機驗證；中國市場「魔霸新銳」為 4 區 RGB 版，不含此硬體",
     "models.n615": "2026 年款沿用同一代號；2025 年款「魔霸新銳」同為 4 區 RGB 版",
     "models.ngx": "側置觸控板，數字模式由鍵盤專用鍵切換",
     "models.nux": "側置觸控板，數字模式由鍵盤專用鍵切換",
     "models.shots": "產品圖取自華碩官網產品頁，與上列機型一一對應。",
-    "models.fine": "以 DMI 裡的機型代號為準，宣傳名稱僅供對照。硬體讀不準時用 <code>asus-numpad sku g614</code> 手動指定，<code>asus-numpad sku auto</code> 回復自動辨識。",
-    "models.gate": "最終判據是觸控板硬體本身。機型代號相符之後，驅動仍要在 HID 裡找到 FEATURE 報告 <code>0x0d</code>，找不到就不啟動：同型號的 4 區 RGB 配置用的是同一塊觸控板模組，但沒有圖示區，畫不出數字鍵。",
+    "models.fine": "以 DMI 裡的機型代號為準，宣傳名稱僅供對照。硬體讀不準時用 <code>numdeck sku g614</code> 手動指定，<code>numdeck sku auto</code> 回復自動辨識。機型 id 只存在於 x86_64 建置。",
+    "models.gate": "最終判據是觸控板硬體本身。機型代號相符之後，驅動仍要在 HID 裡找到 FEATURE 報告 <code>0x0d</code>，找不到就不啟動：同型號的 4 區 RGB 配置用的是同一塊觸控板模組，但沒有圖示區，畫不出數字鍵。上面兩道檢查（機型表、<code>0x0d</code> 探測）都屬於 x86_64 建置；ARM64 套件兩道都不做，觸控板按回報的能力直接用。",
 
     "inst.title": "安裝",
     "inst.sub": "軟體來源只需加入一次，之後隨套件管理員升級。索引帶 GPG 簽章，公鑰隨索引一起發佈。",
@@ -215,11 +215,11 @@
     "inst.apt.n": "Debian 12/13、Ubuntu 22.04–24.04、Mint 21+",
     "inst.dnf.n": "Fedora、RHEL / Rocky / Alma 9–10",
     "inst.zypper.n": "openSUSE Leap 16 與 Tumbleweed 直接讀同一個 rpm-md 來源",
-    "inst.pacman.n": "Arch、Manjaro、EndeavourOS，AUR 來源套件名為 <code>asus-numpad-rs</code>",
+    "inst.pacman.n": "Arch、Manjaro、EndeavourOS，AUR 來源套件名為 <code>numdeck</code>",
     "inst.apk.n": "Alpine 3.19+（musl 建置）",
     "inst.nix.n": "Flake，無需加入來源",
-    "inst.arch": "這些軟體來源目前只提供 <code>x86_64</code> / <code>amd64</code>；其他架構請從原始碼建置：<code>cargo build --release</code>。",
-    "inst.notice": "從舊倉庫 <code>RunningVAN/asus-numpad</code> 過來的使用者：套件名稱相同但來源不同，無法就地升級，換來源前先執行一次 <code>sudo apt remove asus-numpad</code>（rpm 用 <code>dnf remove</code>）。這裡的源只發佈 1.0.0 起，版本號低於舊的 1.2.4，套件管理器不會提示升級。",
+    "inst.arch": "這些軟體來源同時提供 <code>x86_64</code>/<code>amd64</code> 與 <code>ARM64</code>/<code>aarch64</code>；其他架構請從原始碼建置：<code>cargo build --release</code>。ARM64 套件不帶機型表，首次 <code>run</code> 前需在 <code>/etc/numdeck/numdeck.json</code> 的 <code>custom_layouts</code> 裡綁定觸控板模組與鍵位。",
+    "inst.notice": "從舊倉庫 <code>RunningVAN/numdeck</code> 過來的使用者：套件名稱相同但來源不同，無法就地升級，換來源前先執行一次 <code>sudo apt remove numdeck</code>（rpm 用 <code>dnf remove</code>）。這裡的源只發佈 1.0.0 起，版本號低於舊的 1.2.4，套件管理器不會提示升級。",
     "inst.other1.t": "Gentoo 與靜態 tarball",
     "inst.other1.d": "Releases 裡有適合 ebuild 的靜態 tarball，也有 deb、rpm、pkg.tar.zst、apk 供離線安裝。",
     "inst.other1.a": "前往 Releases",
@@ -228,7 +228,7 @@
 
     "use.title": "常用指令",
     "use.sub": "守護行程由 systemd 啟動，命令列用於排查與調參。",
-    "use.gui": "可選的 egui 視窗（<code>asus-numpad-gui</code>）寫的是同一份 FEATURE <code>0x0d</code> 報文。Linux 上它是完整的控制中心，分七個頁籤：燈光（含鍵盤四檔到觸控板亮度的對映，逐檔可改）、驅動設定的全部欄位、系統狀態與服務啟停、每個 <code>asus-numpad</code> 子命令的表單、擴充（自訂佈局、點亮報文、壓感切換、全域熱鍵）、給表外機型做網格分割與手動落點校準的校準頁，以及視窗自行的設定。命令頁執行的是同一個執行檔，不重寫邏輯，也就不會漂移。介面按卡片分組，跟隨系統的深淺色主題；亮度用逐檔的檔位條而不是滑桿，一格一檔。",
+    "use.gui": "可選的 egui 視窗（<code>numdeck-gui</code>）寫的是同一份 FEATURE <code>0x0d</code> 報文。Linux 上它是完整的控制中心，分七個頁籤：燈光（含鍵盤四檔到觸控板亮度的對映，逐檔可改）、驅動設定的全部欄位、系統狀態與服務啟停、每個 <code>numdeck</code> 子命令的表單、擴充（自訂佈局、點亮報文、壓感切換、全域熱鍵）、給表外機型做網格分割與手動落點校準的校準頁，以及視窗自行的設定。命令頁執行的是同一個執行檔，不重寫邏輯，也就不會漂移。介面按卡片分組，跟隨系統的深淺色主題；亮度用逐檔的檔位條而不是滑桿，一格一檔。",
     "use.guiWin": "Windows 上只做燈光：介面、檔位、跟隨 NumLock、寫入日誌。小鍵盤輸入交給官方驅動。",
     "use.shot1": "擴充頁：自訂佈局、重寫點亮報文、壓感切換、全域熱鍵。",
     "use.shot2": "校準頁：分區、手動校準、樣本回放，以及對應的設定片段。",
@@ -237,7 +237,7 @@
     "use.b.t": "背光",
     "use.c.t": "佈局與語言",
     "use.d.t": "機型與校準",
-    "use.fine": "設定檔位於 <code>~/.config/asus-numpad/asus-numpad.json</code>，以 root 執行時讀 <code>/etc/asus-numpad/</code>。未寫的鍵沿用廠商預設值：<code>numlock</code>、<code>mixed_mode</code>、<code>grab</code>、<code>follow_keyboard_brightness</code>、<code>allow_unverified_layout</code> 以及兩張亮度表。",
+    "use.fine": "設定檔位於 <code>~/.config/numdeck/numdeck.json</code>，以 root 執行時讀 <code>/etc/numdeck/</code>。未寫的鍵沿用廠商預設值：<code>numlock</code>、<code>mixed_mode</code>、<code>grab</code>、<code>follow_keyboard_brightness</code>、<code>allow_unverified_layout</code> 以及兩張亮度表。",
 
     "faq.title": "常見問題",
     "faq.1.q": "會取代 asusctl 或核心的 hid-asus 嗎？",
@@ -245,7 +245,7 @@
     "faq.2.q": "觸控板的指標功能會失效嗎？",
     "faq.2.d": "僅在數字模式開啟時抓取。關閉 <code>grab</code> 後，點擊事件仍送至桌面；開啟 <code>mixed_mode</code> 且 <code>/dev/uinput</code> 可用時，數字鍵與指標可以同時使用。",
     "faq.3.q": "我的機型不在表裡，或者沒有 NumberPad，能用嗎？",
-    "faq.3.d": "機型代號無相符項時拒絕啟動：以結束碼 3 結束並列出支援機型，不沿用其他機型的參數。<code>--sku</code> 或 <code>asus-numpad sku &lt;id&gt;</code> 可跳過機型校驗，<code>asus-numpad check</code> 會列出需要回報的資訊。機型在表中但無此硬體的，同樣以結束碼 3 拒絕啟動：驅動要求 HID 的 FEATURE 報告 <code>0x0d</code>，4 區 RGB 配置不具備該報告。",
+    "faq.3.d": "機型代號無相符項時拒絕啟動：以結束碼 3 結束並列出支援機型，不沿用其他機型的參數。<code>--sku</code> 或 <code>numdeck sku &lt;id&gt;</code> 可跳過機型校驗，<code>numdeck check</code> 會列出需要回報的資訊。機型在表中但無此硬體的，同樣以結束碼 3 拒絕啟動：驅動要求 HID 的 FEATURE 報告 <code>0x0d</code>，4 區 RGB 配置不具備該報告。以上規則不適用於 ARM64 建置：它沒有機型表可缺，也不做 <code>0x0d</code> 探測，表外機型不會被拒絕。",
     "faq.4.q": "簽章公鑰在哪裡，怎麼核對？",
     "faq.4.d": "apt、rpm、pacman 的索引共用一個 GPG 公鑰，Alpine 的套件另用一個 RSA 公鑰；兩個公鑰均隨索引放在倉庫的 <code>keys/</code> 下，由 <code>install.sh</code> 匯入，無需另行下載。指紋：<code>79F2 8215 7F2D 3FF8 E3C6 8063 14C2 BF61 1986 E168</code>，細節見 <code>docs/signing.md</code>。",
     "faq.5.q": "雙螢幕機型（Zephyrus Duo、Zenbook Duo）呢？",
@@ -265,7 +265,7 @@
     "foot.install": "安裝指南",
     "foot.verify": "發佈記錄",
     "foot.src": "純靜態頁面 · 無追蹤",
-    "foot.right": "© 2026 asus-numpad · GPL-3.0-or-later"
+    "foot.right": "© 2026 numdeck · GPL-3.0-or-later"
   };
 
   var I18N = { en: {}, "zh-CN": ZH_CN, "zh-TW": ZH_TW };

@@ -2,8 +2,8 @@
 
 use eframe::egui;
 
-use asus_numpad::custom::{CustomLayoutSpec, LayoutPatch};
-use asus_numpad::layout::{self, Layout};
+use numdeck::custom::{CustomLayoutSpec, LayoutPatch};
+use numdeck::layout::{self, Layout};
 
 use crate::theme;
 

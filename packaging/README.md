@@ -20,9 +20,9 @@ packaging/
 └── nix/              package.nix + NixOS module（配合根目录 flake.nix）
 ```
 
-分发包只装 `asus-numpad`、man 页、service 与 udev 规则。GUI（`asus-numpad-gui`）不进包：
+分发包只装 `numdeck`、man 页、service 与 udev 规则。GUI（`numdeck-gui`）不进包：
 它在 Linux 上只是可选项，egui / winit 的依赖体积比驱动本体大一个量级，编译一次要拉几十个
-crate。要用就自行 `cargo build --release -p asus-numpad-gui`。
+crate。要用就自行 `cargo build --release -p numdeck-gui`。
 
 ## 用法
 
@@ -31,7 +31,7 @@ crate。要用就自行 `cargo build --release -p asus-numpad-gui`。
 ./packaging/build.sh deb             # 只出 .deb
 ./packaging/build.sh rpm arch        # 指定多目标
 ./packaging/build.sh --check         # 只自检文件齐全性与工具链
-./packaging/build.sh --no-build deb  # 复用已有 target/release/asus-numpad
+./packaging/build.sh --no-build deb  # 复用已有 target/release/numdeck
 ```
 
 产物落在 `dist/`。也可单独调脚本：
@@ -44,7 +44,7 @@ crate。要用就自行 `cargo build --release -p asus-numpad-gui`。
 ./packaging/tarball/make-tarball.sh --version 5.0.1 --static --out /tmp/out
 ```
 
-编译产物只出一次即可复用：出多个格式时设 `ASUS_NUMPAD_BIN=target/release/asus-numpad`
+编译产物只出一次即可复用：出多个格式时设 `NUMDECK_BIN=target/release/numdeck`
 并给各脚本加 `--no-build`，避免每格式重新编译一遍。
 
 ## 分发仓库
@@ -81,25 +81,25 @@ rpm 的编译在 spec 的 `%build` 里，`make-rpm.sh` 只有 `--check`（`rpmbu
 ```bash
 shellcheck -x -S warning packaging/build.sh packaging/lib/common.sh \
     packaging/deb/make-deb.sh packaging/rpm/make-rpm.sh packaging/arch/make-arch.sh \
-    packaging/arch/PKGBUILD packaging/arch/asus-numpad.install \
+    packaging/arch/PKGBUILD packaging/arch/numdeck.install \
     packaging/alpine/make-alpine.sh packaging/tarball/make-tarball.sh \
     tools/repo-gen.sh
 shellcheck -s sh -S warning packaging/deb/postinst packaging/deb/prerm packaging/deb/postrm \
     packaging/tarball/install.sh packaging/tarball/uninstall.sh \
-    packaging/alpine/asus-numpad.post-install
+    packaging/alpine/numdeck.post-install
 ```
 
 ## 安装后的文件布局
 
 | 路径 | 内容 |
 | --- | --- |
-| `/usr/bin/asus-numpad` | 二进制 |
-| `/usr/lib/systemd/user/asus-numpad.service` | 用户单元（随会话启动，免 root） |
-| `/usr/lib/udev/rules.d/99-asus-numpad.rules` | 权限规则 |
-| `/usr/share/man/man1/asus-numpad.1` | man |
-| `/etc/asus-numpad/asus-numpad.json` | 系统级配置（rpm `%config(noreplace)`） |
-| `~/.config/asus-numpad/asus-numpad.json` | 用户配置，日常读写的就是这份 |
-| `/usr/share/doc/asus-numpad/` | README 与 copyright |
+| `/usr/bin/numdeck` | 二进制 |
+| `/usr/lib/systemd/user/numdeck.service` | 用户单元（随会话启动，免 root） |
+| `/usr/lib/udev/rules.d/99-numdeck.rules` | 权限规则 |
+| `/usr/share/man/man1/numdeck.1` | man |
+| `/etc/numdeck/numdeck.json` | 系统级配置（rpm `%config(noreplace)`） |
+| `~/.config/numdeck/numdeck.json` | 用户配置，日常读写的就是这份 |
+| `/usr/share/doc/numdeck/` | README 与 copyright |
 
 ## 发版顺序
 

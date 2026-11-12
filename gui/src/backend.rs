@@ -8,7 +8,7 @@
 
 use anyhow::Result;
 
-use asus_numpad::led_policy::{ASUS_VID, ELAN_VID, PIXART_VID};
+use numdeck::led_policy::{ASUS_VID, ELAN_VID, PIXART_VID};
 
 /// 一个 HID 接口的探测结果。
 #[derive(Clone, Debug)]
@@ -24,7 +24,7 @@ pub struct DeviceInfo {
     pub has_feature: bool,
     /// `FeatureReportByteLength`（含 report id）；0 表示 HID 层拿不到能力
     pub feature_len: u16,
-    /// [`asus_numpad::led_policy::candidate_rank`] 给出的优先级，越小越优先
+    /// [`numdeck::led_policy::candidate_rank`] 给出的优先级，越小越优先
     pub rank: Option<u8>,
     /// 是否被选为当前灯光目标
     pub selected: bool,
@@ -56,7 +56,7 @@ impl DeviceInfo {
 
     /// 是否能作为灯光目标：带 FEATURE 且报告长度够放下 5 字节报文。
     pub fn usable(&self) -> bool {
-        self.has_feature && self.feature_len as usize >= asus_numpad::led_proto::LED_FEATURE_LEN
+        self.has_feature && self.feature_len as usize >= numdeck::led_proto::LED_FEATURE_LEN
     }
 }
 
@@ -75,7 +75,7 @@ pub trait Backend {
     fn write(
         &mut self,
         device: &DeviceInfo,
-        frame: [u8; asus_numpad::led_proto::LED_FEATURE_LEN],
+        frame: [u8; numdeck::led_proto::LED_FEATURE_LEN],
     ) -> Result<()>;
 
     /// 读 NumLock 状态；平台读不到时返回 `None`。
@@ -101,7 +101,7 @@ pub fn create() -> Box<dyn Backend> {
     }
 }
 
-/// 在探测结果里按 [`asus_numpad::led_policy`] 的优先级挑出灯光目标，并把
+/// 在探测结果里按 [`numdeck::led_policy`] 的优先级挑出灯光目标，并把
 /// `selected` 标记写到对应条目上。
 ///
 /// 判据与 Linux 侧完全一致（同一份 `candidate_rank`），避免两个平台在
@@ -111,10 +111,10 @@ pub fn mark_best(devices: &mut [DeviceInfo]) -> Option<usize> {
         .iter()
         .map(|d| (u32::from(d.vid), u32::from(d.pid), d.has_feature))
         .collect();
-    let best = asus_numpad::led_policy::pick_best(&tuples);
+    let best = numdeck::led_policy::pick_best(&tuples);
 
     for d in devices.iter_mut() {
-        d.rank = asus_numpad::led_policy::candidate_rank(
+        d.rank = numdeck::led_policy::candidate_rank(
             u32::from(d.vid),
             u32::from(d.pid),
             d.has_feature,
@@ -130,11 +130,11 @@ pub fn mark_best(devices: &mut [DeviceInfo]) -> Option<usize> {
 /// 档位表：在 `0x00` 与 `0x41..=0x48` 组成的轴上等分取 `steps` 个点。
 ///
 /// 与 Linux 侧 `manual_brightness_levels` 用的是同一个
-/// [`asus_numpad::brightness::linear_levels_from_off`]，所以 4 档组必然给出
+/// [`numdeck::brightness::linear_levels_from_off`]，所以 4 档组必然给出
 /// `0x00 / 0x43 / 0x45 / 0x48`——两个平台的「第 2 档」不会一个亮一个暗。
 pub fn level_table(steps: u8) -> Vec<u8> {
-    asus_numpad::brightness::linear_levels_from_off(
-        &asus_numpad::led_proto::brightness_levels(),
+    numdeck::brightness::linear_levels_from_off(
+        &numdeck::led_proto::brightness_levels(),
         steps as usize,
     )
 }

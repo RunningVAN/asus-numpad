@@ -76,7 +76,7 @@ pub const VAL_OFF: u8 = 0x00;
 pub const VAL_BRIGHTNESS_BASE: u8 = 0x40;
 pub const VAL_BRIGHTNESS_MAX: u8 = 8;
 
-/// 手动调光的默认档数（`asus-numpad bright 1|2|3|4`，另有 0 = 熄灭）。
+/// 手动调光的默认档数（`numdeck bright 1|2|3|4`，另有 0 = 熄灭）。
 ///
 /// 四档在「熄灭 + 硬件全档」这条轴上**线性等分**（`0x00` 与 `0x41..=0x48`，共 9 点），
 /// 首档就是熄灭、末档是最亮：默认 8 档表 → `0x00 / 0x43 / 0x45 / 0x48`。
@@ -108,14 +108,22 @@ pub enum LevelSetError {
 
 pub const PROC_INPUT_DEVICES: &str = "/proc/bus/input/devices";
 /// 配置文件正式路径（与 rpm 包内安装路径一致）。
-pub const CONFIG_PATH: &str = "/etc/asus-numpad/asus-numpad.json";
+pub const CONFIG_PATH: &str = "/etc/numdeck/numdeck.json";
 /// 历史版本的配置路径（都平铺在 `/etc` 下），按新→旧顺序探测。
 ///
-/// * `/etc/asus-numpad.json` —— 改名后中间版本的路径；
-/// * `/etc/rog-numpad.json`   —— 更早 rog-numpad 时代的路径。
+/// * `/etc/numdeck.json` —— 改名后中间版本的路径；
+/// * `/etc/asus-numpad/asus-numpad.json` —— 更名前（1.0.x）的正式路径，
+///   升级上来的机器大量存在这一份，必须照旧读得到；
+/// * `/etc/asus-numpad.json` —— 更名前的中间版本路径；
+/// * `/etc/rog-numpad.json`  —— 更早 rog-numpad 时代的路径。
 ///
 /// 仅用于一次性迁移与只读兼容，新写入一律走 [`CONFIG_PATH`]。
-pub const LEGACY_CONFIG_PATHS: &[&str] = &["/etc/asus-numpad.json", "/etc/rog-numpad.json"];
+pub const LEGACY_CONFIG_PATHS: &[&str] = &[
+    "/etc/numdeck.json",
+    "/etc/asus-numpad/asus-numpad.json",
+    "/etc/asus-numpad.json",
+    "/etc/rog-numpad.json",
+];
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // --------------------------------------------------------------------------- //
@@ -257,7 +265,7 @@ pub struct Config {
     pub repeat_interval_ms: f64,
     // ---- 布局 ----
     /// 官方布局名：`auto` = 按触摸板 HID 硬件 ID 自动识别（推荐）；
-    /// 也可写死某套布局（`GH3XLNDZ` / `GH2XLNDZ` / `GH4XLNDZ` 等，见 `asus-numpad layout`）。
+    /// 也可写死某套布局（`GH3XLNDZ` / `GH2XLNDZ` / `GH4XLNDZ` 等，见 `numdeck layout`）。
     pub layout_name: String,
     /// 允许使用「尚未收录键表」的同族布局出键。
     ///
@@ -268,7 +276,7 @@ pub struct Config {
     ///
     /// 只给「硬件信息读不准」的机器留的后路：虚拟机、DMI 被写成占位串的整机、
     /// 换过主板、白牌机箱等。命令行 `--sku` 优先级更高；
-    /// `asus-numpad sku auto` 可清空本字段、回到自动识别。
+    /// `numdeck sku auto` 可清空本字段、回到自动识别。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sku: Option<String>,
     // ---- 行为 ----
@@ -285,7 +293,7 @@ pub struct Config {
     pub touchpad_height_mm: f64,
     // ---- 界面语言 ----
     /// 界面语言：`auto`（跟随系统 locale）/ `zh-CN` / `zh-TW` / `en`。
-    /// 优先级：环境变量 `ASUS_NUMPAD_LANG` > 命令行 `--lang` > 本字段 > 系统 locale。
+    /// 优先级：环境变量 `NUMDECK_LANG` > 命令行 `--lang` > 本字段 > 系统 locale。
     pub language: String,
     // ---- 背光亮度（跟随键盘背光） ----
     /// 是否让数字区亮度跟随键盘背光（读 asus::kbd_backlight 换算成 0x41..0x48）
@@ -305,14 +313,14 @@ pub struct Config {
     /// 键盘背光轮询间隔（ms）
     pub brightness_poll_ms: u32,
     /// 手动调光的固定档（0 = 熄灭；1..= [`Config::manual_steps`] 从最暗到最亮）。
-    /// 仅在「不跟随键盘背光」时作为常亮档使用；`asus-numpad bright N` 会写入这里。
+    /// 仅在「不跟随键盘背光」时作为常亮档使用；`numdeck bright N` 会写入这里。
     pub manual_brightness_step: u8,
     /// 手动档位表（从暗到亮）：**默认显式给出四档** `[0, 0x43, 0x45, 0x48]`
     /// （0x00 灭 → 0x48 最亮，线性等分）。
     ///
     /// 每一项都可以换成任意一个硬件支持的亮度：`0x00` 或 `0x41..=0x48`（共 8 个亮档）；
     /// 档数由长度决定（1..=8），所以 `bright 1|2|…|N` 的 N 跟着表长走。
-    /// 改单档可以直接用 `asus-numpad levels <N> <VALUE>`，也可以手改这里，
+    /// 改单档可以直接用 `numdeck levels <N> <VALUE>`，也可以手改这里，
     /// 例如 `[65, 65, 67, 72]`（前两档一样亮）、`[65, 66, 67, 68, 72]`（五档更细）。
     /// 显式写 `null` = 交回驱动按线性等分现算（与默认表数值相同）。
     #[serde(
@@ -423,10 +431,10 @@ mod tests {
 
     #[test]
     fn user_config_path_uses_xdg_layout() {
-        // 不论 HOME/XDG 是否设置，末尾必须是 <dir>/asus-numpad/asus-numpad.json
+        // 不论 HOME/XDG 是否设置，末尾必须是 <dir>/numdeck/numdeck.json
         let p = Config::user_config_path();
         assert!(
-            p.ends_with("asus-numpad/asus-numpad.json"),
+            p.ends_with("numdeck/numdeck.json"),
             "got {}",
             p.display()
         );
@@ -851,7 +859,7 @@ mod tests {
         // to_json 写出的东西必须能被 load 原样读回（v5 曾因 "0x41" 字符串读不回来，
         // 导致 bright 命令写入后 follow/手动档全部丢失，退回默认值）
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("asus-numpad-roundtrip-{}.json", std::process::id()));
+        let path = dir.join(format!("numdeck-roundtrip-{}.json", std::process::id()));
         let c = Config {
             follow_keyboard_brightness: false,
             manual_brightness_step: 2,
@@ -876,7 +884,7 @@ mod tests {
         // 少一个字段就等于界面上的设置被静默丢弃。
         let _registry_guard = crate::test_lock::registry();
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("asus-numpad-ext-{}.json", std::process::id()));
+        let path = dir.join(format!("numdeck-ext-{}.json", std::process::id()));
         let c = Config {
             custom_layouts: vec![crate::custom::CustomLayoutSpec {
                 name: "STICKER-4X4".to_string(),

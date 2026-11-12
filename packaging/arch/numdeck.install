@@ -7,17 +7,17 @@ post_install() {
     udevadm trigger --subsystem-match=input --action=change 2>/dev/null || true
     udevadm trigger --subsystem-match=misc --action=change 2>/dev/null || true
     systemctl daemon-reload 2>/dev/null || true
-    systemctl enable asus-numpad.service 2>/dev/null || true
-    systemctl restart asus-numpad.service 2>/dev/null || true
+    systemctl enable numdeck.service 2>/dev/null || true
+    systemctl restart numdeck.service 2>/dev/null || true
 
     cat <<'EOF'
 
-asus-numpad 已安装。
+numdeck 已安装。
   · 长按触摸板右上角图标区约 496ms 切换数字小键盘
     （冰刃双屏 / 灵耀双屏为侧置触摸板，数字模式走键盘上的专用切换键）
-  · systemctl status asus-numpad
-  · asus-numpad check
-  · 配置：/etc/asus-numpad/asus-numpad.json
+  · systemctl status numdeck
+  · numdeck check
+  · 配置：/etc/numdeck/numdeck.json
 
 EOF
 }
@@ -25,12 +25,12 @@ EOF
 post_upgrade() {
     udevadm control --reload-rules 2>/dev/null || true
     systemctl daemon-reload 2>/dev/null || true
-    systemctl restart asus-numpad.service 2>/dev/null || true
+    systemctl restart numdeck.service 2>/dev/null || true
 }
 
 pre_remove() {
-    systemctl stop asus-numpad.service 2>/dev/null || true
-    systemctl disable asus-numpad.service 2>/dev/null || true
+    systemctl stop numdeck.service 2>/dev/null || true
+    systemctl disable numdeck.service 2>/dev/null || true
 }
 
 post_remove() {

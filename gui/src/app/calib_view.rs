@@ -10,16 +10,16 @@
 //!   格中心原始坐标是多少」，样本点也一起画上去，点偏了能一眼看到。
 //! - [`lints`]：不依赖真机就能判定的问题，就地列出来，别等到保存后服务拒绝启动。
 //!
-//! 两者都走 [`asus_numpad::partition::PartitionSpec::resolve`]——与驱动判键时同一个
+//! 两者都走 [`numdeck::partition::PartitionSpec::resolve`]——与驱动判键时同一个
 //! 解算函数，预览里看到什么，真机就是什么。
 
 use eframe::egui::{
     self, pos2, vec2, Align2, Color32, CornerRadius, FontId, Rect, Stroke, StrokeKind,
 };
 
-use asus_numpad::config::Config;
-use asus_numpad::layout::{self as layout_mod, Geometry};
-use asus_numpad::partition::Panel;
+use numdeck::config::Config;
+use numdeck::layout::{self as layout_mod, Geometry};
+use numdeck::partition::Panel;
 
 use crate::theme::{self, Palette};
 
@@ -464,7 +464,7 @@ impl Lint {
 
 /// 只靠配置本身就能判定的问题。
 ///
-/// 判据与 [`asus_numpad::partition::PartitionSpec::resolve`] / `sanitize` 一致，
+/// 判据与 [`numdeck::partition::PartitionSpec::resolve`] / `sanitize` 一致，
 /// 但不依赖真机范围：真机上「矩形越界」由驱动拒绝，这里管的是填错、写反、漏一个。
 pub(super) fn lints(cfg: &Config) -> Vec<Lint> {
     let mut out = Vec::new();
@@ -792,7 +792,7 @@ mod tests {
     #[test]
     fn lints_catch_reversed_rect() {
         let mut cfg = Config::default();
-        cfg.partition = asus_numpad::partition::PartitionSpec {
+        cfg.partition = numdeck::partition::PartitionSpec {
             rect: Some([900.0, 800.0, 100.0, 50.0]),
             ..cfg.partition
         };
@@ -811,7 +811,7 @@ mod tests {
     #[test]
     fn lints_catch_out_of_range_cols() {
         let mut cfg = Config::default();
-        cfg.partition = asus_numpad::partition::PartitionSpec {
+        cfg.partition = numdeck::partition::PartitionSpec {
             cols: Some(99),
             ..cfg.partition
         };

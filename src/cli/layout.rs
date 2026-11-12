@@ -3,10 +3,10 @@
 use std::path::Path;
 
 use anyhow::Result;
-use asus_numpad::config::Config;
-use asus_numpad::i18n::{self};
-use asus_numpad::keycodes as kc;
-use asus_numpad::layout::{Geometry, KEY_GRID};
+use numdeck::config::Config;
+use numdeck::i18n::{self};
+use numdeck::keycodes as kc;
+use numdeck::layout::{Geometry, KEY_GRID};
 
 use super::*;
 
@@ -20,7 +20,7 @@ pub(crate) fn cmd_layout(
     name: Option<&str>,
     ids: bool,
 ) -> Result<i32> {
-    use asus_numpad::layout::{self, LayoutSupport};
+    use numdeck::layout::{self, LayoutSupport};
 
     println!(
         "{}",
@@ -63,7 +63,7 @@ pub(crate) fn cmd_layout(
 
     // 配置里装上的自定义布局也要列出来：否则用户配完 `custom_layouts` 在
     // `layout list` 里看不到任何痕迹，只能靠猜是否生效。
-    let custom = asus_numpad::custom::list_custom();
+    let custom = numdeck::custom::list_custom();
     if !custom.is_empty() {
         println!();
         println!("{}", i18n::t("layout.custom_title"));
@@ -182,7 +182,7 @@ pub(crate) fn render_keygrid(cfg: &Config) -> String {
         for (c, cell) in row.iter().enumerate() {
             let text = match cell {
                 None => i18n::t("check.keygrid_numlock"),
-                Some(cell) => asus_numpad::layout::key_for_cell(*cell, cfg.key_mode)
+                Some(cell) => numdeck::layout::key_for_cell(*cell, cfg.key_mode)
                     .map(|k| kc::name_of(k).to_string())
                     .unwrap_or_else(|| "?".into()),
             };
@@ -212,7 +212,7 @@ pub(crate) fn fallback_geometry(cfg: &Config) -> Geometry {
     let height_um = cfg.touchpad_height_mm * 1000.0;
     let ux = side_x as f64 / width_um;
     let uy = side_y as f64 / height_um;
-    let panel = asus_numpad::partition::Panel {
+    let panel = numdeck::partition::Panel {
         xmin: 0,
         xmax: side_x,
         ymin: 0,

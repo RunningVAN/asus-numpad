@@ -4,25 +4,25 @@
 # Gentoo 版本化 ebuild。
 #
 # 用法：把本文件与 Manifest 一起放进本地 overlay
-#   /var/db/repos/local/sys-apps/asus-numpad/asus-numpad-1.0.3.ebuild
+#   /var/db/repos/local/sys-apps/numdeck/numdeck-1.0.3.ebuild
 # 然后
-#   sudo ebuild asus-numpad-1.0.3.ebuild manifest
-#   sudo emerge -av sys-apps/asus-numpad
+#   sudo ebuild numdeck-1.0.3.ebuild manifest
+#   sudo emerge -av sys-apps/numdeck
 #
-# 若想直接源码跟随仓库最新提交，用同目录的 asus-numpad-9999.ebuild。
+# 若想直接源码跟随仓库最新提交，用同目录的 numdeck-9999.ebuild。
 
 EAPI=8
 
 inherit systemd udev
 
-DESCRIPTION="ASUS NumberPad userspace driver for Linux (official AlgoParameters aligned)"
-HOMEPAGE="https://github.com/asus-numpad/asus-numpad"
+DESCRIPTION="Touchpad numeric keypad userspace driver for Linux (ASUS NumberPad lineage, official AlgoParameters aligned)"
+HOMEPAGE="https://github.com/numdeck-dev/numdeck"
 
 if [[ ${PV} == 9999 ]]; then
 	inherit git-r3
-	EGIT_REPO_URI="https://github.com/asus-numpad/asus-numpad.git"
+	EGIT_REPO_URI="https://github.com/numdeck-dev/numdeck.git"
 else
-	SRC_URI="https://github.com/asus-numpad/asus-numpad/archive/v${PV}.tar.gz -> ${P}.tar.gz"
+	SRC_URI="https://github.com/numdeck-dev/numdeck/archive/v${PV}.tar.gz -> ${P}.tar.gz"
 	KEYWORDS="~amd64 ~arm64"
 fi
 
@@ -56,20 +56,20 @@ src_compile() {
 }
 
 src_install() {
-	dobin target/release/asus-numpad
-	doman packaging/common/asus-numpad.1
+	dobin target/release/numdeck
+	doman packaging/common/numdeck.1
 
-	insinto /usr/share/asus-numpad/lang
+	insinto /usr/share/numdeck/lang
 	doins lang/zh_CN.lang lang/zh_TW.lang lang/en.lang
 
-	udev_dorules packaging/common/99-asus-numpad.rules
+	udev_dorules packaging/common/99-numdeck.rules
 
 	if use systemd; then
-		systemd_douserunit packaging/common/asus-numpad.service
+		systemd_douserunit packaging/common/numdeck.service
 	fi
 
-	insinto /etc/asus-numpad
-	newins - asus-numpad.json <<-EOF
+	insinto /etc/numdeck
+	newins - numdeck.json <<-EOF
 		{
 		  "numlock": "sync",
 		  "calc_gesture": true,
@@ -82,7 +82,7 @@ src_install() {
 		}
 	EOF
 	# 配置归用户，升级不覆盖
-	keepdir /etc/asus-numpad
+	keepdir /etc/numdeck
 
 	einstalldocs
 }
@@ -92,11 +92,11 @@ pkg_postinst() {
 
 	if use systemd; then
 		elog "启用用户级服务（当前用户）："
-		elog "  systemctl --user enable --now asus-numpad.service"
+		elog "  systemctl --user enable --now numdeck.service"
 		elog "开机即起（不依赖登录）："
 		elog "  loginctl enable-linger \$USER"
 	else
-		elog "无 systemd：把 'asus-numpad run' 加进桌面会话自启即可。"
+		elog "无 systemd：把 'numdeck run' 加进桌面会话自启即可。"
 	fi
-	elog "自检：asus-numpad check"
+	elog "自检：numdeck check"
 }

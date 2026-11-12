@@ -23,12 +23,12 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: asus-numpad-gui-windows-x64
-            binary: asus-numpad-gui.exe
+            artifact: numdeck-gui-windows-x64
+            binary: numdeck-gui.exe
           # 22.04 的 glibc 更旧，产出的二进制在新旧发行版上都能跑
           - os: ubuntu-22.04
-            artifact: asus-numpad-gui-linux-x64
-            binary: asus-numpad-gui
+            artifact: numdeck-gui-linux-x64
+            binary: numdeck-gui
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -49,7 +49,7 @@ jobs:
         shell: bash
 
       - name: cargo build --release
-        run: cargo build --release -p asus-numpad-gui
+        run: cargo build --release -p numdeck-gui
 
       - name: 自检（不写硬件）
         run: ./target/release/${{ matrix.binary }} --selftest
@@ -66,7 +66,7 @@ jobs:
         continue-on-error: true
         run: |
           sudo apt-get install -y --no-install-recommends xvfb libgl1-mesa-dri
-          cargo build -p asus-numpad-gui
+          cargo build -p numdeck-gui
           LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a bash tools/verify-gui-shots.sh
 
       - uses: actions/upload-artifact@v4

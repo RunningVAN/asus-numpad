@@ -2,7 +2,7 @@
 
 use eframe::egui;
 
-use asus_numpad::custom::{Hotkey, HotkeyAction, HotkeySpec};
+use numdeck::custom::{Hotkey, HotkeyAction, HotkeySpec};
 
 use super::WARN;
 use crate::theme;

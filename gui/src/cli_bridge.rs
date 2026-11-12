@@ -1,11 +1,11 @@
 //! 命令行工具桥接层。
 //!
 //! 界面上那张命令面板并不重新实现 `check` / `dump` / `bright` / `levels` / `led` /
-//! `layout` / `sku` / `lang` 的行为，而是按表单拼出参数、调用仓库里那个 `asus-numpad`
+//! `layout` / `sku` / `lang` 的行为，而是按表单拼出参数、调用仓库里那个 `numdeck`
 //! 可执行文件，再把输出原样贴回来。理由是这些子命令会读 DMI、写配置文件、按语言文件
 //! 输出文案，重写一遍必然与 CLI 漂移——界面上看到的和终端里敲出来的必须是同一件事。
 //!
-//! 可执行文件的查找顺序：`ASUS_NUMPAD_BIN` → 与本程序同目录 → `PATH` → 几个常见安装
+//! 可执行文件的查找顺序：`NUMDECK_BIN` → 与本程序同目录 → `PATH` → 几个常见安装
 //! 位置。找不到时界面会说明，不会静默失败。
 
 use std::io::Read;
@@ -65,16 +65,16 @@ impl Completion {
     }
 }
 
-/// 定位 `asus-numpad` 可执行文件。
+/// 定位 `numdeck` 可执行文件。
 pub fn locate() -> Option<PathBuf> {
-    if let Some(explicit) = std::env::var_os("ASUS_NUMPAD_BIN") {
+    if let Some(explicit) = std::env::var_os("NUMDECK_BIN") {
         let path = PathBuf::from(explicit);
         if path.is_file() {
             return Some(path);
         }
     }
 
-    let name = format!("asus-numpad{}", std::env::consts::EXE_SUFFIX);
+    let name = format!("numdeck{}", std::env::consts::EXE_SUFFIX);
 
     // 同目录：源码树里 cargo build 之后两个二进制挨着，或安装包装在同一前缀下
     if let Ok(exe) = std::env::current_exe() {
@@ -96,10 +96,10 @@ pub fn locate() -> Option<PathBuf> {
     }
 
     let fallbacks = [
-        "/usr/bin/asus-numpad",
-        "/usr/local/bin/asus-numpad",
-        "/bin/asus-numpad",
-        "/run/current-system/sw/bin/asus-numpad", // NixOS
+        "/usr/bin/numdeck",
+        "/usr/local/bin/numdeck",
+        "/bin/numdeck",
+        "/run/current-system/sw/bin/numdeck", // NixOS
     ];
     for path in fallbacks {
         let path = PathBuf::from(path);
@@ -304,7 +304,7 @@ mod tests {
     #[test]
     fn summary_includes_exit_code_and_streams() {
         let done = Completion {
-            argv: vec!["asus-numpad".to_string(), "check".to_string()],
+            argv: vec!["numdeck".to_string(), "check".to_string()],
             code: Some(0),
             stdout: "ok\n".to_string(),
             stderr: String::new(),
@@ -313,7 +313,7 @@ mod tests {
             truncated: false,
         };
         let text = done.summary();
-        assert!(text.starts_with("$ asus-numpad check"));
+        assert!(text.starts_with("$ numdeck check"));
         assert!(text.contains("[退出码] 0"));
         assert!(text.contains("ok"));
         assert!(done.ok());
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn summary_reports_spawn_failure() {
         let done = Completion {
-            argv: vec!["asus-numpad".to_string()],
+            argv: vec!["numdeck".to_string()],
             code: None,
             stdout: String::new(),
             stderr: String::new(),
@@ -337,7 +337,7 @@ mod tests {
     #[test]
     fn summary_marks_signal_termination() {
         let done = Completion {
-            argv: vec!["asus-numpad".to_string(), "run".to_string()],
+            argv: vec!["numdeck".to_string(), "run".to_string()],
             code: None,
             stdout: String::new(),
             stderr: String::new(),
@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn summary_mentions_timeout() {
         let done = Completion {
-            argv: vec!["asus-numpad".to_string(), "dump".to_string()],
+            argv: vec!["numdeck".to_string(), "dump".to_string()],
             code: None,
             stdout: "event 0x41\n".to_string(),
             stderr: String::new(),
@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn missing_binary_reports_error() {
         let done = run(
-            Path::new("/definitely/not/here/asus-numpad"),
+            Path::new("/definitely/not/here/numdeck"),
             vec!["check".to_string()],
             None,
         );
@@ -409,25 +409,25 @@ mod tests {
         assert!(!done.timed_out);
     }
 
-    /// 端到端：命令面板拼出来的 argv 真的交给 `asus-numpad` 跑一遍。
+    /// 端到端：命令面板拼出来的 argv 真的交给 `numdeck` 跑一遍。
     ///
     /// 默认不跑，因为它依赖一个构建好的可执行文件。手跑：
-    /// `cargo build -p asus-numpad && cargo test -p asus-numpad-gui -- --ignored --nocapture e2e`
+    /// `cargo build -p numdeck && cargo test -p numdeck-gui -- --ignored --nocapture e2e`
     ///
     /// 判据只看 clap 那一层：参数形态不对时它会打 "unexpected argument" / "invalid
     /// value" 并以用法错误退出。至于「这台机器不支持」「档位不单调」这类业务拒绝，
     /// 属于真机才有的结论，不影响这里要验的东西——界面拼的参数 CLI 能认。
     #[test]
-    #[ignore = "需要先构建 asus-numpad（或用 ASUS_NUMPAD_BIN 指过去）"]
+    #[ignore = "需要先构建 numdeck（或用 NUMDECK_BIN 指过去）"]
     fn e2e_argv_is_accepted_by_the_real_cli() {
         use crate::cmdform::{
             Advanced, BrightAction, CommandForm, LedAction, LevelsAction, SubCmd,
         };
 
         let Some(bin) = locate() else {
-            panic!("找不到 asus-numpad，先 cargo build -p asus-numpad");
+            panic!("找不到 numdeck，先 cargo build -p numdeck");
         };
-        let cfg = std::env::temp_dir().join("asus-numpad-gui-e2e.json");
+        let cfg = std::env::temp_dir().join("numdeck-gui-e2e.json");
         let cfg_text = cfg.display().to_string();
 
         let base = |sub: SubCmd| CommandForm {

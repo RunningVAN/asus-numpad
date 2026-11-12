@@ -1,11 +1,11 @@
 //! `check`：只读体检，把识别结果、几何、键表、描述符、服务状态摆成一份报告。
 
 use anyhow::Result;
-use asus_numpad::banner;
-use asus_numpad::config::{self, CalcMode, Config};
-use asus_numpad::i18n::{self, LangSource};
-use asus_numpad::keycodes as kc;
-use asus_numpad::layout::{Tol, COLS, ROWS, UM_PER_LAYOUT_UNIT};
+use numdeck::banner;
+use numdeck::config::{self, CalcMode, Config};
+use numdeck::i18n::{self, LangSource};
+use numdeck::keycodes as kc;
+use numdeck::layout::{Tol, COLS, ROWS, UM_PER_LAYOUT_UNIT};
 
 use super::*;
 use crate::LANG_SOURCE;
@@ -37,7 +37,7 @@ pub(crate) fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     let geometry = {
         #[cfg(target_os = "linux")]
         {
-            match asus_numpad::linux::probe_report(cfg) {
+            match numdeck::linux::probe_report(cfg) {
                 Ok((g, lines)) => {
                     println!("{}", i18n::t("check.device.probed"));
                     for line in lines {
@@ -227,7 +227,7 @@ pub(crate) fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     // 跨机型自检：列出全部背光候选节点，便于在陌生机型上一眼定位该选谁。
     #[cfg(target_os = "linux")]
     {
-        let cands = asus_numpad::linux::probe_candidates();
+        let cands = numdeck::linux::probe_candidates();
         if !cands.is_empty() {
             println!("{}", i18n::t("check.led_probe_title"));
             for c in &cands {
@@ -239,10 +239,10 @@ pub(crate) fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
                     i18n::t("check.led_probe_idle")
                 };
                 let feature = match c.probe {
-                    asus_numpad::linux::FeatureProbe::Has => i18n::t("common.yes"),
-                    asus_numpad::linux::FeatureProbe::Missing => i18n::t("common.no"),
-                    asus_numpad::linux::FeatureProbe::NoAccess => i18n::t("check.led_probe_noperm"),
-                    asus_numpad::linux::FeatureProbe::Unknown => i18n::t("check.led_probe_unknown"),
+                    numdeck::linux::FeatureProbe::Has => i18n::t("common.yes"),
+                    numdeck::linux::FeatureProbe::Missing => i18n::t("common.no"),
+                    numdeck::linux::FeatureProbe::NoAccess => i18n::t("check.led_probe_noperm"),
+                    numdeck::linux::FeatureProbe::Unknown => i18n::t("check.led_probe_unknown"),
                 };
                 println!(
                     "  {}",
@@ -261,11 +261,11 @@ pub(crate) fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
             }
             if cands
                 .iter()
-                .any(|c| c.probe == asus_numpad::linux::FeatureProbe::NoAccess)
+                .any(|c| c.probe == numdeck::linux::FeatureProbe::NoAccess)
             {
                 println!("{}", i18n::t("check.led_probe_noperm_hint"));
             }
-            match asus_numpad::linux::probe_i2c() {
+            match numdeck::linux::probe_i2c() {
                 Some((bus, addr)) => println!(
                     "{}",
                     i18n::tf(
@@ -311,7 +311,7 @@ pub(crate) fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
     // 扩展开关：真机排障时最先要确认的就是"我配的东西到底读进去了没有"。
     println!();
     println!("{}", i18n::t("check.ext_title"));
-    let custom_all = asus_numpad::custom::list_custom();
+    let custom_all = numdeck::custom::list_custom();
     if custom_all.is_empty() {
         println!("  {}", i18n::t("check.ext_layouts_none"));
     } else {
@@ -363,7 +363,7 @@ pub(crate) fn cmd_check(cfg: &Config, notes: &[String]) -> Result<i32> {
         "  {}",
         i18n::tf("check.ext_pressure", &[("text", &press_text)])
     );
-    let (bind, _hot_notes) = asus_numpad::custom::HotkeyState::new(&cfg.hotkeys);
+    let (bind, _hot_notes) = numdeck::custom::HotkeyState::new(&cfg.hotkeys);
     let hot_text = if bind.is_empty() {
         i18n::t("check.ext_none")
     } else {

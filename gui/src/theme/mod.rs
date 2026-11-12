@@ -4,7 +4,7 @@
 //! 用 `ui.button` / `ui.label`，颜色、圆角、间距、字号统一从这里出，避免各页面各写一套。
 //!
 //! 配色跟着系统深浅色走：Windows / Linux 桌面默认是浅色，硬塞深色反而突兀，所以两套
-//! 调色板都在这里定义，按 `ctx.theme()` 取一套；`ASUS_NUMPAD_GUI_THEME=dark|light`
+//! 调色板都在这里定义，按 `ctx.theme()` 取一套；`NUMDECK_GUI_THEME=dark|light`
 //! 可以强制覆盖（截图和交稿时用得上）。
 
 use eframe::egui::{
@@ -116,7 +116,7 @@ const WIDGET_RADIUS: u8 = 10;
 
 /// 装上主题，返回当前生效的调色板。
 pub fn install(ctx: &egui::Context) -> Palette {
-    let forced = std::env::var("ASUS_NUMPAD_GUI_THEME").ok();
+    let forced = std::env::var("NUMDECK_GUI_THEME").ok();
     let dark = match forced.as_deref().map(str::trim) {
         Some("dark") => true,
         Some("light") => false,

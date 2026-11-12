@@ -1,12 +1,12 @@
-# asus-numpad English language file
+# numdeck English language file
 # Format: key = text (# starts a comment, \n is allowed inside a value)
-# Missing keys fall back to the built-in English text; copy this file to ~/.config/asus-numpad/lang/ to override (no root needed).
+# Missing keys fall back to the built-in English text; copy this file to ~/.config/numdeck/lang/ to override (no root needed).
 
 # ---- 启动横幅 ----
-app.banner = ASUS touchpad numpad v{version} (Linux userspace, parameters taken from the official AlgoParameters)
+app.banner = touchpad numpad v{version} (Linux userspace, parameters taken from the official AlgoParameters)
 
 # ---- 命令行总览 ----
-cli.about = ASUS touchpad numpad driver (Linux, parameters taken from the official AlgoParameters)
+cli.about = Touchpad numpad driver (Linux, parameters taken from the official AlgoParameters)
 cli.config.help = Path to the config file
 cli.device.help = Touchpad event device; auto-detected by default (ELAN 04F3 / PixArt 093A, layout picked from the HID module)
 cli.keyboard.help = Keyboard event device (reads the NumLock LED)
@@ -16,7 +16,7 @@ cli.i2c_addr.help = i2c address (0x38 or 56)
 cli.hidraw.help = hidraw node (e.g. /dev/hidraw3)
 cli.i2c_transfer.help = i2c write tool name
 cli.key_mode.help = Key style: keypad / digits
-cli.layout.help = Layout code; `auto` (default) picks it from the touchpad HID module, `asus-numpad layout` lists every supported code
+cli.layout.help = Layout code; `auto` (default) picks it from the touchpad HID module, `numdeck layout` lists every supported code
 cli.numlock.help = NumLock linkage: sync / toggle / off
 cli.mixed_mode.help = Mixed mode: auto / on / off
 cli.no_follow_brightness.help = Disable "numpad brightness follows keyboard backlight" and fall back to fixed 0x01
@@ -41,7 +41,7 @@ cli.cmd.levels.value = Level for that step: 0x00 or 0x41..0x48 (decimal or hex)
 cli.cmd.led = Send a raw backlight command byte (bypasses every state machine; for diagnosis)
 cli.cmd.led.long = e.g. led on | led off | led 0x41..0x48 (levels 1..8). Separates "never sent" from "hardware rejects".
 cli.cmd.led.value = on / off / any hex level (e.g. 0x41)
-led.cmd.usage = Usage: asus-numpad led on|off|0x41 (0x01 = on, 0x00 = off, 0x41..0x48 = levels 1..8)
+led.cmd.usage = Usage: numdeck led on|off|0x41 (0x01 = on, 0x00 = off, 0x41..0x48 = levels 1..8)
 led.cmd.bad_value = Unrecognized value: {v} (use on / off / 0x41 / 65)
 cli.cmd.lang = Language: show / switch the UI language (简体中文, 繁體中文, English)
 cli.cmd.lang.long = e.g. `lang` (show current language and source), `lang zh-TW`, `lang en`, `lang auto` (follow system)
@@ -99,7 +99,7 @@ check.b_grab_no = no (clicks leak through)
 check.b_idle = Idle blackout     {sec}s (keeps running, lights up on touch)
 check.b_led = Backlight channel {kind} ({where})
 check.b_bright = Backlight         {text}
-check.b_bright_cmd = Dim command       asus-numpad bright 1..4 (0=off, {steps} steps); asus-numpad bright follow on|off
+check.b_bright_cmd = Dim command       numdeck bright 1..4 (0=off, {steps} steps); numdeck bright follow on|off
 check.lang_line = UI language       {name} ({code})
 check.lang_source = Language source   {source}
 check.lang_file = Language file     {path}
@@ -141,8 +141,8 @@ bright.report.follow_nodir = Follows keyboard backlight (unreadable, using the f
 bright.report.static = Does not follow the keyboard backlight, fixed step {step} → 0x{level} (adjust with `bright 1..N`, re-enable with `bright follow on`)
 
 # ---- 亮度命令 ----
-bright.usage = Usage: asus-numpad bright 0|1..N    fixed step (0=off; 1=darkest; N=brightest, N=4 by default, linearly spaced)\n       asus-numpad bright up|down|cycle  step up/down or cycle through all steps\n       asus-numpad bright follow on|off  follow the keyboard backlight or not\n       asus-numpad bright status         show the current state and step table
-bright.follow_usage = Usage: asus-numpad bright follow on|off
+bright.usage = Usage: numdeck bright 0|1..N    fixed step (0=off; 1=darkest; N=brightest, N=4 by default, linearly spaced)\n       numdeck bright up|down|cycle  step up/down or cycle through all steps\n       numdeck bright follow on|off  follow the keyboard backlight or not\n       numdeck bright status         show the current state and step table
+bright.follow_usage = Usage: numdeck bright follow on|off
 bright.err_unmappable = Step {step} cannot be mapped to a brightness byte (check the brightness_levels config)
 bright.sent = Sent brightness 0x{level} (channel {kind})
 bright.send_failed = Failed to send 0x{level}: channel not usable (check the --hidraw node and whether the udev uaccess rule matches it)
@@ -162,13 +162,13 @@ persist.bad_json = {path} is not valid JSON, aborted (nothing was changed)
 persist.mkdir_failed = Cannot create directory {dir}
 persist.backup_failed = Failed to back up {path}, aborted
 persist.write_failed = Failed to write {path} (check owner/permissions of the file and its directory)
-svc.not_running = Note: the asus-numpad service is not running; the new settings take effect on next start.
-svc.restarted = Restarted the asus-numpad service; new settings are active now.
-svc.restart_failed = Failed to restart the service automatically; run: systemctl --user restart asus-numpad
+svc.not_running = Note: the numdeck service is not running; the new settings take effect on next start.
+svc.restarted = Restarted the numdeck service; new settings are active now.
+svc.restart_failed = Failed to restart the service automatically; run: systemctl --user restart numdeck
 
 # ---- 语言命令 ----
 lang.current = Current language: {name} ({code}), source: {source}
-lang.source.env = ASUS_NUMPAD_LANG environment variable
+lang.source.env = NUMDECK_LANG environment variable
 lang.source.cli = command line --lang
 lang.source.config = config file language
 lang.source.locale = system locale
@@ -178,9 +178,9 @@ lang.dirs = Language file dirs: {dirs}
 lang.file = Language file: {path}
 lang.file_builtin = Language file     using text built into the binary (no external .lang found)
 lang.wrote = Wrote {path}: language = {value} (backup {backup})
-lang.usage = Usage: asus-numpad lang [zh-CN|zh-TW|en|auto]   show or switch UI language\nTemporary override: asus-numpad --lang en check
+lang.usage = Usage: numdeck lang [zh-CN|zh-TW|en|auto]   show or switch UI language\nTemporary override: numdeck --lang en check
 lang.bad_code = Unrecognised language: {v} (available: zh-CN / zh-TW / en / auto)
-lang.restart_hint = Takes effect the next time asus-numpad runs (this output keeps the current language).
+lang.restart_hint = Takes effect the next time numdeck runs (this output keeps the current language).
 lang.effect_auto = Language will follow the system locale from now on (currently resolved to {name}).
 
 # ---- dump 与 run 模式 ----
@@ -188,10 +188,10 @@ dump.mode = dump mode: prints raw touchpad events, no keys are emitted. Press Ct
 dump.nonlinux = evdev is unavailable on this platform; cannot dump. Run it on the target Linux machine.
 dump.header = Reading {path} ({name}), Ctrl-C to stop
 run.brightness = Backlight: {text}
-run.already_running = another asus-numpad instance is already running; exiting.
+run.already_running = another numdeck instance is already running; exiting.
 run.reloading = reload requested; exiting so the service restarts with the new config.
 run.nonlinux = evdev / uinput are unavailable; run only works on Linux.
-run.nonlinux_hint = Use `asus-numpad check` to inspect parameters and geometry conversion.
+run.nonlinux_hint = Use `numdeck check` to inspect parameters and geometry conversion.
 run.device =   device: {path} ({name})
 run.device_lost = Touchpad is gone ({err}); stopping to release it.
 
@@ -218,7 +218,7 @@ led.warn.exec = [warn] Cannot execute {tool}: {err}
 led.warn.no_feature = [warn] {dev} is {vid}:{pid} but has no FEATURE report 0x{rid}; trying it anyway
 led.warn.fallback_asus = [warn] No backlight node for {vid}:{pid}, falling back to the ASUS node; it may not light up
 led.warn.bad_kind = [warn] --led {v} is invalid, using auto
-led.warn.no_access = [warn] cannot read FEATURE report 0x{rid} of {dev} (permission denied); run `asus-numpad check` for the udev hint, do not treat it as missing hardware
+led.warn.no_access = [warn] cannot read FEATURE report 0x{rid} of {dev} (permission denied); run `numdeck check` for the udev hint, do not treat it as missing hardware
 led.none.explicit = explicitly disabled
 led.none.no_hidraw = no ASUS hidraw node found
 led.none.no_i2c = no i2c slave 0x38 found
@@ -226,7 +226,7 @@ led.none.any = neither hidraw nor i2c is available, backlight unusable
 bright.warn.no_kbd_dir = [warn] Cannot read {dir}; numpad brightness falls back to 0x{level} (use --no-follow-brightness to disable following explicitly)
 
 # ---- 引擎状态日志 ----
-[warn] Failed to grab the touchpad; numpad clicks will leak to the desktop. If another instance is already running (the user service grabs the device on boot), stop it first with `systemctl --user stop asus-numpad`; two processes always contend for the device (EBUSY).
+[warn] Failed to grab the touchpad; numpad clicks will leak to the desktop. If another instance is already running (the user service grabs the device on boot), stop it first with `systemctl --user stop numdeck`; two processes always contend for the device (EBUSY).
 engine.state.lit = [state] backlight on ({reason})
 engine.state.dark = [state] backlight off ({reason})
 engine.state.enter = [state] numpad on
@@ -256,28 +256,31 @@ cli.cmd.layout = Layout: list official layouts / auto-detect by HID hardware ID 
 cli.cmd.layout.long = Without arguments it lists every official layout with its support level; `layout auto` restores auto-detection; `layout GH3XLNDZ` pins a layout; `layout --ids` also prints the HID hardware ID table
 cli.cmd.layout.name = Layout name (GH3XLNDZ / GH2XLNDZ / GH4XLNDZ / auto)
 cli.cmd.layout.ids = Also list the touchpad HID hardware ID -> layout table
-cli.sku.help = Force a model config, skipping auto-detection (run `asus-numpad sku` for the ids)
+cli.sku.help = Force a model config, skipping auto-detection (run `numdeck sku` for the ids)
 cli.cmd.sku = Model config: show what was detected, list the ids, or pick one by hand
 cli.cmd.sku.long = Without arguments it shows the detected model config, how it was chosen, plus the DMI identity and touchpad module; `sku list` lists every id; `sku g614` pins one by hand; `sku auto` goes back to auto-detection
 cli.cmd.sku.id = Model id, or auto / list
+cli.sku.help.arm = This build carries no model table; only `custom` is accepted (= not set)
+cli.cmd.sku.long.arm = Without arguments it shows the current model and touchpad module. The ARM64 build carries no ASUS model table, so the model is always the custom layout and `sku list` only lists `custom`; key positions and numpad geometry come from custom_layouts in the config
 layout.current = Layout: configured {layout}, effective {resolved} ({support})
 layout.list_title = Layouts recorded in the official AsusNUMPADFilter.inf (* verified / ~ family, parameters from the INF, not checked on hardware / - no key-position reference):
 layout.legend = * verified   ~ same family, unverified (needs --allow-unverified)   - unsupported
 layout.custom_title = Custom layouts installed from the config (custom_layouts):
 layout.custom_line = + {name} cols={cols} hids={hids}
 layout.ids_title = Touchpad HID hardware ID -> layout (models sharing an ID are interchangeable):
-layout.usage = Usage: asus-numpad layout                 show current layout and the table
-      asus-numpad layout --ids           also print the HID hardware ID table
-      asus-numpad layout auto            auto-detect from the touchpad HID ID (recommended)
-      asus-numpad layout GH3XLNDZ        pin a layout
+layout.usage = Usage: numdeck layout                 show current layout and the table
+      numdeck layout --ids           also print the HID hardware ID table
+      numdeck layout auto            auto-detect from the touchpad HID ID (recommended)
+      numdeck layout GH3XLNDZ        pin a layout
 layout.wrote = Wrote {path}: layout_name = {value} (backup {backup})
 layout.effect_auto = Next start picks the layout from the touchpad HID hardware ID, falling back to GH3XLNDZ
 layout.unverified_warn = Note: layout {layout} is {support}; its key table has not been verified on real hardware
 layout.bad_name = Unknown layout name: {v}
 note.layout_unknown = layout_name={v} is not in the official layout table, using auto
 err.layout_unverified = Layout {layout} ({support}) is not verified on real hardware; startup stopped to avoid wrong keys. Add --allow-unverified once confirmed.
-err.layout_unverified.hint = To allow it: asus-numpad --allow-unverified run, or set "allow_unverified_layout": true in ~/.config/asus-numpad/asus-numpad.json
-err.layout_unsupported.hint = This key table has never been checked on real hardware and there is no key-position reference for it, so applying it could produce wrong keys; please report the `asus-numpad check` output so it can be checked
+err.layout_unverified.hint = To allow it: numdeck --allow-unverified run, or set "allow_unverified_layout": true in /etc/numdeck/numdeck.json
+err.layout_unsupported.hint = This key table has never been checked on real hardware and there is no key-position reference for it, so applying it could produce wrong keys; please report the `numdeck check` output so it can be checked
+err.layout_custom.hint = This build ships no built-in model table; configure a custom layout first: add an entry to custom_layouts in /etc/numdeck/numdeck.json (hid_ids binds the touchpad, keys records the key positions) or use the Extend page in the GUI. See https://numdeck-dev.github.io/
 dev.report.layout = Layout: {layout} ({support}, source {source}, HID {hid})
 
 # 跨机型背光自检 / cross-model backlight self-check
@@ -299,9 +302,10 @@ sku.model = Model config: {sku} — {source}
 sku.source.manual = set by hand
 sku.source.dmi = detected from the DMI model string
 sku.source.hardware = detected from the touchpad module
+sku.source.custom = running the custom layout
 sku.detail = Matched: {detail}
 sku.note = Model note: {note}
-sku.compat = Compatibility details: https://asus-numpad.github.io/
+sku.compat = Compatibility details: https://numdeck-dev.github.io/
 sku.dmi = Local DMI identity: {dmi}
 sku.dmi_unknown = Local DMI identity: unavailable (not Linux or /sys/class/dmi/id unreadable)
 sku.hw = Local touchpad module: {hw}
@@ -310,18 +314,19 @@ sku.set = Model set to {sku} ({path}); restart the service to apply
 sku.clear = Manual choice cleared, back to automatic detection ({path})
 sku.bad_id = Unknown model "{id}"; available: {ids}
 note.sku_unknown = Model id "{id}" is not in the model table (ignored, automatic detection stays on). Known ids: {ids}
-err.not_asus = This machine's vendor is {vendor}, not ASUS.
+err.not_asus = This machine's vendor is {vendor}, which is not in the model list. If its touchpad is a NumberPad-type module, pin a model with --sku.
 err.unsupported_model = This machine is not in the supported model list ({ids}).
-err.unsupported_stop = asus-numpad was not started.
-err.unsupported_hint = If the hardware info is wrong or unreadable (virtual machine, placeholder DMI), force the model by hand: asus-numpad sku <id>
+err.unsupported_stop = numdeck was not started.
+err.unsupported_hint = If the hardware info is wrong or unreadable (virtual machine, placeholder DMI), force the model by hand: numdeck sku <id>
 err.no_numpad = This touchpad has no NumberPad hardware: its HID report descriptor carries no FEATURE report 0x0d, so neither the numpad backlight nor the icon area exists. Refusing to start.
-err.no_numpad.hint = Only configurations with a NumberPad expose FEATURE 0x0d. The 4-zone RGB configurations of the same model share the touchpad module but have no icon area, and no software can create one. If the hardware really does have a NumberPad, report the output of `asus-numpad check`.
+err.no_numpad.hint = Only configurations with a NumberPad expose FEATURE 0x0d. The 4-zone RGB configurations of the same model share the touchpad module but have no icon area, and no software can create one. If the hardware really does have a NumberPad, report the output of `numdeck check`.
 err.numpad_no_access = Cannot read the touchpad report descriptor (permission denied), so NumberPad presence is unknown. Continuing; if the numpad does not respond, check the udev uaccess rule first.
 layout.source.auto = auto-detected from the touchpad module
 layout.source.fixed = pinned in the config / on the command line
 layout.source.sku = inferred from the detected model, module id unreadable
 layout.source.unknown_hid = module id not in the layout table
 layout.source.fallback = default layout, module id unreadable
+layout.source.custom_none = no custom layout configured (this build has no built-in model table)
 sku.nonlinux = Model check: skipped, DMI and hidraw are Linux-only (run this on the target machine)
 
 # Model display names and recognition notes (untranslated languages fall back to the built-in Chinese text)
@@ -335,6 +340,8 @@ sku.gx550.display = ASUS ROG Zephyrus Duo, 15" / 16", side-mounted touchpad (GX5
 sku.gx550.note = GX550 / GX551 / GX650 all belong to the gx551 key family; module ASUE1408 → GVM_A, ASUE1404 → GVM. GVM_A and GVM share one parameter set (the official NUMPADLAYOUT_GVM_* list stops at _06 and the remaining fields default to 0); layout status: same family, not verified on real hardware. The touchpad sits vertically to the right of the keyboard and numeric mode is toggled by a dedicated keyboard key, not by a long press on the icon area (see README, dual-screen models)
 sku.ux582.display = ASUS Zenbook Pro Duo, side-mounted touchpad (UX582 / UX482)
 sku.ux582.note = Module ASUE1406 / ELAN1406 → layout NVM (the official NUMPADLAYOUT_NVM_* list stops at _12 and the remaining fields default to 0); layout status: same family, not verified on real hardware. The touchpad sits to the right of the keyboard and numeric mode is toggled by a dedicated keyboard key, not by a long press on the icon area
+sku.custom.display = Custom layout (no model table, no model detection)
+sku.custom.note = This build ships no ASUS model table: the model is not derived from DMI strings or touchpad modules; the custom layout path is used directly. Add an entry to custom_layouts (hid_ids binds the touchpad, keys records the key positions) or use the Extend page in the GUI; startup stops while no custom layout is configured
 
 # ---- custom extensions: report / layout / pressure / hotkey ----
 note.custom_layout_no_name = a custom layout has no name and was ignored

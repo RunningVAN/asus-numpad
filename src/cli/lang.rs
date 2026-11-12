@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use asus_numpad::i18n::{self, Lang};
+use numdeck::i18n::{self, Lang};
 
 use super::*;
 

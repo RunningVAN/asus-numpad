@@ -1,9 +1,9 @@
 //! 配置片段：把四项扩展打包成一段 JSON，导出 / 复制 / 存盘 / 应用。
 
-use asus_numpad::custom::{CustomLayoutSpec, HotkeySpec, LedProtoSpec, PressureSwitch};
+use numdeck::custom::{CustomLayoutSpec, HotkeySpec, LedProtoSpec, PressureSwitch};
 
 /// 四项扩展打包成一段 JSON 文本（同机型对拷用）。
-pub(crate) fn fragment_of(cfg: &asus_numpad::config::Config) -> String {
+pub(crate) fn fragment_of(cfg: &numdeck::config::Config) -> String {
     let value = serde_json::json!({
         "custom_layouts": cfg.custom_layouts,
         "led_proto": cfg.led_proto,
@@ -17,7 +17,7 @@ pub(crate) fn fragment_of(cfg: &asus_numpad::config::Config) -> String {
 ///
 /// 返回值第二项为 `true` 表示出错。写进来的内容不做裁剪——真正能不能装，
 /// 由保存时的 `sanitize` 统一判定，界面不替它猜。
-pub(crate) fn apply_fragment(cfg: &mut asus_numpad::config::Config, text: &str) -> (String, bool) {
+pub(crate) fn apply_fragment(cfg: &mut numdeck::config::Config, text: &str) -> (String, bool) {
     let text = text.trim();
     if text.is_empty() {
         return (
@@ -111,9 +111,9 @@ pub(crate) fn save_snippet_in(
     }
     for round in 1..100 {
         let name = if round == 1 {
-            "asus-numpad-extend.json".to_string()
+            "numdeck-extend.json".to_string()
         } else {
-            format!("asus-numpad-extend-{round}.json")
+            format!("numdeck-extend-{round}.json")
         };
         let path = dir.join(name);
         if path.exists() {

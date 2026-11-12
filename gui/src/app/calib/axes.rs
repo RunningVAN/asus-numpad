@@ -29,7 +29,7 @@ impl App {
             );
             if resp.changed() {
                 self.driver.cfg.calibration.x = if x_on {
-                    asus_numpad::partition::AxisCal {
+                    numdeck::partition::AxisCal {
                         min: Some(0),
                         max: Some(3600),
                         units_per_mm: None,
@@ -89,7 +89,7 @@ impl App {
             );
             if resp.changed() {
                 self.driver.cfg.calibration.y = if y_on {
-                    asus_numpad::partition::AxisCal {
+                    numdeck::partition::AxisCal {
                         min: Some(0),
                         max: Some(2200),
                         units_per_mm: None,

@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
-# 在 macOS / 任意主机上交叉构建 Windows 与 Linux 的 asus-numpad.exe / asus-numpad。
+# 在 macOS / 任意主机上交叉构建 Windows 与 Linux 的 numdeck.exe / numdeck。
 #
 # 为什么要 zig：Rust 的 windows-gnu 目标要一个 MinGW 链接器，linux-gnu 目标要一个
 # glibc 工具链。zig 自带这两套（`zig cc` 内含 mingw-w64 与 glibc），不用装
 # mingw-w64、也不用起容器；cargo-zigbuild 负责把 Rust 的 `-nodefaultlibs`
 # 链接参数翻译成 zig 认的形式。
 #
-#   tools/build-cross.sh              # 两个目标都建
-#   tools/build-cross.sh windows      # 只建 exe
-#   tools/build-cross.sh linux        # 只建 elfin
+#   tools/build-cross.sh              # 四个目标全建
+#   tools/build-cross.sh windows      # x86_64 + ARM64 的 exe
+#   tools/build-cross.sh linux        # x86_64 + ARM64 的 elf
 #
 # 产物：
-#   target/x86_64-pc-windows-gnu/release/asus-numpad.exe
-#   target/x86_64-unknown-linux-gnu/release/asus-numpad
+#   target/x86_64-pc-windows-gnu/release/numdeck.exe
+#   target/aarch64-pc-windows-gnullvm/release/numdeck.exe
+#   target/x86_64-unknown-linux-gnu/release/numdeck
+#   target/aarch64-unknown-linux-gnu/release/numdeck
 #
 # Linux 目标固定 glibc 2.17 作为下限，Fedora / Ubuntu 18.04 之后都能直接跑。
+# ARM64 目标（RTX Spark、骁龙 X 一类的笔记本）与 x86_64 走同一条 zig 链路，
+# 构建机不需要是 ARM 机器。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ZIG_VERSION="${ZIG_VERSION:-0.17.1}"
 GLIBC="${GLIBC:-2.17}"
-CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/asus-numpad-zig"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/numdeck-zig"
 
 case "$(uname -m)" in
 aarch64 | arm64) ZIG_ARCH=aarch64 ;;
@@ -50,17 +54,24 @@ fi
 export PATH="$(dirname "$ZIG_BIN"):$PATH"
 echo "zig $("$ZIG_BIN" version)"
 
-want="${1:-both}"
-if [ "$want" = both ] || [ "$want" = windows ]; then
+want="${1:-all}"
+# Windows ARM64 用 gnullvm ABI：zig 自带 llvm-mingw，不必装 MSVC 工具链
+if [ "$want" = all ] || [ "$want" = both ] || [ "$want" = windows ]; then
   echo "==> x86_64-pc-windows-gnu"
-  cargo zigbuild --release --target x86_64-pc-windows-gnu --bin asus-numpad
+  cargo zigbuild --release --target x86_64-pc-windows-gnu --bin numdeck
+  echo "==> aarch64-pc-windows-gnullvm"
+  cargo zigbuild --release --target aarch64-pc-windows-gnullvm --bin numdeck
 fi
-if [ "$want" = both ] || [ "$want" = linux ]; then
+if [ "$want" = all ] || [ "$want" = both ] || [ "$want" = linux ]; then
   echo "==> x86_64-unknown-linux-gnu (glibc >= $GLIBC)"
-  cargo zigbuild --release --target "x86_64-unknown-linux-gnu.$GLIBC" --bin asus-numpad
+  cargo zigbuild --release --target "x86_64-unknown-linux-gnu.$GLIBC" --bin numdeck
+  echo "==> aarch64-unknown-linux-gnu (glibc >= $GLIBC)"
+  cargo zigbuild --release --target "aarch64-unknown-linux-gnu.$GLIBC" --bin numdeck
 fi
 
-for f in target/x86_64-pc-windows-gnu/release/asus-numpad.exe \
-  target/x86_64-unknown-linux-gnu/release/asus-numpad; do
-  [ -f "$f" ] && printf '%-56s %s\n' "$f" "$(du -h "$f" | cut -f1)"
+for f in target/x86_64-pc-windows-gnu/release/numdeck.exe \
+  target/aarch64-pc-windows-gnullvm/release/numdeck.exe \
+  target/x86_64-unknown-linux-gnu/release/numdeck \
+  target/aarch64-unknown-linux-gnu/release/numdeck; do
+  [ -f "$f" ] && printf '%-58s %s\n' "$f" "$(du -h "$f" | cut -f1)"
 done

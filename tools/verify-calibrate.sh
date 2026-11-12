@@ -3,11 +3,11 @@
 #
 #   tools/verify-calibrate.sh            # 自动项全跑，结果写 verify-calibrate.txt
 #   tools/verify-calibrate.sh --keep     # 保留临时配置，方便手工接着试
-#   tools/verify-calibrate.sh --bin PATH # 指定二进制（默认 target/release/asus-numpad）
+#   tools/verify-calibrate.sh --bin PATH # 指定二进制（默认 target/release/numdeck）
 #
 # 设计原则与 verify-extend.sh 一致：
 #   1. 自动项全部**不改系统状态**——临时配置写进 mktemp 目录，用 `--config` 指过去，
-#      不碰 ~/.config/asus-numpad/asus-numpad.json，不碰任何 hidraw 节点。
+#      不碰 ~/.config/numdeck/numdeck.json，不碰任何 hidraw 节点。
 #   2. 采样本身要在真机上按住触摸板，脚本只回放样本文件；真机项打印命令由人确认。
 #   3. 每项都有 PASS/FAIL/SKIP 判定，最后给汇总，方便贴回 issue。
 set -uo pipefail
@@ -36,7 +36,7 @@ fi
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
-[[ -n "$BIN" ]] || BIN="$ROOT/target/release/asus-numpad"
+[[ -n "$BIN" ]] || BIN="$ROOT/target/release/numdeck"
 OUT="$ROOT/verify-calibrate.txt"
 
 PASS=0; FAIL=0; SKIP=0
@@ -49,7 +49,7 @@ fail() { FAIL=$((FAIL+1)); FAILED+=("$*"); say "[FAIL] $*"; }
 skip() { SKIP=$((SKIP+1)); say "[SKIP] $*"; }
 
 {
-say "asus-numpad 自定义分区与手动校准验证"
+say "numdeck 自定义分区与手动校准验证"
 say "时间: $(date '+%F %T %z')"
 say "主机: $(uname -srm)"
 say "发行版: $(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || echo unknown)"
@@ -112,7 +112,7 @@ elif command -v cargo >/dev/null 2>&1; then
         fi
     done
     # GUI 侧的片段打包 / 样本解析跑在同一个 crate 的另一包上
-    if cargo test -q -p asus-numpad-gui calib:: 2>/dev/null | grep -q "test result: ok"; then
+    if cargo test -q -p numdeck-gui calib:: 2>/dev/null | grep -q "test result: ok"; then
         pass "GUI 校准页用例（片段往返 / 坏片段 / 样本缺键 / 解算包住格心）"
     else
         skip "GUI 包未构建或没有 cargo（不影响命令行侧）"
@@ -302,7 +302,7 @@ say "  9.3 覆盖轴范围（内核上报与实测差很多时才做）"
 say "      · 把 9.1 打印的实测角点范围填进 calibration.x/y 的 min / max，再跑 check 看几何换算"
 say
 say "  9.4 GUI 校准页"
-say "      cargo run -p asus-numpad-gui"
+say "      cargo run -p numdeck-gui"
 say "      · 期望：样本回放解出的矩形与 9.1 一致；导出的片段里只有 partition / calibration 两段"
 hr
 

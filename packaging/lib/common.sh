@@ -5,12 +5,12 @@
 
 set -euo pipefail
 
-PKG_NAME="asus-numpad"
-BIN_NAME="asus-numpad"
+PKG_NAME="numdeck"
+BIN_NAME="numdeck"
 PKG_LICENSE="GPL-3.0-or-later"
-PKG_URL="https://github.com/asus-numpad/asus-numpad"
-PKG_SUMMARY="ASUS 触摸板数字小键盘（NumberPad）Linux 用户态驱动"
-PKG_DESC="ASUS 触摸板数字小键盘用户态驱动，参数取自官方 AsusNUMPADFilter.inf。"
+PKG_URL="https://github.com/numdeck-dev/numdeck"
+PKG_SUMMARY="笔记本触摸板数字小键盘的 Linux 用户态驱动"
+PKG_DESC="让笔记本触摸板上的数字小键盘在 Linux 下工作。起家于 ASUS NumberPad，\n一并覆盖采用同类触摸板数字区的机型；参数对齐官方 AsusNUMPADFilter.inf。"
 
 # --------------------------------------------------------------------------- #
 # 输出
@@ -50,10 +50,28 @@ cargo_version() {
     sed -n 's/^version[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' "$root/Cargo.toml" | head -n1
 }
 
+# --------------------------------------------------------------------------- #
+# 目标架构
+#
+# 默认按本机架构出包（ARM64 笔记本上直接跑就是 arm64 包）；需要在一台机器上
+# 同时出另一种架构时，用 NUMDECK_TARGET 指定 Rust target triple 并配合
+# NUMDECK_USE_ZIGBUILD=1（cargo-zigbuild 自带交叉链接器，不必装整套 sysroot）。
+# --------------------------------------------------------------------------- #
+TARGET_TRIPLE="${NUMDECK_TARGET:-}"
+TARGET_ARCH=""
+case "$TARGET_TRIPLE" in
+    "")        TARGET_ARCH="$(uname -m)" ;;
+    aarch64-*|arm64-*) TARGET_ARCH=aarch64 ;;
+    x86_64-*)          TARGET_ARCH=x86_64 ;;
+    *) die "NUMDECK_TARGET 不支持的架构: $TARGET_TRIPLE（只处理 x86_64 / aarch64）" ;;
+esac
+
 # 目标架构 -> 各发行版叫法
-arch_deb()  { case "$(uname -m)" in x86_64) echo amd64;; aarch64) echo arm64;; *) uname -m;; esac; }
-arch_rpm()  { uname -m; }
-arch_pkg()  { uname -m; }
+arch_deb()  { case "$TARGET_ARCH" in x86_64) echo amd64;; aarch64) echo arm64;; *) echo "$TARGET_ARCH";; esac; }
+arch_rpm()  { echo "$TARGET_ARCH"; }
+arch_pkg()  { echo "$TARGET_ARCH"; }
+# 人工可读的架构名（站点、日志用）
+arch_pretty() { case "$TARGET_ARCH" in x86_64) echo "x86_64";; aarch64) echo "ARM64 (aarch64)";; *) echo "$TARGET_ARCH";; esac; }
 
 # 是否在 Linux
 require_linux() {
@@ -63,7 +81,7 @@ require_linux() {
 # 临时目录：在 source 时就建好。
 # 不能懒加载——`mktmp` 是在 $(...) 子 shell 里调用的，在子 shell 里给 TMP_ROOT 赋值
 # 父进程看不到，等于白建；而 trap 注册在子 shell 里也不会生效。
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/asus-numpad-build.XXXXXX")"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/numdeck-build.XXXXXX")"
 
 mktmp() {
     mktemp -d "$TMP_ROOT/work.XXXXXX"
@@ -77,14 +95,18 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # 编译产物路径。
-# `ASUS_NUMPAD_BIN` 可覆盖：交叉编译或复用 CI 产物时不必让每个打包器都重新编译一次。
+# `NUMDECK_BIN` 可覆盖：交叉编译或复用 CI 产物时不必让每个打包器都重新编译一次。
 built_binary() {
-    if [[ -n "${ASUS_NUMPAD_BIN:-}" ]]; then
-        echo "$ASUS_NUMPAD_BIN"
+    if [[ -n "${NUMDECK_BIN:-}" ]]; then
+        echo "$NUMDECK_BIN"
         return 0
     fi
     local root
     root="$(repo_root)"
+    if [[ -n "$TARGET_TRIPLE" ]]; then
+        echo "$root/target/$TARGET_TRIPLE/release/$BIN_NAME"
+        return 0
+    fi
     echo "$root/target/release/$BIN_NAME"
 }
 
@@ -92,8 +114,15 @@ built_binary() {
 # 有 Cargo.lock 就 --locked 保证可复现；没有就先放行（首次克隆 / 依赖刚改过），
 # 只告警不中断——否则新用户第一步就卡死，比版本漂移更烦人。
 cargo_build() {
-    local root args mode
+    local root args mode tool
     root="$(repo_root)"
+    tool="cargo"
+    if [[ -n "$TARGET_TRIPLE" ]]; then
+        if [[ "${NUMDECK_USE_ZIGBUILD:-0}" == 1 ]]; then
+            have cargo-zigbuild || die "需要 cargo-zigbuild：cargo install cargo-zigbuild（还要 zig 在 PATH 中）"
+            tool="cargo zigbuild"
+        fi
+    fi
     require cargo
     args=(build --release)
     mode="未锁定"
@@ -103,8 +132,12 @@ cargo_build() {
     else
         warn "缺少 Cargo.lock，本次不加 --locked；发布前请执行 cargo generate-lockfile 并提交"
     fi
-    log "编译 ${BIN_NAME}（release, ${mode}）"
-    ( cd "$root" && cargo "${args[@]}" )
+    if [[ -n "$TARGET_TRIPLE" ]]; then
+        args+=(--target "$TARGET_TRIPLE")
+    fi
+    log "编译 ${BIN_NAME}（release, ${mode}, 目标 $(arch_pretty)）"
+    # shellcheck disable=SC2086  # tool 可能是 "cargo zigbuild" 两个词
+    ( cd "$root" && $tool "${args[@]}" )
     [[ -x "$(built_binary)" ]] || die "编译产物不存在: $(built_binary)"
 }
 
@@ -120,14 +153,14 @@ install_common_files() {
     mandir="$destdir/usr/share/man/man1"
     unitdir="$destdir/usr/lib/systemd/system"
     rulesdir="$destdir/usr/lib/udev/rules.d"
-    langdir="$destdir/usr/share/asus-numpad/lang"
+    langdir="$destdir/usr/share/numdeck/lang"
 
     install -d "$bindir" "$mandir" "$unitdir" "$rulesdir"
     install -m 0755 "$bin" "$bindir/$BIN_NAME"
-    install -m 0644 "$root/packaging/common/asus-numpad.service" "$unitdir/asus-numpad.service"
-    install -m 0644 "$root/packaging/common/99-asus-numpad.rules" "$rulesdir/99-asus-numpad.rules"
-    if [[ -f "$root/packaging/common/asus-numpad.1" ]]; then
-        install -m 0644 "$root/packaging/common/asus-numpad.1" "$mandir/asus-numpad.1"
+    install -m 0644 "$root/packaging/common/numdeck.service" "$unitdir/numdeck.service"
+    install -m 0644 "$root/packaging/common/99-numdeck.rules" "$rulesdir/99-numdeck.rules"
+    if [[ -f "$root/packaging/common/numdeck.1" ]]; then
+        install -m 0644 "$root/packaging/common/numdeck.1" "$mandir/numdeck.1"
     fi
     # 语言文件：二进制内置一份兜底，这里的可编辑副本供用户整份替换
     if [[ -d "$root/lang" ]]; then

@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use anyhow::Result;
-use asus_numpad::config::{self, Config, VAL_OFF};
-use asus_numpad::i18n::{self};
+use numdeck::config::{self, Config, VAL_OFF};
+use numdeck::i18n::{self};
 
 use super::*;
 
@@ -21,7 +21,7 @@ pub(crate) fn parse_level_value(raw: &str) -> Option<u8> {
 pub(crate) fn apply_led_level(cfg: &Config, level: u8) -> bool {
     #[cfg(target_os = "linux")]
     {
-        let mut led = asus_numpad::linux::led::build_led(cfg);
+        let mut led = numdeck::linux::led::build_led(cfg);
         let ok = led.send(level);
         if ok {
             println!(
@@ -114,10 +114,10 @@ pub(crate) fn print_levels_table(cfg: &Config) {
 /// `levels`：查看档位表 / 给某一档指定任意支持亮度 / 恢复默认四档。
 ///
 /// 需求是「每个档位都能指定任意一个支持的亮度，现在的线性四档只作默认」，所以：
-/// * `asus-numpad levels`            → 打印当前档表（要看得出每档到底发多少字节）
-/// * `asus-numpad levels 2 0x46`     → 把第 2 档设成 0x46，其余档不动
-/// * `asus-numpad levels 3 71`       → 十进制写法，等价 0x47
-/// * `asus-numpad levels reset`      → 恢复默认四档 `[0, 0x43, 0x45, 0x48]`
+/// * `numdeck levels`            → 打印当前档表（要看得出每档到底发多少字节）
+/// * `numdeck levels 2 0x46`     → 把第 2 档设成 0x46，其余档不动
+/// * `numdeck levels 3 71`       → 十进制写法，等价 0x47
+/// * `numdeck levels reset`      → 恢复默认四档 `[0, 0x43, 0x45, 0x48]`
 ///
 /// 合法值只有硬件的 `0x00`（熄灭）与 `0x41..=0x48`（八档亮度），改完仍要求非递减，
 /// 否则 `bright up` 会越按越黑。

@@ -2,10 +2,64 @@
 
 版本号跟包版本一致；`-N` 后缀是发版前的构建号。
 
-1.0.0 起版本号在 `asus-numpad` 组织下重新起算。1.2.4 及更早的记录来自旧仓库
+1.0.0 起版本号在 `asus-numpad` 组织（现已更名为 `numdeck-dev`）下重新起算。1.2.4 及更早的记录来自旧仓库
 [`RunningVAN/asus-numpad`](https://github.com/RunningVAN/asus-numpad)，见 git 历史。
 
 ## 未发布
+
+### 名字：从「华硕专用」改成一个不限厂牌的名字
+
+项目名 `asus-numpad` 改成了 `numdeck`，组织 `asus-numpad` 改成 `numdeck-dev`，
+代码与包名不受影响。原名把适用面钉在了华硕上，可运行期判断向来只看 DMI 字段与
+触摸板模块，与厂牌无关——`docs/machines.md` 里的机型表也是靠这两个值匹配的。
+别的品牌只要触摸板是同款 I2C-HID 数字键盘，本来就能跑。
+
+站点域名随之变为 `numdeck-dev.github.io`；仓库地址、raw 源地址、Nix flake 引用、
+AUR 与 Gentoo 里的 URL 全部同步。旧地址 `RunningVAN/asus-numpad` 与
+`asus-numpad/asus-numpad` 仍可通过 GitHub 的仓库重定向访问，但新文档一律写新地址。
+
+### 架构：ARM64 与 x86_64 平权
+
+骁龙 X 与 RTX Spark 这类 ARM64 笔记本已经能跑完整 Linux 桌面，之前却只有 x86_64 的包，
+装完还得自己编。现在 deb / rpm / apk / tarball 各出两份，架构在构建时用 `--arch arm64`
+指定，交叉编译交给 zig，构建机不必是 ARM。
+
+- `packaging/lib/common.sh` 增加 `TARGET_TRIPLE` / `TARGET_ARCH`，各打包脚本的架构字段
+  由它派生（`arch_deb` / `arch_rpm` / `arch_pkg` / `arch_pretty`），不再各自写死。
+- `packaging/build.sh --arch native|amd64|arm64`，加 `--zig` 时走 `cargo zigbuild`；
+  在 x86_64 上也能出 ARM64 包。
+- release 流水线按「架构 × 包格式」二维展开，ARM 那份在原生 arm runner 上构建；
+  install-check 同样按「架构 × 发行版」展开，在 ARM 容器里真装一遍再发版。
+- 仓库索引与 tarball 归档按架构分目录（`rpm/x86_64`、`rpm/aarch64` 等），
+  安装命令用 `$(uname -m)` 选目录，两种机器贴同一行命令即可。
+- pacman 仍是 x86_64：Arch Linux ARM 是独立生态，自己的仓库与签名，官方仓库不收
+  aarch64 包。PKGBUILD 里已声明 `aarch64`，ArchLinuxARM 用户自行 `makepkg`。
+
+### 架构：ARM64 包不带机型表，只走自定义布局
+
+华硕原生 NumberPad 的机型全是 x86_64，ARM64 机器上不可能命中那张表，留着只是让 ARM 用户
+拿到一份「认不出任何机型、启动即退出码 3」的包。ARM64 构建现在把机型那一套整个裁掉：
+
+- `src/sku.rs`：`ASUS_SKUS` 整表在 ARM64 下不参与编译，`SKUS` 只剩 `CUSTOM_SKU`；
+  `resolve()` 不做 DMI 与模组判定，直接返回 `SkuSource::Custom`。`dmi_hit` / `matches_model` /
+  `non_asus_vendor` 同样按架构裁掉，`sku list` 也只有 `custom` 一行。
+- `src/cli/sku.rs`：`numpad_gate` 在 ARM64 下不再发 FEATURE `0x0d` 探测——那是「同型号里
+  有没有 NumberPad 硬件」的华硕机型问题，与本构建无关。
+- `src/linux/led.rs`：厂商白名单（ELAN `04F3` / PixArt `093A` / ASUS `0B05`）在 ARM64 下
+  置空，触摸板按 HID 上报能力判定，不按厂牌过滤。
+- `src/linux/mod.rs`：没有命中自定义布局时不再回落到内置默认布局，而是明确报「未配置自定义
+  布局」并提示怎么加；`layout.source` 多一个 `custom-none` 取值。
+- 语言包：ARM64 加载文案时丢弃 `sku.<机型>.display` / `sku.<机型>.note`，`--sku` 与
+  `numdeck sku` 的帮助也换成不提机型的版本（`cli.sku.help.arm` / `cli.cmd.sku.long.arm`）。
+- 构建产物层面：ARM64 二进制里不含机型表数据，配置里残留 `sku = "g614"` 会被 sanitize
+  丢掉并提示，随后按自定义布局启动。
+
+装完 ARM64 包要先在 `/etc/numdeck/numdeck.json` 的 `custom_layouts` 里加一条（`hid_ids`
+绑触摸板模组、`keys` 录键位），或用图形界面的扩展页添加，否则 `numdeck run` 会停下——这是
+「只保留自定义」的直接后果，README 与 `docs/install.md` 都已注明。
+
+CI 加了 `test-arm`：在原生 `ubuntu-24.04-arm` runner 上跑 `cargo test` 与 clippy，此前
+只在 x86_64 上验过，ARM 专属分支（含这批裁剪）实际没被执行过。
 
 ### 结构：大文件按职责拆开（行为零变化）
 

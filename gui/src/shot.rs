@@ -1,17 +1,17 @@
 //! 开发辅助：把当前画面存成 PPM，用来更新文档和官网截图。
 //!
-//! 只有设置了环境变量 `ASUS_NUMPAD_GUI_SHOT=<路径>` 才生效，正常启动完全不走这里。
+//! 只有设置了环境变量 `NUMDECK_GUI_SHOT=<路径>` 才生效，正常启动完全不走这里。
 //! 之所以不用系统截图工具：一是 macOS 屏幕录制权限在新系统上经常拿不到，
 //! 二是系统截图还会带窗口阴影和桌面背景，而这里拿到的是渲染出来的原始像素，1:1、干净。
 //!
-//!   ASUS_NUMPAD_GUI_FULL=1 ASUS_NUMPAD_GUI_SHOT=full.ppm ./target/debug/asus-numpad-gui
+//!   NUMDECK_GUI_FULL=1 NUMDECK_GUI_SHOT=full.ppm ./target/debug/numdeck-gui
 //!
 //! 存完即退出，方便脚本化；PPM 交给 `PIL`/`sips` 转 PNG（不为此给 GUI 加图片依赖）。
 //!
 //! 离屏渲染没有真实鼠标，`on_hover_ui` 的气泡永远拍不到。设了
-//! `ASUS_NUMPAD_GUI_HOVER=1`（或显式坐标 `ASUS_NUMPAD_GUI_HOVER=640,320`）后，
+//! `NUMDECK_GUI_HOVER=1`（或显式坐标 `NUMDECK_GUI_HOVER=640,320`）后，
 //! 本模块会在每帧的 `RawInput` 里塞一个 `PointerMoved`，停在第一个（或
-//! `ASUS_NUMPAD_GUI_HOVER_INDEX=n` 指定的第 n 个）挂了说明的控件上，气泡便随帧渲染出来。
+//! `NUMDECK_GUI_HOVER_INDEX=n` 指定的第 n 个）挂了说明的控件上，气泡便随帧渲染出来。
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -21,7 +21,7 @@ use eframe::egui;
 
 /// 截图前先空转几帧：字体、面板宽度和滚动区域都要几帧才稳定。
 ///
-/// 开了悬停（`ASUS_NUMPAD_GUI_HOVER`）时要多等：egui 的气泡有 0.5 s 的停留延迟，
+/// 开了悬停（`NUMDECK_GUI_HOVER`）时要多等：egui 的气泡有 0.5 s 的停留延迟，
 /// 而离屏每帧只有几毫秒，不把时间推上去永远等不到那个阈值。
 const WARMUP_FRAMES: u32 = 16;
 const WARMUP_FRAMES_HOVER: u32 = 40;
@@ -44,23 +44,23 @@ fn hover_at() -> &'static Mutex<Option<egui::Pos2>> {
 /// 截图模式下的悬停设置：`None` = 不注入指针（默认，纯静态图）。
 ///
 /// 只给 `HOVER_TEXT` / `HOVER_INDEX` 也算开——初期一定要写成
-/// `ASUS_NUMPAD_GUI_HOVER=1 ASUS_NUMPAD_GUI_HOVER_TEXT=…`，少写前一半就静默拍一张
+/// `NUMDECK_GUI_HOVER=1 NUMDECK_GUI_HOVER_TEXT=…`，少写前一半就静默拍一张
 /// 没有气泡的静态图，图看着「正常」，其实白渲染一轮（踩过）。现在缺那一半会在这里
 /// 补上并往 stderr 说一声，几轮跑下来四张图的 md5 一模一样就是这种情况。
 fn hover_setting() -> Option<HoverSetting> {
-    let index = std::env::var("ASUS_NUMPAD_GUI_HOVER_INDEX")
+    let index = std::env::var("NUMDECK_GUI_HOVER_INDEX")
         .ok()
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(0u32);
-    let text = std::env::var("ASUS_NUMPAD_GUI_HOVER_TEXT")
+    let text = std::env::var("NUMDECK_GUI_HOVER_TEXT")
         .ok()
         .filter(|v| !v.trim().is_empty());
-    let raw = match std::env::var("ASUS_NUMPAD_GUI_HOVER") {
+    let raw = match std::env::var("NUMDECK_GUI_HOVER") {
         Ok(v) if !v.trim().is_empty() => v,
         _ if index != 0 || text.is_some() => {
             // 只提示一次：这函数每帧都会被问一遍
             if !WARNED_HOVER_SWAP.swap(true, Ordering::Relaxed) {
-                eprintln!("提示：没设 ASUS_NUMPAD_GUI_HOVER，按已开启悬停处理");
+                eprintln!("提示：没设 NUMDECK_GUI_HOVER，按已开启悬停处理");
             }
             String::from("1")
         }
@@ -88,7 +88,7 @@ struct HoverSetting {
 /// `tip` 每次落笔都报一次位置：命中目标（序号或文本关键字）且还没记过，就当作停靠点。
 ///
 /// 序号按本帧绘制顺序数，跨页跨主题都不稳定；想拍某一句话的气泡，用
-/// `ASUS_NUMPAD_GUI_HOVER_TEXT=<正文里的一段>` 更靠谱。
+/// `NUMDECK_GUI_HOVER_TEXT=<正文里的一段>` 更靠谱。
 pub fn note_tip_rect(rect: egui::Rect, text: &str) {
     let Some(cfg) = hover_setting() else {
         return;
@@ -137,7 +137,7 @@ pub fn raw_input_hook(raw_input: &mut egui::RawInput) {
 
 /// 截图前要预先滚动的距离（逻辑点，正数 = 内容往下走，看到更靠后的部分）。
 fn scroll_setting() -> f32 {
-    std::env::var("ASUS_NUMPAD_GUI_SCROLL")
+    std::env::var("NUMDECK_GUI_SCROLL")
         .ok()
         .and_then(|value| value.trim().parse::<f32>().ok())
         .filter(|v| v.is_finite() && *v != 0.0)
@@ -174,7 +174,7 @@ fn scroll_hook(raw_input: &mut egui::RawInput, frame: u32) {
 }
 
 fn target_path() -> Option<PathBuf> {
-    std::env::var_os("ASUS_NUMPAD_GUI_SHOT").map(PathBuf::from)
+    std::env::var_os("NUMDECK_GUI_SHOT").map(PathBuf::from)
 }
 
 /// 每帧调用一次。到点就请求截图，回调里落盘并退出。

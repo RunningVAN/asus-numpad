@@ -56,7 +56,7 @@ tar -C "$ROOT" \
 [[ -f "$ROOT/LICENSE" ]] || die "缺少 LICENSE 文件（spec 的 %license 需要它）"
 
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@RELEASE@/$RELEASE/g" \
-    "$SELF_DIR/asus-numpad.spec" > "$TOPDIR/SPECS/$PKG_NAME.spec"
+    "$SELF_DIR/numdeck.spec" > "$TOPDIR/SPECS/$PKG_NAME.spec"
 
 DEFINES=(
     --define "_topdir $TOPDIR"

@@ -1,9 +1,21 @@
 //! 命令行骨架：clap 定义、参数到 `Opts` 的映射、以及把两者合成生效配置。
 
-use asus_numpad::config::{Config, MixedMode, NumLockMode};
-use asus_numpad::i18n::{self};
-use asus_numpad::layout::KeyMode;
+/// `--sku` 与 `numdeck sku` 的帮助文案键。
+///
+/// ARM64 构建里没有机型表，帮助文本不能还举 `sku g614` 这种例子——那是 x86_64 才有的东西。
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const SKU_HELP_KEY: &str = "cli.sku.help.arm";
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+const SKU_HELP_KEY: &str = "cli.sku.help";
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const SKU_LONG_KEY: &str = "cli.cmd.sku.long.arm";
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+const SKU_LONG_KEY: &str = "cli.cmd.sku.long";
+
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use numdeck::config::{Config, MixedMode, NumLockMode};
+use numdeck::i18n::{self};
+use numdeck::layout::KeyMode;
 
 use super::util::parse_addr;
 use crate::{Cmd, Opts};
@@ -24,7 +36,7 @@ pub(crate) fn detect_led_kind() -> String {
 }
 
 pub(crate) fn build_config(cli: &Opts) -> (Config, Vec<String>, std::path::PathBuf) {
-    // 未显式指定 --config 时，先把旧版平铺路径的配置迁到 /etc/asus-numpad/ 下
+    // 未显式指定 --config 时，先把旧版平铺路径的配置迁到 /etc/numdeck/ 下
     let mut notes: Vec<String> = Vec::new();
     if cli.config.is_none() {
         if let Some(msg) = Config::migrate_legacy_config() {
@@ -48,7 +60,7 @@ pub(crate) fn build_config(cli: &Opts) -> (Config, Vec<String>, std::path::PathB
     if let Some(v) = &cli.layout {
         cfg.layout_name = v.clone();
     }
-    // `--sku` 只覆盖本次运行；要长期生效用 `asus-numpad sku <id>` 写进配置。
+    // `--sku` 只覆盖本次运行；要长期生效用 `numdeck sku <id>` 写进配置。
     // 取值非法时由后面的 sanitize 丢弃并提示，不让手误把驱动卡在启动阶段。
     if let Some(v) = &cli.sku {
         cfg.sku = Some(v.clone());
@@ -123,7 +135,7 @@ pub(crate) fn build_config(cli: &Opts) -> (Config, Vec<String>, std::path::PathB
 /// 命令行骨架：所有说明文字在运行时按当前语言取。
 pub(crate) fn build_cli() -> Command {
     let t = i18n::t;
-    Command::new("asus-numpad")
+    Command::new("numdeck")
         .version(env!("CARGO_PKG_VERSION"))
         .about(t("cli.about"))
         .arg(
@@ -310,7 +322,7 @@ pub(crate) fn build_cli() -> Command {
                 .long("sku")
                 .global(true)
                 .value_name("ID")
-                .help(t("cli.sku.help")),
+                .help(t(SKU_HELP_KEY)),
         )
         .subcommand(
             Command::new("layout")
@@ -331,7 +343,7 @@ pub(crate) fn build_cli() -> Command {
         .subcommand(
             Command::new("sku")
                 .about(t("cli.cmd.sku"))
-                .long_about(t("cli.cmd.sku.long"))
+                .long_about(t(SKU_LONG_KEY))
                 .arg(Arg::new("id").value_name("ID").help(t("cli.cmd.sku.id"))),
         )
         .subcommand(

@@ -1,19 +1,19 @@
 //! 界面设置的持久化。
 //!
 //! 只存「用户的选择」，不存硬件状态：档位、联动开关、上次选中的接口。
-//! Windows 下放 `%APPDATA%\asus-numpad-gui\settings.json`，其他平台放
-//! `~/.config/asus-numpad-gui/settings.json`。
+//! Windows 下放 `%APPDATA%\numdeck-gui\settings.json`，其他平台放
+//! `~/.config/numdeck-gui/settings.json`。
 //!
-//! 界面设置与驱动的配置文件（`asus-numpad.toml`）是两份东西：驱动那份写机型与
+//! 界面设置与驱动的配置文件（`numdeck.toml`）是两份东西：驱动那份写机型与
 //! 布局，这里只写「这个界面自己记的事」，改这里不会影响驱动行为。
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use asus_numpad::config::VAL_BRIGHTNESS_MAX;
+use numdeck::config::VAL_BRIGHTNESS_MAX;
 
-const APP_DIR: &str = "asus-numpad-gui";
+const APP_DIR: &str = "numdeck-gui";
 const FILE: &str = "settings.json";
 
 /// 界面设置。字段全部带默认值，旧版本配置缺项也能读。
@@ -222,7 +222,7 @@ mod tests {
     /// 原子写：目标已存在时被完整替换，且不留临时文件。
     #[test]
     fn write_atomic_replaces_and_cleans_up() {
-        let dir = std::env::temp_dir().join(format!("asus-numpad-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("numdeck-test-{}", std::process::id()));
         let path = dir.join("cfg.json");
         let _ = std::fs::remove_dir_all(&dir);
         write_atomic(&path, "first").expect("首次写入");
@@ -241,7 +241,7 @@ mod tests {
     /// 原子写：文件夹本身不存在时能自己建出来（首次运行 / 用户删了配置目录）。
     #[test]
     fn write_atomic_creates_missing_dir() {
-        let dir = std::env::temp_dir().join(format!("asus-numpad-mkdir-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("numdeck-mkdir-{}", std::process::id()));
         let path = dir.join("nested").join("cfg.json");
         let _ = std::fs::remove_dir_all(&dir);
         write_atomic(&path, "hello").expect("应能自建目录");
@@ -252,7 +252,7 @@ mod tests {
     /// 原子写：写的是空串也要真的把文件清空，不能 rename 成 0 长度的临时文件后失败。
     #[test]
     fn write_atomic_accepts_empty_text() {
-        let dir = std::env::temp_dir().join(format!("asus-numpad-empty-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("numdeck-empty-{}", std::process::id()));
         let path = dir.join("cfg.json");
         let _ = std::fs::remove_dir_all(&dir);
         write_atomic(&path, "先写点东西").expect("首次写入");
@@ -320,7 +320,7 @@ mod tests {
 #[cfg(test)]
 mod resilience_tests {
     use super::*;
-    use asus_numpad::config::{VAL_BRIGHTNESS_BASE, VAL_OFF};
+    use numdeck::config::{VAL_BRIGHTNESS_BASE, VAL_OFF};
 
     #[test]
     fn broken_text_falls_back_with_reason() {
@@ -364,7 +364,7 @@ mod resilience_tests {
     #[test]
     fn broken_copy_never_overwrites_first_scene() {
         let dir =
-            std::env::temp_dir().join(format!("asus-numpad-gui-settings-{}", std::process::id()));
+            std::env::temp_dir().join(format!("numdeck-gui-settings-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("settings.json");

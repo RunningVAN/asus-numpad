@@ -2,7 +2,10 @@
 
 ## 机型兼容表
 
-一行一个机型 id（`src/sku.rs` 的 `SKUS`），键表由触摸板模组决定（`src/layout.rs` 的 `HID_LAYOUTS`）：
+一行一个机型 id（`src/sku.rs` 的 `SKUS`），键表由触摸板模组决定（`src/layout.rs` 的 `HID_LAYOUTS`）。
+
+> 这张表只存在于 `x86_64` 构建里。华硕原生 NumberPad 机型均为 x86_64，ARM64 包不带机型表，
+> 启动不判定机型、只走自定义布局，见 [安装](install.md) 的架构说明。
 
 | 机型 id | 机型（中文市场名） | 年份 | DMI 前缀（`excludes` 在内） | 触摸板模组 | 键表 | 键表状态 | 同型号无硬件配置 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -104,7 +107,7 @@ NumberPad 的键位按**触摸板模组 + HID 命名**区分，与整机型号�
 * 4 区 RGB 配置上，触摸板没有图标区，长按图标区不会触发数字模式；DMI 仍会命中 `g614`
   这类行（前缀相同），所以驱动不会把它判成「表外机器」，只是没有硬件响应可做。
 * 这类配置的触摸板模组名是否仍报 `ASUE1416` 尚未实测确认。要在不带 NumberPad 的配置上
-  验证，执行 `asus-numpad check` 看「本机触摸板模组」与背光候选段：模组名在、FEATURE `0x0d`
+  验证，执行 `numdeck check` 看「本机触摸板模组」与背光候选段：模组名在、FEATURE `0x0d`
   在，说明按键链路可用，缺的只是图标区；两者都没有，即该配置不具备此硬件。
 
 启动校验在 DMI 匹配机型之后还会再读一次触摸板 HID 报告描述符：扫到的候选节点里没有任何一个
@@ -148,14 +151,14 @@ NumberPad 的键位按**触摸板模组 + HID 命名**区分，与整机型号�
 | `unsupported` | 默认拒绝，提示反馈 `check` 输出（无键位依据、未在真机核对过） |
 
 ```bash
-asus-numpad --allow-unverified run
+numdeck --allow-unverified run
 # 或配置 {"allow_unverified_layout": true}
 ```
 
 ## 新机型自检
 
 ```bash
-asus-numpad check
+numdeck check
 ```
 
 会额外打印背光候选段，列出每个 `/dev/hidraw*` 的 `vid:pid`、是否带 FEATURE `0x0d`、
@@ -181,7 +184,7 @@ DMI 写坏、写成占位串的机器靠这一层仍能认出机型。机型表�
 
 ## 表外机型与自定义布局
 
-表里没有的机器不必等驱动更新，先在 `asus-numpad.json` 里写一条 `custom_layouts` 试：
+表里没有的机器不必等驱动更新，先在 `numdeck.json` 里写一条 `custom_layouts` 试：
 
 ```json
 {
@@ -196,7 +199,7 @@ DMI 写坏、写成占位串的机器靠这一层仍能认出机型。机型表�
 }
 ```
 
-- `hid_ids` 填 `asus-numpad check` 里「本机触摸板模组」那一行打印的 ID（`ASUE1416` 这一层），
+- `hid_ids` 填 `numdeck check` 里「本机触摸板模组」那一行打印的 ID（`ASUE1416` 这一层），
   绑上之后 `layout_name` 留 `auto` 也能命中，`verified` / `family` / `unsupported` 三级校验对它
   不起作用。
 - 触摸板本身没有镭雕、也没背光时，贴一张小键盘贴纸就是「键盘」：`keys` 按贴纸的排布写，列数由
@@ -215,7 +218,7 @@ tools/verify-extend.sh          # 结果同时写进 verify-extend.txt
 ```
 
 22 项自动检查，全程用 `mktemp` 临时配置，**不写 hidraw、不动
-`~/.config/asus-numpad/asus-numpad.json`**，纯读：
+`~/.config/numdeck/numdeck.json`**，纯读：
 
 | 组 | 检查内容 |
 | --- | --- |

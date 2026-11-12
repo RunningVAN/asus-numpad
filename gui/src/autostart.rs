@@ -4,7 +4,7 @@
 //! 不需要管理员权限，也不需要服务/计划任务。值名固定为 ASCII，便于脚本检查。
 //!
 //! Linux 不走这里：那边数字键与手势本来就有 systemd 用户单元，界面的「开机自启」
-//! 直接 `systemctl --user enable asus-numpad`（见 [`crate::sysinfo`]）。
+//! 直接 `systemctl --user enable numdeck`（见 [`crate::sysinfo`]）。
 
 use anyhow::Result;
 
@@ -137,6 +137,6 @@ pub fn set(on: bool, cmd: &str) -> Result<()> {
 pub fn command_line() -> String {
     let exe = std::env::current_exe()
         .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "asus-numpad-gui".to_string());
+        .unwrap_or_else(|_| "numdeck-gui".to_string());
     format!("\"{exe}\" --apply-startup")
 }

@@ -1,11 +1,11 @@
 //! 灯光：档位下发、策略档表、NumLock 跟随。
 //!
-//! 档位映射不在这里算——统一走 `asus_numpad::brightness` / `led_proto`，GUI 只负责
+//! 档位映射不在这里算——统一走 `numdeck::brightness` / `led_proto`，GUI 只负责
 //! 「用户点到哪一档」与「把结果写成一行日志」。
 
 use std::time::{Duration, Instant};
 
-use asus_numpad::led_proto;
+use numdeck::led_proto;
 
 use crate::backend;
 use crate::kbdmap;

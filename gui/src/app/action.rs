@@ -4,7 +4,7 @@
 //! [`App::run_action`] 里。这样闭包里不会和 `self` 的其余字段互相借，也方便一眼看完
 //! 「这个按钮到底会触发什么」。
 
-use asus_numpad::led_proto;
+use numdeck::led_proto;
 use eframe::egui;
 
 use crate::autostart;

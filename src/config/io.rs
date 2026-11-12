@@ -53,20 +53,31 @@ impl Config {
         (cfg, notes)
     }
 
+    /// 用户配置根目录（`$XDG_CONFIG_HOME`，缺省 `~/.config`）。
+    fn user_config_root() -> Option<PathBuf> {
+        match std::env::var_os("XDG_CONFIG_HOME") {
+            Some(xdg) if !xdg.is_empty() => Some(PathBuf::from(xdg)),
+            _ => std::env::var_os("HOME")
+                .filter(|h| !h.is_empty())
+                .map(|home| PathBuf::from(home).join(".config")),
+        }
+    }
+
+    /// 新配置路径，写入与迁移都以它为准。
     pub fn user_config_path() -> PathBuf {
-        if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
-            let dir = PathBuf::from(xdg);
-            if !dir.as_os_str().is_empty() {
-                return dir.join("asus-numpad").join("asus-numpad.json");
-            }
+        match Self::user_config_root() {
+            Some(root) => root.join("numdeck").join("numdeck.json"),
+            None => PathBuf::from(CONFIG_PATH),
         }
-        match std::env::var_os("HOME") {
-            Some(home) if !home.as_os_str().is_empty() => PathBuf::from(home)
-                .join(".config")
-                .join("asus-numpad")
-                .join("asus-numpad.json"),
-            _ => PathBuf::from(CONFIG_PATH),
-        }
+    }
+
+    /// 更名前（1.0.x）用户级配置的位置，只读兼容用。
+    pub fn legacy_user_config_paths() -> Vec<PathBuf> {
+        let Some(root) = Self::user_config_root() else {
+            return Vec::new();
+        };
+        let dir = root.join(crate::compat::LEGACY_APP_DIR);
+        vec![dir.join("asus-numpad.json"), dir.join("numdeck.json")]
     }
 
     pub fn is_privileged() -> bool {
@@ -95,23 +106,17 @@ impl Config {
         if user.exists() {
             return user;
         }
-        let current = PathBuf::from(CONFIG_PATH);
-        if current.exists() {
-            return current;
-        }
-        for legacy in LEGACY_CONFIG_PATHS {
-            let path = PathBuf::from(legacy);
-            if path.exists() {
-                return path;
-            }
-        }
-        user
+        Self::legacy_config_path().unwrap_or(user)
     }
 
-    fn legacy_config_path() -> Option<&'static Path> {
-        std::iter::once(CONFIG_PATH)
-            .chain(LEGACY_CONFIG_PATHS.iter().copied())
-            .map(Path::new)
+    /// 现存配置的探测顺序：正式路径 → 历史 `/etc` 路径 → 更名前的用户目录。
+    ///
+    /// 用户目录排在最后，是因为它的内容属于「某个用户」而不是「这台机器」，
+    /// 只有在系统级配置全都不存在时才轮到它。
+    fn legacy_config_path() -> Option<PathBuf> {
+        std::iter::once(PathBuf::from(CONFIG_PATH))
+            .chain(LEGACY_CONFIG_PATHS.iter().map(PathBuf::from))
+            .chain(Self::legacy_user_config_paths())
             .find(|p| p.exists())
     }
 
@@ -121,10 +126,10 @@ impl Config {
             return None;
         }
         let source = Self::legacy_config_path()?;
-        if source == target.as_path() {
+        if source == target {
             return None;
         }
-        let text = std::fs::read_to_string(source).ok()?;
+        let text = std::fs::read_to_string(&source).ok()?;
         // 只搬合法配置，避免把半截文件带进用户目录
         Config::from_json(&text).ok()?;
         std::fs::create_dir_all(target.parent()?).ok()?;

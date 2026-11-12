@@ -49,7 +49,7 @@ impl App {
                         if theme::secondary(ui, &p, "复制").clicked() {
                             ui.ctx().copy_text(text.clone());
                         }
-                        theme::note(ui, &p, "与 asus-numpad --dump-config 输出一致");
+                        theme::note(ui, &p, "与 numdeck --dump-config 输出一致");
                     });
                     let mut shown = text;
                     ui.add(

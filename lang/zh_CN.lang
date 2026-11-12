@@ -1,12 +1,12 @@
-# asus-numpad 简体中文语言文件
+# numdeck 简体中文语言文件
 # 键值格式：key = 文案（# 开头为注释，值内可用 \n 换行）
-# 缺键会回落到英文内置文案；可复制整份文件到 ~/.config/asus-numpad/lang/ 做本地化覆盖（免 root）。
+# 缺键会回落到英文内置文案；可复制整份文件到 ~/.config/numdeck/lang/ 做本地化覆盖（免 root）。
 
 # ---- 启动横幅 ----
-app.banner = ASUS 触摸板小键盘 v{version}（Linux 用户态，参数取自官方 AlgoParameters）
+app.banner = 触摸板小键盘 v{version}（Linux 用户态，参数取自官方 AlgoParameters）
 
 # ---- 命令行总览 ----
-cli.about = ASUS 触摸板数字小键盘驱动（Linux，官方 AlgoParameters 对齐版）
+cli.about = 触摸板数字小键盘驱动（Linux，官方 AlgoParameters 对齐版）
 cli.config.help = 配置文件路径
 cli.device.help = 触摸板事件设备；缺省自动探测（义隆 04F3 / 原相 093A 全族，按 HID 模组识别布局）
 cli.keyboard.help = 键盘事件设备（读 NumLock LED）
@@ -16,7 +16,7 @@ cli.i2c_addr.help = i2c 地址（0x38 或 56）
 cli.hidraw.help = hidraw 节点（如 /dev/hidraw3）
 cli.i2c_transfer.help = i2c 写入工具名
 cli.key_mode.help = 键位风格：keypad / digits
-cli.layout.help = 布局代号；默认 auto 按触摸板 HID 模组自动识别，asus-numpad layout 可列出全部代号
+cli.layout.help = 布局代号；默认 auto 按触摸板 HID 模组自动识别，numdeck layout 可列出全部代号
 cli.numlock.help = NumLock 联动：sync / toggle / off
 cli.mixed_mode.help = 混合模式：auto / on / off
 cli.no_follow_brightness.help = 关闭「数字区亮度跟随键盘背光」，退回固定 0x01 点亮
@@ -41,7 +41,7 @@ cli.cmd.levels.value = 该档下发的亮度：0x00 或 0x41~0x48（十进制、
 cli.cmd.led = 直发背光命令字（排障用，绕过所有状态机）
 cli.cmd.led.long = 例：led on | led off | led 0x41..0x48（1..8 档）。用于区分「驱动未发送」与「硬件不接受该值」。
 cli.cmd.led.value = on / off / 任意十六进制档位（如 0x41）
-led.cmd.usage = 用法：asus-numpad led on|off|0x41（0x01 亮 / 0x00 灭 / 0x41..0x48 为 1..8 档）
+led.cmd.usage = 用法：numdeck led on|off|0x41（0x01 亮 / 0x00 灭 / 0x41..0x48 为 1..8 档）
 led.cmd.bad_value = 无法识别的取值：{v}（可用 on / off / 0x41 / 65）
 cli.cmd.lang = 语言：查看 / 切换界面语言（简体中文、繁體中文、English）
 cli.cmd.lang.long = 例：`lang`（查看当前语言与来源）、`lang zh-TW`、`lang en`、`lang auto`（跟随系统）
@@ -99,7 +99,7 @@ check.b_grab_no = 否（点击会穿透）
 check.b_idle = 空闲熄灯          {sec}s（熄灯不退出，触摸复亮）
 check.b_led = 背光通道          {kind}（{where}）
 check.b_bright = 背光亮度          {text}
-check.b_bright_cmd = 调光命令          asus-numpad bright 1..4（0=灭，共 {steps} 档）；asus-numpad bright follow on|off
+check.b_bright_cmd = 调光命令          numdeck bright 1..4（0=灭，共 {steps} 档）；numdeck bright follow on|off
 check.lang_line = 界面语言          {name}（{code}）
 check.lang_source = 语言来源          {source}
 check.lang_file = 语言文件          {path}
@@ -141,8 +141,8 @@ bright.report.follow_nodir = 跟随键盘背光（读不到键盘背光节点，
 bright.report.static = 不跟随键盘背光，固定档 {step} → 0x{level}（`bright 1..N` 调整，`bright follow on` 恢复跟随）
 
 # ---- 亮度命令 ----
-bright.usage = 用法：asus-numpad bright 0|1..N    固定档（0=灭；1=最暗；N=最亮，默认 N=4，线性等分）\n      asus-numpad bright up|down|cycle  逐档 / 循环切换\n      asus-numpad bright follow on|off  是否跟随键盘背光\n      asus-numpad bright status         查看当前状态与档位映射表
-bright.follow_usage = 用法：asus-numpad bright follow on|off
+bright.usage = 用法：numdeck bright 0|1..N    固定档（0=灭；1=最暗；N=最亮，默认 N=4，线性等分）\n      numdeck bright up|down|cycle  逐档 / 循环切换\n      numdeck bright follow on|off  是否跟随键盘背光\n      numdeck bright status         查看当前状态与档位映射表
+bright.follow_usage = 用法：numdeck bright follow on|off
 bright.err_unmappable = 档位 {step} 无法换算成亮度字节（检查 brightness_levels 配置）
 bright.sent = 已下发亮度 0x{level}（通道 {kind}）
 bright.send_failed = 下发 0x{level} 失败：通道不通（检查 --hidraw 节点与 udev 的 uaccess 规则是否命中）
@@ -162,13 +162,13 @@ persist.bad_json = {path} 不是合法 JSON，已中止（未做任何修改）
 persist.mkdir_failed = 无法创建目录 {dir}
 persist.backup_failed = 备份 {path} 失败，已中止
 persist.write_failed = 写入 {path} 失败（检查该文件与所在目录的属主、权限）
-svc.not_running = 提示：asus-numpad 服务未在运行，下次启动时按新配置生效。
-svc.restarted = 已重启 asus-numpad 服务，新设置立即生效。
-svc.restart_failed = 自动重启服务失败，请手动执行：systemctl --user restart asus-numpad
+svc.not_running = 提示：numdeck 服务未在运行，下次启动时按新配置生效。
+svc.restarted = 已重启 numdeck 服务，新设置立即生效。
+svc.restart_failed = 自动重启服务失败，请手动执行：systemctl --user restart numdeck
 
 # ---- 语言命令 ----
 lang.current = 当前语言：{name}（{code}），来源：{source}
-lang.source.env = 环境变量 ASUS_NUMPAD_LANG
+lang.source.env = 环境变量 NUMDECK_LANG
 lang.source.cli = 命令行 --lang
 lang.source.config = 配置文件 language
 lang.source.locale = 系统 locale
@@ -178,9 +178,9 @@ lang.dirs = 语言文件目录：{dirs}
 lang.file = 语言文件：{path}
 lang.file_builtin = 语言文件           使用二进制内置文案（未找到外部 .lang 文件）
 lang.wrote = 已写入 {path}：language = {value}（备份 {backup}）
-lang.usage = 用法：asus-numpad lang [zh-CN|zh-TW|en|auto]   查看或切换界面语言\n临时覆盖：asus-numpad --lang en check
+lang.usage = 用法：numdeck lang [zh-CN|zh-TW|en|auto]   查看或切换界面语言\n临时覆盖：numdeck --lang en check
 lang.bad_code = 无法识别的语言：{v}（可用：zh-CN / zh-TW / en / auto）
-lang.restart_hint = 下次运行 asus-numpad 时生效（本次输出仍为当前语言）。
+lang.restart_hint = 下次运行 numdeck 时生效（本次输出仍为当前语言）。
 lang.effect_auto = 之后按系统 locale 自动选择语言（当前判定为 {name}）。
 
 # ---- dump 与 run 模式 ----
@@ -188,10 +188,10 @@ dump.mode = dump 模式：原样打印触摸板事件，不产生任何按键。
 dump.nonlinux = 当前平台不支持 evdev，无法 dump。请在目标 Linux 机器上运行。
 dump.header = 正在读取 {path}（{name}），Ctrl-C 结束
 run.brightness = 背光亮度：{text}
-run.already_running = 已有一个 asus-numpad 实例在运行，本次退出。
+run.already_running = 已有一个 numdeck 实例在运行，本次退出。
 run.reloading = 收到重载信号，退出并等待重新启动以应用新配置。
 run.nonlinux = 当前平台不支持 evdev / uinput，run 仅能在 Linux 上运行。
-run.nonlinux_hint = 可用 `asus-numpad check` 查看参数与几何换算。
+run.nonlinux_hint = 可用 `numdeck check` 查看参数与几何换算。
 run.device =   设备: {path}（{name}）
 run.device_lost = 触摸板已断开（{err}），退出以释放设备。
 
@@ -218,7 +218,7 @@ led.warn.exec = [警告] 无法执行 {tool}: {err}
 led.warn.no_feature = [警告] {dev} 是 {vid}:{pid} 但没有 FEATURE 报告 0x{rid}，仍按它试
 led.warn.fallback_asus = [警告] 未找到 {vid}:{pid} 背光节点，回退到 ASUS 节点，可能点不亮
 led.warn.bad_kind = [警告] --led {v} 无效，按 auto 处理
-led.warn.no_access = [warn] 读不到 {dev} 的 FEATURE 报告 0x{rid}（权限不足）；用 `asus-numpad check` 查 udev 提示，不要据此判定硬件缺失
+led.warn.no_access = [warn] 读不到 {dev} 的 FEATURE 报告 0x{rid}（权限不足）；用 `numdeck check` 查 udev 提示，不要据此判定硬件缺失
 led.none.explicit = 显式关闭
 led.none.no_hidraw = 未找到 ASUS hidraw 节点
 led.none.no_i2c = 未找到 i2c 从设备 0x38
@@ -255,25 +255,28 @@ cli.cmd.layout = 布局：查看官方布局表 / 按 HID 硬件 ID 自动识别
 cli.cmd.layout.long = 不带参数列出全部官方布局与支持级别；`layout auto` 恢复自动识别；`layout GH3XLNDZ` 固定布局；`layout --ids` 列出 HID 硬件 ID 对照表
 cli.cmd.layout.name = 布局名（GH3XLNDZ / GH2XLNDZ / GH4XLNDZ / auto）
 cli.cmd.layout.ids = 同时列出触摸板 HID 硬件 ID → 布局的对照表
-cli.sku.help = 手动指定机型配置，跳过自动识别（机型 id 用 `asus-numpad sku` 查看）
+cli.sku.help = 手动指定机型配置，跳过自动识别（机型 id 用 `numdeck sku` 查看）
 cli.cmd.sku = 机型配置：查看自动识别结果、列出可选机型、手动指定
 cli.cmd.sku.long = 不带参数时显示识别出的机型、判定依据、本机 DMI 身份与触摸板模组；`sku list` 列出全部可选机型；`sku g614` 手动指定；`sku auto` 恢复自动识别
 cli.cmd.sku.id = 机型 id，或 auto / list
+cli.sku.help.arm = 本构建不含机型表，只接受 `custom`（等于不指定）
+cli.cmd.sku.long.arm = 不带参数时显示当前机型与触摸板模组；ARM64 构建不含华硕机型表，所以机型恒为「自定义布局」、`sku list` 只列出 `custom`；键位与小键盘几何由配置里的 custom_layouts 决定
 layout.current = 当前布局：配置 {layout}，实际生效 {resolved}（{support}）
 layout.list_title = 官方 AsusNUMPADFilter.inf 收录的布局（* 已验证 / ~ 同族、参数照录但未上真机 / - 无键位依据）：
 layout.legend = * 已验证   ~ 同族未验证（需 --allow-unverified）   - 不支持
 layout.custom_title = 配置里已装上的自定义布局（custom_layouts）：
 layout.custom_line = + {name} 列数={cols} HID={hids}
 layout.ids_title = 触摸板 HID 硬件 ID → 布局（同 ID 的机型可直接通用）：
-layout.usage = 用法：asus-numpad layout                 查看当前布局与布局表
+layout.usage = 用法：numdeck layout                 查看当前布局与布局表
 layout.wrote = 已写入 {path}：layout_name = {value}（备份 {backup}）
 layout.effect_auto = 下次启动按触摸板 HID 硬件 ID 自动选布局，无法识别时回落 GH3XLNDZ
 layout.unverified_warn = 注意：布局 {layout} 为 {support} 级别，键位表未经真机验证
 layout.bad_name = 未知布局名：{v}
 note.layout_unknown = layout_name={v} 不在官方布局表内，按 auto 处理
 err.layout_unverified = 布局 {layout}（{support}）尚未真机验证，已停止启动以免按错键。确认可用后加 --allow-unverified。
-err.layout_unverified.hint = 允许使用的方式：asus-numpad --allow-unverified run，或在 ~/.config/asus-numpad/asus-numpad.json 里设 "allow_unverified_layout": true
-err.layout_unsupported.hint = 该键表未经真机核对，且无键位排布依据，直接使用可能误按键；请把 `asus-numpad check` 的输出反馈给维护者以补充核对
+err.layout_unverified.hint = 允许使用的方式：numdeck --allow-unverified run，或在 /etc/numdeck/numdeck.json 里设 "allow_unverified_layout": true
+err.layout_unsupported.hint = 该键表未经真机核对，且无键位排布依据，直接使用可能误按键；请把 `numdeck check` 的输出反馈给维护者以补充核对
+err.layout_custom.hint = 本构建不含内置机型表，需要先配一份自定义布局：在 /etc/numdeck/numdeck.json 的 custom_layouts 里加一条（hid_ids 绑触摸板、keys 录键位），或用图形界面的扩展页添加，详见 https://numdeck-dev.github.io/
 dev.report.layout = 布局：{layout}（{support}，来源 {source}，HID {hid}）
 
 # 跨机型背光自检 / cross-model backlight self-check
@@ -295,9 +298,10 @@ sku.model = 当前机型配置：{sku} —— {source}
 sku.source.manual = 手动指定
 sku.source.dmi = 由 DMI 型号自动识别
 sku.source.hardware = 由触摸板模组自动识别
+sku.source.custom = 按自定义布局运行
 sku.detail = 判定依据：{detail}
 sku.note = 机型备注：{note}
-sku.compat = 兼容情况详见官网：https://asus-numpad.github.io/
+sku.compat = 兼容情况详见官网：https://numdeck-dev.github.io/
 sku.dmi = 本机 DMI 身份：{dmi}
 sku.dmi_unknown = 本机 DMI 身份：读不到（非 Linux 或 /sys/class/dmi/id 不可读）
 sku.hw = 本机触摸板模组：{hw}
@@ -306,18 +310,19 @@ sku.set = 已指定机型 {sku}（{path}），重启服务生效
 sku.clear = 已取消手动指定，恢复自动识别（{path}）
 sku.bad_id = 没有机型「{id}」，可选：{ids}
 note.sku_unknown = 机型 id「{id}」不在机型表里（已忽略，仍按自动识别）。可选：{ids}
-err.not_asus = 本机厂商是 {vendor}，不是 ASUS 机器。
+err.not_asus = 本机厂商是 {vendor}，不在机型表里。若确认这块触摸板是 NumberPad 类，可用 --sku 手动指定机型。
 err.unsupported_stop = 已拒绝启动。
 err.unsupported_model = 本机不在支持的机型列表里（{ids}）。
-err.unsupported_hint = 硬件信息读不准时（虚拟机、白牌机箱、BIOS 占位串）可手动指定机型：asus-numpad sku <id>
+err.unsupported_hint = 硬件信息读不准时（虚拟机、白牌机箱、BIOS 占位串）可手动指定机型：numdeck sku <id>
 err.no_numpad = 本机触摸板没有 NumberPad 硬件：HID 报告描述符里没有 FEATURE 报告 0x0d，数字区背光与图标区都不存在，拒绝启动。
-err.no_numpad.hint = 只有带 NumberPad 的配置才导出 FEATURE 0x0d。4 区 RGB 键盘的配置（同型号的减配档，国行「魔霸新锐」即此类）触摸板与带硬件的机型同款，但不存在图标区，无法通过软件补足。硬件确实带 NumberPad 却报此错时，把 `asus-numpad check` 的输出反馈给维护者。
+err.no_numpad.hint = 只有带 NumberPad 的配置才导出 FEATURE 0x0d。4 区 RGB 键盘的配置（同型号的减配档，国行「魔霸新锐」即此类）触摸板与带硬件的机型同款，但不存在图标区，无法通过软件补足。硬件确实带 NumberPad 却报此错时，把 `numdeck check` 的输出反馈给维护者。
 err.numpad_no_access = 读不到触摸板的报告描述符（权限不足），无法确认 NumberPad 是否存在，继续启动；数字区若无反应，先查 udev 的 uaccess 规则。
 layout.source.auto = 按触摸板模组自动识别
 layout.source.fixed = 由配置或命令行固定
 layout.source.sku = 按识别到的机型推断，模组 ID 读不到
 layout.source.unknown_hid = 模组 ID 不在布局表内
 layout.source.fallback = 默认布局，模组 ID 读不到
+layout.source.custom_none = 未配置自定义布局（本构建不含内置机型表）
 sku.nonlinux = 机型判定：跳过，DMI 与 hidraw 只在 Linux 上可读（请在目标机上运行）
 
 # 机型展示名与判定依据（与 src/sku.rs 的中文原文一字不差，改动要两边同步）
@@ -331,6 +336,8 @@ sku.gx550.display = ASUS 冰刃双屏，15 / 16 英寸，侧置触摸板（GX550
 sku.gx550.note = GX550 / GX551 / GX650 同属 gx551 键位族；模组 ASUE1408 → GVM_A、ASUE1404 → GVM。GVM_A 与 GVM 共用同一份参数（官方 NUMPADLAYOUT_GVM_* 只列到 _06，其余项按缺省 0），键表状态是同族、未上真机。触摸板竖排在键盘右侧，数字模式由键盘上的专用键切换，不是长按图标区（见 README「双屏机型：侧置触摸板」）
 sku.ux582.display = ASUS 灵耀双屏，侧置触摸板（UX582 / UX482）
 sku.ux582.note = 模组 ASUE1406 / ELAN1406 → 键表 NVM（官方 NUMPADLAYOUT_NVM_* 只列到 _12，其余项按缺省 0），键表状态是同族、未上真机。触摸板在键盘右侧，数字模式由键盘上的专用键切换，不是长按图标区
+sku.custom.display = 自定义布局（不含机型表，不判定机型）
+sku.custom.note = 本构建不含华硕机型表：不按 DMI 型号或触摸板模组判定机型，直接走自定义布局。在配置文件 custom_layouts 里加一条（hid_ids 绑触摸板、keys 录键位），或用图形界面的扩展页添加；没有自定义布局时启动会停下
 
 # ---- 自定义扩展：报文 / 布局 / 压感 / 热键 ----
 note.custom_layout_no_name = 有一条自定义布局缺少 name，已忽略

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://asus-numpad.github.io/sitemap.xml
+Sitemap: https://numdeck-dev.github.io/sitemap.xml

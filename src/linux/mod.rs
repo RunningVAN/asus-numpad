@@ -256,11 +256,28 @@ pub fn resolve_layout(cfg: &Config, device_name: &str) -> ResolvedLayout {
             };
         }
     }
-    let entry = layout::by_name(layout::DEFAULT_LAYOUT_NAME).expect("内置布局表必须包含默认布局");
-    ResolvedLayout {
-        entry,
-        hid,
-        source: "fallback",
+    // ARM64 构建没有机型表，也认不出华硕模组：此时绝不留「默认套 GH3XLNDZ」的兜底——
+    // 那是把本机验证过的 G634 键表往未知硬件上套，按出来的键全是错的，比不跑更难查。
+    // 交给 UNKNOWN 占位，由 layout_gate 拦下并提示先去扩展页配自定义布局。
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    {
+        let entry = layout::by_name("UNKNOWN").expect("内置布局表必须包含 UNKNOWN 占位");
+        ResolvedLayout {
+            entry,
+            hid,
+            source: "custom-none",
+        }
+    }
+
+    #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+    {
+        let entry =
+            layout::by_name(layout::DEFAULT_LAYOUT_NAME).expect("内置布局表必须包含默认布局");
+        ResolvedLayout {
+            entry,
+            hid,
+            source: "fallback",
+        }
     }
 }
 
@@ -271,6 +288,7 @@ fn layout_source_key(source: &str) -> &'static str {
         "fixed" => "layout.source.fixed",
         "sku" => "layout.source.sku",
         "unknown-hid" => "layout.source.unknown_hid",
+        "custom-none" => "layout.source.custom_none",
         _ => "layout.source.fallback",
     }
 }
@@ -288,8 +306,14 @@ pub fn layout_gate(cfg: &Config, rl: &ResolvedLayout) -> Option<String> {
         return None;
     }
     let support = rl.entry.support.as_str();
+    // ARM64 构建拦下的是「还没配自定义布局」，该给的出路是去配一份，
+    // 不是把 `check` 输出反馈给维护者——那边根本没有机型表可补。
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    let unsupported_hint = "err.layout_custom.hint";
+    #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+    let unsupported_hint = "err.layout_unsupported.hint";
     let hint = crate::i18n::t(if matches!(rl.entry.support, LayoutSupport::Unsupported) {
-        "err.layout_unsupported.hint"
+        unsupported_hint
     } else {
         "err.layout_unverified.hint"
     });
@@ -539,7 +563,7 @@ pub enum ServiceExit {
 fn acquire_single_instance() -> Result<Option<std::fs::File>> {
     use std::os::unix::io::AsRawFd;
     let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-    let path = format!("{dir}/asus-numpad.lock");
+    let path = format!("{dir}/numdeck.lock");
     let file = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -597,7 +621,7 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<ServiceExit> {
     let has_mt = tpad.borrow().supports(kc::EV_ABS, kc::ABS_MT_TRACKING_ID);
     let geometry = geometry_from_abs(&xi, &yi, &cfg, layout_name);
 
-    let keyboard_dev = Rc::new(RefCell::new(VirtualDevice::create_keyboard("asus-numpad")?));
+    let keyboard_dev = Rc::new(RefCell::new(VirtualDevice::create_keyboard("numdeck")?));
 
     // 混合模式需要把未吞掉的触点转发回去，否则开数字键盘后光标就没了
     let pointer_dev = if cfg.mixed_mode.is_enabled() && has_mt {
@@ -625,7 +649,7 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<ServiceExit> {
         ];
         let mut keys = vec![kc::BTN_TOUCH, kc::BTN_TOOL_FINGER, kc::BTN_TOOL_DOUBLETAP];
         keys.extend_from_slice(&kc::ALL_KEYS);
-        match VirtualDevice::create_touchpad("asus-numpad-touchpad", &ranges, &keys) {
+        match VirtualDevice::create_touchpad("numdeck-touchpad", &ranges, &keys) {
             Ok(d) => Some(Rc::new(RefCell::new(d))),
             Err(err) => {
                 eprintln!(
@@ -760,10 +784,10 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<ServiceExit> {
         // 键盘只用来读 NumLock 灯，读失败不影响数字区本身；但一直抱着一个失效的
         // 节点会让「NumLock 亮时点灯」永久失灵，所以连续失败到阈值就重新枚举。
         kb_events.clear();
-        let kb_read = match kb_slot.borrow().as_ref() {
-            Some(dev) => Some(dev.read_events_into(&mut kb_events)),
-            None => None,
-        };
+        let kb_read = kb_slot
+            .borrow()
+            .as_ref()
+            .map(|dev| dev.read_events_into(&mut kb_events));
         match kb_read {
             Some(Ok(())) => {
                 kb_failures = 0;

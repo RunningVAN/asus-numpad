@@ -9,10 +9,10 @@
 # CI 里由 release.yml 的 aur job 调用；本地手动发 AUR 也用同一个入口。
 set -euo pipefail
 
-REPO_URL="https://github.com/asus-numpad/asus-numpad"
+REPO_URL="https://github.com/numdeck-dev/numdeck"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TPL="${HERE}/PKGBUILD.in"
-INSTALL_FILE="${HERE}/asus-numpad-rs.install"
+INSTALL_FILE="${HERE}/numdeck.install"
 
 die() { echo "gen-aur: $*" >&2; exit 1; }
 log() { echo "gen-aur: $*"; }
@@ -46,7 +46,7 @@ if [[ -z "${SHA256}" ]]; then
     log "下载源码包计算校验和：${SOURCE_URL}"
     # 用显式模板：GNU mktemp 的 -t 要求模板自带至少三个 X，macOS 的 -t 则是
     # 直接给名字，两边不通用，CI 上一版就死在 "too few X's in template"。
-    tmp="$(mktemp "${TMPDIR:-/tmp}/asus-numpad-aur.XXXXXX")"
+    tmp="$(mktemp "${TMPDIR:-/tmp}/numdeck-aur.XXXXXX")"
     trap 'rm -f "$tmp"' EXIT
     # --retry-all-errors：tag 刚推上去时 archive 会短暂 404，普通 --retry 不重试 404
     if ! curl -fsSL --retry 6 --retry-delay 5 --retry-all-errors -o "$tmp" "${SOURCE_URL}"; then
@@ -78,8 +78,8 @@ sed -e "s|@PKGVER@|${VERSION}|g" \
     -e "s|@SOURCE@|${SOURCE_URL}|g" \
     -e "s|@MAINTAINER@|${MAINTAINER}|g" \
     "${TPL}" > "${OUT}/PKGBUILD"
-cp "${INSTALL_FILE}" "${OUT}/asus-numpad-rs.install"
-chmod 0644 "${OUT}/PKGBUILD" "${OUT}/asus-numpad-rs.install"
+cp "${INSTALL_FILE}" "${OUT}/numdeck.install"
+chmod 0644 "${OUT}/PKGBUILD" "${OUT}/numdeck.install"
 log "已生成 ${OUT}/PKGBUILD（${VERSION}, sha256=${SHA256}）"
 
 # .SRCINFO 只能由 makepkg 生成，Arch 环境里顺手做掉；没有就留空由 CI 补

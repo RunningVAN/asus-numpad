@@ -3,11 +3,11 @@
 #
 #   tools/verify-extend.sh              # 自动项全跑，结果写 verify-extend.txt
 #   tools/verify-extend.sh --keep       # 保留临时配置，方便手工接着试
-#   tools/verify-extend.sh --bin PATH   # 指定二进制（默认 target/release/asus-numpad）
+#   tools/verify-extend.sh --bin PATH   # 指定二进制（默认 target/release/numdeck）
 #
 # 设计原则：
 #   1. 自动项全部**不改系统状态**——临时配置写进 mktemp 目录，用 `--config` 指过去，
-#      不碰 ~/.config/asus-numpad/asus-numpad.json，不写 hidraw，不重启服务。
+#      不碰 ~/.config/numdeck/numdeck.json，不写 hidraw，不重启服务。
 #   2. 需要真机手感/硬件反馈的项**不自动跑**，只打印可以直接粘贴的命令，由人确认。
 #   3. 每项都有 PASS/FAIL/SKIP 判定，最后给汇总，方便贴回 issue。
 set -uo pipefail
@@ -29,7 +29,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 # 相对路径的 --bin 要按「调用者所在目录」解析：脚本马上会 cd 到仓库根，cd 之后同一个
 # 相对路径指向别处（把包解压到任意目录、在上一层 `bash pkg/tools/verify-extend.sh
-# --bin ./asus-numpad` 就会踩到），第 1 步会误报「找不到可执行文件」。
+# --bin ./numdeck` 就会踩到），第 1 步会误报「找不到可执行文件」。
 if [[ -n "$BIN" && "$BIN" != /* ]]; then
     if BIN_DIR="$(cd -- "$(dirname -- "$BIN")" 2>/dev/null && pwd)"; then
         BIN="$BIN_DIR/$(basename -- "$BIN")"
@@ -38,7 +38,7 @@ fi
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
-[[ -n "$BIN" ]] || BIN="$ROOT/target/release/asus-numpad"
+[[ -n "$BIN" ]] || BIN="$ROOT/target/release/numdeck"
 OUT="$ROOT/verify-extend.txt"
 
 PASS=0; FAIL=0; SKIP=0
@@ -52,7 +52,7 @@ fail() { FAIL=$((FAIL+1)); FAILED+=("$*"); say "[FAIL] $*"; }
 skip() { SKIP=$((SKIP+1)); say "[SKIP] $*"; }
 
 {
-say "asus-numpad 扩展功能验证"
+say "numdeck 扩展功能验证"
 say "时间: $(date '+%F %T %z')"
 say "主机: $(uname -srm)"
 say "发行版: $(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || echo unknown)"

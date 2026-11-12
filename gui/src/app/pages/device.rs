@@ -5,7 +5,7 @@
 
 use eframe::egui;
 
-use asus_numpad::led_policy::{RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE};
+use numdeck::led_policy::{RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE};
 
 use crate::kbdmap;
 use crate::theme::{self};

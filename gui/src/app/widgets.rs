@@ -12,10 +12,10 @@ use crate::theme;
 
 /// 是否画 Linux 全套面板。
 ///
-/// 默认按平台走：Linux 全套、Windows 只灯光。环境变量 `ASUS_NUMPAD_GUI_FULL=1/0`
+/// 默认按平台走：Linux 全套、Windows 只灯光。环境变量 `NUMDECK_GUI_FULL=1/0`
 /// 可以强制覆盖，用于在另一平台上预览对面那套界面（真机默认行为不受影响）。
 pub fn ui_full() -> bool {
-    let Ok(value) = std::env::var("ASUS_NUMPAD_GUI_FULL") else {
+    let Ok(value) = std::env::var("NUMDECK_GUI_FULL") else {
         return cfg!(target_os = "linux");
     };
     match value.trim().to_ascii_lowercase().as_str() {

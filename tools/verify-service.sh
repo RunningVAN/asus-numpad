@@ -31,10 +31,10 @@ chk() { # chk <描述> <文件> <正则>
 }
 
 echo "== 服务单元：重试语义 ==" | tee -a "$OUT"
-chk "无限重试（设备暂时不在时要能自愈）" packaging/common/asus-numpad.service '^StartLimitIntervalSec=0'
-chk "永久性失败不重启（机型不支持 / 无硬件）" packaging/common/asus-numpad.service '^RestartPreventExitStatus=2 3'
-chk "reload 走重启而非原地换配置" packaging/common/asus-numpad.service '^ExecReload=/bin/kill -HUP \$MAINPID'
-chk "重启间隔 >= 2s（别把日志刷爆）" packaging/common/asus-numpad.service '^RestartSec=[2-9]'
+chk "无限重试（设备暂时不在时要能自愈）" packaging/common/numdeck.service '^StartLimitIntervalSec=0'
+chk "永久性失败不重启（机型不支持 / 无硬件）" packaging/common/numdeck.service '^RestartPreventExitStatus=2 3'
+chk "reload 走重启而非原地换配置" packaging/common/numdeck.service '^ExecReload=/bin/kill -HUP \$MAINPID'
+chk "重启间隔 >= 2s（别把日志刷爆）" packaging/common/numdeck.service '^RestartSec=[2-9]'
 
 echo "== 进程侧：退出码与锁 ==" | tee -a "$OUT"
 chk "单实例锁（防两个实例互抢 grab）" src/linux/mod.rs 'fn acquire_single_instance'

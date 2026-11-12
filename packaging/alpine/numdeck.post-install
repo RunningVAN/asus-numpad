@@ -16,16 +16,16 @@ if command -v udevadm >/dev/null 2>&1; then
 fi
 
 if command -v systemctl >/dev/null 2>&1; then
-    systemctl --global enable asus-numpad.service >/dev/null 2>&1 || true
+    systemctl --global enable numdeck.service >/dev/null 2>&1 || true
 fi
 
 cat <<'MSG'
 
-asus-numpad 已安装。
-  OpenRC 用户：把 `asus-numpad run` 放进桌面会话自启（如 ~/.xprofile 或
-  /etc/local.d/），或手工运行 `asus-numpad run`。
-  systemd 用户：`systemctl --user enable --now asus-numpad.service`
-  自检：asus-numpad check
+numdeck 已安装。
+  OpenRC 用户：把 `numdeck run` 放进桌面会话自启（如 ~/.xprofile 或
+  /etc/local.d/），或手工运行 `numdeck run`。
+  systemd 用户：`systemctl --user enable --now numdeck.service`
+  自检：numdeck check
 
 MSG
 

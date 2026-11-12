@@ -3,9 +3,9 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use asus_numpad::banner;
-use asus_numpad::config::Config;
-use asus_numpad::i18n::{self};
+use numdeck::banner;
+use numdeck::config::Config;
+use numdeck::i18n::{self};
 
 use super::*;
 
@@ -13,8 +13,8 @@ use super::*;
 ///
 /// 样本数据是纯坐标，不含任何机型信息——同一次采集在 mac 上解算和在真机上解算
 /// 走的是同一段代码，离线调算法时不用占着触摸板。
-pub(crate) fn read_raw_samples(path: &Path) -> Result<asus_numpad::partition::RawSamples> {
-    use asus_numpad::partition::{CornerSamples, RawSamples};
+pub(crate) fn read_raw_samples(path: &Path) -> Result<numdeck::partition::RawSamples> {
+    use numdeck::partition::{CornerSamples, RawSamples};
 
     fn pair_at(obj: &serde_json::Value, name: &str) -> Result<(i32, i32)> {
         // anyhow 直接把 String 当错误装进去时 Display 会自带引号
@@ -70,7 +70,7 @@ pub(crate) fn cmd_calibrate(
     cols: Option<usize>,
     rows: Option<usize>,
 ) -> Result<i32> {
-    use asus_numpad::partition::{solve_calibration, GridProbe};
+    use numdeck::partition::{solve_calibration, GridProbe};
 
     let table = cfg.key_table();
     let keys = (
@@ -100,8 +100,8 @@ pub(crate) fn cmd_calibrate(
         None => {
             #[cfg(target_os = "linux")]
             {
-                let dev = asus_numpad::linux::find_touchpad(cfg)?;
-                let raw = asus_numpad::linux::calibrate::collect(&dev)?;
+                let dev = numdeck::linux::find_touchpad(cfg)?;
+                let raw = numdeck::linux::calibrate::collect(&dev)?;
                 println!();
                 raw
             }

@@ -1,6 +1,6 @@
-# asus-numpad
+# numdeck
 
-English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [Website](https://asus-numpad.github.io/)
+English · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [Website](https://numdeck-dev.github.io/)
 
 Linux userspace driver for the ASUS NumberPad. The touchpad is grabbed through evdev, contacts
 are mapped to numpad cells, key events are injected through uinput. No kernel module is replaced,
@@ -13,48 +13,48 @@ Timing and geometry constants come from `AlgoParameters` in the vendor file `Asu
 ```bash
 # Debian / Ubuntu
 sudo install -d -m 0755 /usr/share/keyrings
-curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.gpg \
-  | sudo tee /usr/share/keyrings/asus-numpad.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/asus-numpad.gpg] https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/asus-numpad.list
-sudo apt update && sudo apt install asus-numpad
+curl -fsSL https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.gpg \
+  | sudo tee /usr/share/keyrings/numdeck.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/numdeck.gpg] https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/numdeck.list
+sudo apt update && sudo apt install numdeck
 
 # Fedora / RHEL / Rocky / Alma
-sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
-sudo tee /etc/yum.repos.d/asus-numpad.repo >/dev/null <<'EOF'
-[asus-numpad]
-name=asus-numpad
-baseurl=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$basearch
+sudo rpm --import https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc
+sudo tee /etc/yum.repos.d/numdeck.repo >/dev/null <<'EOF'
+[numdeck]
+name=numdeck
+baseurl=https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/rpm/$basearch
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+gpgkey=https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc
 EOF
-sudo dnf install asus-numpad
+sudo dnf install numdeck
 
 # openSUSE Leap / Tumbleweed, same rpm-md repo, zypper reads it directly
-sudo rpm --import https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc
+sudo rpm --import https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc
 sudo zypper addrepo --refresh \
-  "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/rpm/$(uname -m)" asus-numpad
-sudo zypper install asus-numpad
+  "https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/rpm/$(uname -m)" numdeck
+sudo zypper install numdeck
 
 # Arch / Manjaro
-curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-repo.asc -o /tmp/asus-numpad.asc
-sudo pacman-key --add /tmp/asus-numpad.asc
+curl -fsSL https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-repo.asc -o /tmp/numdeck.asc
+sudo pacman-key --add /tmp/numdeck.asc
 sudo pacman-key --lsign-key 79F282157F2D3FF8E3C6806314C2BF611986E168
 sudo tee -a /etc/pacman.conf >/dev/null <<'EOF'
 
-[asus-numpad]
+[numdeck]
 SigLevel = Required DatabaseRequired
-Server = https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/arch/$arch
+Server = https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/arch/$arch
 EOF
-sudo pacman -Syu asus-numpad
+sudo pacman -Syu numdeck
 
 # Alpine
-curl -fsSL https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/keys/asus-numpad-apk.rsa.pub \
-  | sudo tee /etc/apk/keys/asus-numpad-apk.rsa.pub >/dev/null
-echo "https://raw.githubusercontent.com/asus-numpad/asus-numpad/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
-sudo apk update && sudo apk add asus-numpad
+curl -fsSL https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/keys/numdeck-apk.rsa.pub \
+  | sudo tee /etc/apk/keys/numdeck-apk.rsa.pub >/dev/null
+echo "https://raw.githubusercontent.com/numdeck-dev/numdeck/main/repo/alpine/$(apk --print-arch)" | sudo tee -a /etc/apk/repositories
+sudo apk update && sudo apk add numdeck
 ```
 
 One package per ecosystem. The deb is built on Ubuntu 22.04 and covers 22.04 to 24.04 plus Debian
@@ -62,15 +62,15 @@ One package per ecosystem. The deb is built on Ubuntu 22.04 and covers 22.04 to 
 openSUSE Leap 16 and Tumbleweed: the spec uses standard macros only, runtime dependencies are glibc
 and systemd, and the repository is rpm-md, which zypper reads directly. Nothing is rebuilt per
 distribution. Native packages are also on
-[Releases](https://github.com/asus-numpad/asus-numpad/releases): deb, rpm, pkg.tar.zst, PKGBUILD with
+[Releases](https://github.com/numdeck-dev/numdeck/releases): deb, rpm, pkg.tar.zst, PKGBUILD with
 .SRCINFO, apk, static tarball. Building the PKGBUILD by hand: put `PKGBUILD` and
-`asus-numpad-rs.install` in one directory and run `makepkg -si`. Alpine, Gentoo, NixOS and manual
-tarball steps are in [docs/install.md](docs/install.md). The repositories and the release assets are
-x86_64 only; other architectures need a local build.
+`numdeck.install` in one directory and run `makepkg -si`. Alpine, Gentoo, NixOS and manual
+tarball steps are in [docs/install.md](docs/install.md). The repositories and the release assets
+ship both `x86_64`/`amd64` and `ARM64`/`aarch64` builds. On anything else, build from source.
 
 `ci.yml` builds a package per ecosystem on every push and checks the package metadata. `release.yml`
 additionally installs each package in a clean container of every target distribution and runs
-`asus-numpad --version`; a package that does not install blocks the release.
+`numdeck --version`; a package that does not install blocks the release.
 
 Runtime model detection means a package is not tied to a single model: the same binary reads the DMI
 fields and the touchpad module, then picks the matching parameter set and keymap. A machine that
@@ -79,42 +79,48 @@ models, instead of applying parameters intended for other hardware. If the hardw
 reliably (virtual machines, whitebox chassis, BIOS placeholder strings), pin the model by hand, see
 [Model detection](#model-detection). Runtime dependency: glibc, or musl on Alpine.
 
+The ARM64 package is the exception: every ASUS machine with a native NumberPad is x86_64, so an
+ARM64 build carries **no model table** at all. It does not read the DMI strings, does not recognise
+touchpad modules and does not filter touchpads by vendor; startup does not reject any machine and the
+custom layout path is the only route (bind the touchpad and record its key positions in
+`custom_layouts`, see [Custom layouts](#custom-layouts)). Conversely, the `x86_64` package reserves no fallback for ARM.
+
 ## Usage
 
 ```bash
-asus-numpad check          # read-only self test: devices, layout conversion, backlight candidates
-asus-numpad dump           # raw event stream
-asus-numpad run            # foreground, started by the systemd unit
-asus-numpad --dump-config  # effective configuration
+numdeck check          # read-only self test: devices, layout conversion, backlight candidates
+numdeck dump           # raw event stream
+numdeck run            # foreground, started by the systemd unit
+numdeck --dump-config  # effective configuration
 ```
 
 ```bash
-asus-numpad bright 0..N         # step, 0 = off (follow disabled); N is the step count (4 by default)
-asus-numpad bright up|down|cycle
-asus-numpad bright follow on|off
-asus-numpad bright status
+numdeck bright 0..N         # step, 0 = off (follow disabled); N is the step count (4 by default)
+numdeck bright up|down|cycle
+numdeck bright follow on|off
+numdeck bright status
 ```
 
 ```bash
-asus-numpad levels              # step table: the byte each step writes
-asus-numpad levels 2 0x46       # step 2 writes 0x46 (0x00 or 0x41..0x48)
-asus-numpad levels reset        # back to the default four steps
-asus-numpad led on|off|0x41     # bypass the state machine, send one backlight byte
-asus-numpad layout              # keymap in use, every recorded keymap, support level
-asus-numpad layout --ids        # module name to keymap table
-asus-numpad layout auto         # back to automatic selection
+numdeck levels              # step table: the byte each step writes
+numdeck levels 2 0x46       # step 2 writes 0x46 (0x00 or 0x41..0x48)
+numdeck levels reset        # back to the default four steps
+numdeck led on|off|0x41     # bypass the state machine, send one backlight byte
+numdeck layout              # keymap in use, every recorded keymap, support level
+numdeck layout --ids        # module name to keymap table
+numdeck layout auto         # back to automatic selection
 ```
 
 ```bash
-asus-numpad lang [zh-CN|zh-TW|en|auto]
-asus-numpad --lang en check     # this invocation only
+numdeck lang [zh-CN|zh-TW|en|auto]
+numdeck --lang en check     # this invocation only
 ```
 
-Language precedence: `ASUS_NUMPAD_LANG`, `--lang`, `language` in the config, system locale.
+Language precedence: `NUMDECK_LANG`, `--lang`, `language` in the config, system locale.
 
 ## Configuration
 
-`~/.config/asus-numpad/asus-numpad.json`, or `/etc/asus-numpad/` when run by root. Unwritten keys
+`~/.config/numdeck/numdeck.json`, or `/etc/numdeck/` when run by root. Unwritten keys
 use vendor defaults.
 
 | Key | Value | Meaning |
@@ -155,14 +161,14 @@ the `GVM` values — `NUMPADLAYOUT_GVM_05` / `_06` are annotated "for GVMA" in t
 carry `LayoutSupport::Family`: 5 columns, same grid, not checked key by key on real hardware, so they
 are refused at startup unless `--allow-unverified` is given.
 
-This table is the support list: a model id switches parameters by hand (`asus-numpad sku <id>`) and
+This table is the support list: a model id switches parameters by hand (`numdeck sku <id>`) and
 makes the detection result visible, and a machine outside the table is refused at startup. `G614` and `G634` cover the
 2023 and 2024 model years (SCAR 16 -> SCAR 16 2024), `G615` and `G635` cover 2025 and 2026 (Strix
 G16 2025 -> 2026 and SCAR 16 2025 -> 2026; `G615` is the standard model, `G635` the SCAR variant):
 the trailing characters track CPU refreshes, the touchpad does not change. 2026 keeps the same codes,
 so the table needs no extra row. A row is assigned from touchpad module data and keymap tables rather
 than validated machine by machine; per-model compatibility lives on the
-[website](https://asus-numpad.github.io/).
+[website](https://numdeck-dev.github.io/).
 
 A model id is not proof that the machine carries the hardware. Some retail configurations of the
 same model ship a 4-zone RGB touchpad with no NumberPad while keeping an identical DMI prefix
@@ -184,7 +190,7 @@ Strix (魔霸 10 / 魔霸 9), and the per-configuration counts above do not cove
 touchpad module still decides the keymap.
 
 The model code in DMI is authoritative; marketing names are for orientation only. The old per-model
-package names (`asus-numpad-g614` and friends) stay in `Obsoletes`, so upgrades move to `asus-numpad`.
+package names (`numdeck-g614` and friends) stay in `Obsoletes`, so upgrades move to `numdeck`.
 
 | | |
 | --- | --- |
@@ -228,10 +234,10 @@ the startup check refuses to start with exit code 3; `--sku` skips the check. Mo
 When the hardware cannot be read reliably, pin the model:
 
 ```bash
-asus-numpad sku            # what was detected, and on what evidence
-asus-numpad sku list       # available model ids
-asus-numpad sku g614       # pin a model, persisted to the config
-asus-numpad sku auto       # back to auto-detection
+numdeck sku            # what was detected, and on what evidence
+numdeck sku list       # available model ids
+numdeck sku g614       # pin a model, persisted to the config
+numdeck sku auto       # back to auto-detection
 ```
 
 `sku` in the config wins over detection; `--sku g614` applies to one invocation only.
@@ -252,7 +258,7 @@ panel is not mapped onto a keymap that would emit the wrong keys. The check appl
 only, not to the model id.
 
 ```bash
-asus-numpad --allow-unverified run    # or set allow_unverified_layout in the config
+numdeck --allow-unverified run    # or set allow_unverified_layout in the config
 ```
 
 ## Extending: adding a numpad to other models
@@ -269,7 +275,7 @@ Pick by what the hardware in hand actually offers:
 | You would rather toggle from the physical keyboard | Bind a combo in `hotkeys` | Unaffected |
 
 The four are independent; configure only the ones the machine needs. All of them live in the same
-`asus-numpad.json`, and the GUI's Extension page edits that same file.
+`numdeck.json`, and the GUI's Extension page edits that same file.
 
 ### Custom layouts
 
@@ -401,7 +407,7 @@ kernel that reports coordinates which don't actually span the panel. The Calibra
   panel corner, for when raw units differ from what the panel measures) and `numlock_cell`
   (`[row, col]` for the NumLock icon; the default is the last column of row 0).
 
-Measuring beats guessing: `asus-numpad calibrate --samples samples.json` takes four corner presses
+Measuring beats guessing: `numdeck calibrate --samples samples.json` takes four corner presses
 plus the centres of two diagonal cells and solves the rect and cell size. `--write` stores the result
 in the config, keeping a `.bak` of the previous file. The Calibrate tab replays the same sample file
 through the same solver, so a sample taken on the machine can be solved from the GUI without
@@ -411,7 +417,7 @@ another machine of the same model - the keymap is not included, that lives in `c
 Values that can be judged wrong without touching the panel - a column or row count outside 1..=8, a
 rect with the right and left edges swapped (or no area at all), a ratio list whose length does not
 match the column count or that contains zero/negative weights, a `numlock_cell` outside the grid - are
-rejected as the config is loaded and named in the notes, so `asus-numpad check` reports them instead of
+rejected as the config is loaded and named in the notes, so `numdeck check` reports them instead of
 silently drawing a wrong grid. Only the offending field is dropped; everything else still applies.
 
 ![Calibrate tab: partition, manual calibration, sample replay, snippet](site/assets/screenshots/gui-calib.webp)
@@ -571,21 +577,21 @@ On Linux it is the whole thing, split into seven tabs:
 | Tab | Contents |
 | --- | --- |
 | Lighting | interface list, keyboard 4 steps → touchpad brightness map (editable per step), on / off, NumLock follow, keyboard-brightness follow, report log |
-| Driver config | every field of the driver config (`~/.config/asus-numpad/asus-numpad.json`, root: `/etc/asus-numpad/asus-numpad.json`) as a control: model, layout, keypad style, NumLock policy, gesture thresholds, backlight channel and follow poll, manual step table, timing constants, driver language |
+| Driver config | every field of the driver config (`~/.config/numdeck/numdeck.json`, root: `/etc/numdeck/numdeck.json`) as a control: model, layout, keypad style, NumLock policy, gesture thresholds, backlight channel and follow poll, manual step table, timing constants, driver language |
 | System | config path, detected model, layout, hidraw channel, unit state, start / stop / restart |
 | Extension | custom layouts, LED report template, force-press toggle, global hotkeys, and a config snippet to hand to someone else |
 | Calibrate | custom partition (rect, columns, ratios) and manual axis calibration for models the table doesn't cover, plus sample replay and a snippet |
-| Command line | one form per `asus-numpad` subcommand, spawning the real binary |
+| Command line | one form per `numdeck` subcommand, spawning the real binary |
 | Settings | step count, NumLock follow, poll interval, enable on login |
 
 ![Linux control center](site/assets/screenshots/gui-main.webp)
 
 Edits live in memory until you press save, or "save and restart", which writes the file and restarts
-the `asus-numpad` user unit in one go. Nothing duplicates the CLI: the command tab spawns the same
+the `numdeck` user unit in one go. Nothing duplicates the CLI: the command tab spawns the same
 executable and pastes its output back.
 
 ```bash
-cargo run -p asus-numpad-gui      # or: cargo build --release -p asus-numpad-gui
+cargo run -p numdeck-gui      # or: cargo build --release -p numdeck-gui
 ```
 
 See `gui/README.md` for the runtime requirements, settings path and troubleshooting.
@@ -613,28 +619,31 @@ No root. udev tags hidraw and event nodes with `TAG+="uaccess"`, the daemon runs
 | `src/linux/` | evdev, uinput, hidraw and i2c backends |
 | `gui/` | egui window: lighting only on Windows, full control center on Linux |
 | `lang/` | zh-CN, zh-TW, en strings |
-| `site/` | Website sources, published to https://asus-numpad.github.io/ |
+| `site/` | Website sources, published to https://numdeck-dev.github.io/ |
 | `tools/` | `push-site.sh` (site publish), `repo-gen.sh` (repository indexes) |
 | `packaging/` | deb, rpm, Arch, Alpine, Gentoo, Nix, tarball scripts and repo tools |
 
 ## Building
 
-### Cross-building the two other targets
+### Cross-building the other targets
 
 ```bash
-./tools/build-cross.sh            # both
-./tools/build-cross.sh windows    # target/x86_64-pc-windows-gnu/release/asus-numpad.exe
-./tools/build-cross.sh linux      # target/x86_64-unknown-linux-gnu/release/asus-numpad
+./tools/build-cross.sh            # all four
+./tools/build-cross.sh windows    # x86_64-pc-windows-gnu + aarch64-pc-windows-gnullvm
+./tools/build-cross.sh linux      # x86_64-unknown-linux-gnu + aarch64-unknown-linux-gnu
 ```
 
 The script fetches zig (which ships the MinGW and glibc pieces `windows-gnu` / `linux-gnu`
 need, so no mingw-w64 install and no container) and installs `cargo-zigbuild` if missing.
-The Linux binary is pinned to glibc 2.17, so it runs on anything from Ubuntu 18.04 up.
+The Linux binaries are pinned to glibc 2.17, so they run on anything from Ubuntu 18.04 up.
+The ARM64 targets matter for machines like the RTX Spark and Snapdragon X laptops: the build
+machine does not have to be ARM, zig cross-compiles from x86_64 or Apple silicon.
 The GUI crate is not cross-built - it needs the platform's compositor stack.
 
 ```bash
 ./packaging/build.sh                        # current distribution
 ./packaging/build.sh deb rpm tarball        # explicit targets (deb/rpm/arch/alpine/tarball)
+./packaging/build.sh --arch arm64 deb       # cross-build an ARM64 package (needs zig)
 ./tools/repo-gen.sh                         # dist/ to local repositories in repo/ (apt/rpm/pacman/apk)
 ```
 
@@ -648,7 +657,7 @@ Packaging details: [packaging/README.md](packaging/README.md). A `v*` tag runs
 repository indexes, publishes the release and commits `repo/` back to `main`.
 
 The website sources are in `site/`: `./tools/push-site.sh` copies them to the
-`asus-numpad/asus-numpad.github.io` repository, which serves https://asus-numpad.github.io/.
+`numdeck-dev/numdeck-dev.github.io` repository, which serves https://numdeck-dev.github.io/.
 `docs/` holds project documentation only; `docs/index.html` is the redirect that keeps the old
 project-pages URL working.
 
@@ -656,4 +665,4 @@ project-pages URL working.
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
 
-Copyright (C) 2026 the asus-numpad authors
+Copyright (C) 2026 the numdeck authors

@@ -1,4 +1,4 @@
-//! `asus-numpad-gui`：NumberPad 背光控制的图形界面 + 命令行（Windows / Linux 共用）。
+//! `numdeck-gui`：NumberPad 背光控制的图形界面 + 命令行（Windows / Linux 共用）。
 //!
 //! 两个平台的界面、档位、报文完全一致，差别只在后端：Windows 走 `setupapi` +
 //! `hid.dll`，Linux 走 hidraw 的 `HIDIOCSFEATURE`。
@@ -6,12 +6,12 @@
 //! 不带参数启动界面；带参数时按命令行执行，便于脚本、开机自启与排障。
 //!
 //! ```text
-//! asus-numpad-gui                      打开界面
-//! asus-numpad-gui --selftest           只探测接口并打印档位报文，不写硬件
-//! asus-numpad-gui --on                 按内置档位点亮
-//! asus-numpad-gui --off                熄灭
-//! asus-numpad-gui --level 6            点灯并设到第 6 档（也接受 0x45 这类原始值）
-//! asus-numpad-gui --apply-startup      按配置文件下发一次（供开机自启用）
+//! numdeck-gui                      打开界面
+//! numdeck-gui --selftest           只探测接口并打印档位报文，不写硬件
+//! numdeck-gui --on                 按内置档位点亮
+//! numdeck-gui --off                熄灭
+//! numdeck-gui --level 6            点灯并设到第 6 档（也接受 0x45 这类原始值）
+//! numdeck-gui --apply-startup      按配置文件下发一次（供开机自启用）
 //! ```
 
 mod app;
@@ -35,7 +35,7 @@ mod win_hid;
 
 use anyhow::{anyhow, bail, Context, Result};
 
-use asus_numpad::led_proto;
+use numdeck::led_proto;
 
 use crate::backend::{mark_best, Backend, DeviceInfo};
 
@@ -43,20 +43,22 @@ const USAGE: &str = "\
 ASUS NumberPad 背光控制（图形界面 + 命令行）
 
 用法：
-  asus-numpad-gui                    打开图形界面
-  asus-numpad-gui --selftest         探测 HID 接口并打印报文，不写硬件
-  asus-numpad-gui --on               点亮（配置文件里的档位）
-  asus-numpad-gui --off              熄灭
-  asus-numpad-gui --level <1-8|0xNN> 点灯并设到指定档
-  asus-numpad-gui --apply-startup    按配置文件下发一次（开机自启调用）
-  asus-numpad-gui --help             显示本说明
+  numdeck-gui                    打开图形界面
+  numdeck-gui --selftest         探测 HID 接口并打印报文，不写硬件
+  numdeck-gui --on               点亮（配置文件里的档位）
+  numdeck-gui --off              熄灭
+  numdeck-gui --level <1-8|0xNN> 点灯并设到指定档
+  numdeck-gui --apply-startup    按配置文件下发一次（开机自启调用）
+  numdeck-gui --help             显示本说明
 
 说明：
   本程序只写背光 FEATURE 报告 0x0d，不接管任何输入。
   Windows：数字键、手势与触摸板行为由 ASUS 官方驱动负责；
-  Linux：数字键与手势由 systemd 用户单元 asus-numpad 负责。";
+  Linux：数字键与手势由 systemd 用户单元 numdeck 负责。";
 
 fn main() -> Result<()> {
+    // GUI 也读 NUMDECK_GUI_* 环境变量，先把更名前的 ASUS_NUMPAD_GUI_* 继承过来
+    numdeck::compat::adopt_legacy_env();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let code = match args.first().map(String::as_str) {
         None => {
@@ -264,9 +266,9 @@ fn run_gui() -> Result<()> {
     } else {
         ([980.0, 780.0], [820.0, 620.0])
     };
-    // `ASUS_NUMPAD_GUI_SIZE=1180x1400` 覆盖初始窗口尺寸：文档截图要把整页拍全，
+    // `NUMDECK_GUI_SIZE=1180x1400` 覆盖初始窗口尺寸：文档截图要把整页拍全，
     // 而窗口一旦被系统记住大小（eframe 的持久化），改代码里的默认值就没用了。
-    let size = std::env::var("ASUS_NUMPAD_GUI_SIZE")
+    let size = std::env::var("NUMDECK_GUI_SIZE")
         .ok()
         .and_then(|v| {
             let (w, h) = v.split_once('x')?;
@@ -284,7 +286,7 @@ fn run_gui() -> Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "asus-numpad-gui",
+        "numdeck-gui",
         options,
         Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
     )

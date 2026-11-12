@@ -418,11 +418,33 @@ impl LedSink for NullLed {
 pub use crate::hid_desc::{feature_in_descriptor, FeatureProbe};
 use crate::led_policy::OMNI_PID;
 pub use crate::led_policy::{
-    candidate_rank, pick_best, presence_from, NumpadPresence, NumpadProbe, ASUS_VID, ELAN_VID,
-    KNOWN_NUMPAD_PIDS, PIXART_VID, RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE,
+    candidate_rank, pick_best, presence_from, NumpadPresence, NumpadProbe, ASUS_VID,
+    KNOWN_NUMPAD_PIDS, RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE,
 };
+/// 这两个厂商号只用来划定「华硕 NumberPad 模组可能来自哪几家」的白名单，
+/// ARM64 构建不按厂商过滤，导入也就不需要，见 [`VENDOR_FILTER`]。
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+pub use crate::led_policy::{ELAN_VID, PIXART_VID};
 /// OMNI RECEIVER 无线接收器 vendor。
 const OMNI_VID: u32 = ASUS_VID;
+
+/// 可以参与 NumberPad 候选打分的厂商号。
+///
+/// x86_64 构建只认 ELAN(`04f3`) / PixArt(`093a`) / ASUS(`0b05`)——华硕的 NumberPad
+/// 模组全部由这三家供货，其余厂商的触摸板没有这块硬件，早点筛掉省得白读描述符。
+///
+/// ARM64 构建没有机型表、按自定义跑：触摸板可能是 Synaptics、Goodix 等任意厂商，
+/// 再按厂商号拦一道就一个候选都找不到（自定义也就无从落地），因此这里留空表示
+/// **不按厂商过滤**。
+#[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+const VENDOR_FILTER: &[u32] = &[ELAN_VID, PIXART_VID, ASUS_VID];
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const VENDOR_FILTER: &[u32] = &[];
+
+/// 厂商号是否在过滤范围内（空表 = 不限厂商）。
+fn vid_accepted(vid: u32) -> bool {
+    VENDOR_FILTER.is_empty() || VENDOR_FILTER.contains(&vid)
+}
 
 /// 解析 `/sys/class/hidraw/hidrawN/device/uevent` 里的 `HID_ID=bus:vid:pid`。
 fn hid_id(entry: &Path) -> Option<(u32, u32)> {
@@ -465,7 +487,7 @@ pub fn probe_feature_report(path: &str, report_id: u8) -> FeatureProbe {
     feature_in_descriptor(&desc.value[..len], report_id)
 }
 
-/// 一个背光候选节点的探测结果（`asus-numpad check` 会逐条列出）。
+/// 一个背光候选节点的探测结果（`numdeck check` 会逐条列出）。
 #[derive(Debug, Clone)]
 pub struct LedCandidate {
     pub dev: String,
@@ -506,7 +528,7 @@ pub fn probe_candidates() -> Vec<LedCandidate> {
         let Some((vid, pid)) = hid_id(&entry.path()) else {
             continue;
         };
-        if vid != ELAN_VID && vid != PIXART_VID && vid != ASUS_VID {
+        if !vid_accepted(vid) {
             continue;
         }
         if vid == OMNI_VID && pid == OMNI_PID {
@@ -558,7 +580,7 @@ pub fn probe_numpad_presence() -> NumpadPresence {
         let Some((vid, pid)) = hid_id(&entry.path()) else {
             continue;
         };
-        if vid != ELAN_VID && vid != PIXART_VID && vid != ASUS_VID {
+        if !vid_accepted(vid) {
             continue;
         }
         if vid == OMNI_VID && pid == OMNI_PID {
@@ -604,7 +626,7 @@ pub fn find_hidraw() -> Option<String> {
         };
 
         // 先按 vid 粗筛，避免对无关节点做 ioctl
-        if vid != ELAN_VID && vid != PIXART_VID && vid != ASUS_VID {
+        if !vid_accepted(vid) {
             continue;
         }
         if vid == OMNI_VID && pid == OMNI_PID {

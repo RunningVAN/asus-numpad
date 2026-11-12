@@ -1,22 +1,22 @@
 [package]
-name = "asus-numpad-gui"
-version = "0.2.0"
+name = "numdeck-gui"
+version = "2.0.0"
 edition = "2021"
 rust-version = "1.77"
-description = "ASUS NumberPad 背光控制图形界面（Windows / Linux 共用同一套界面与报文层）"
+description = "numdeck 图形界面：触摸板数字小键盘的背光、布局与校准控制（Windows / Linux 共用同一套界面与报文层）"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/asus-numpad/asus-numpad"
-homepage = "https://asus-numpad.github.io/"
+repository = "https://github.com/numdeck-dev/numdeck"
+homepage = "https://numdeck-dev.github.io/"
 readme = "README.md"
 
 [[bin]]
-name = "asus-numpad-gui"
+name = "numdeck-gui"
 path = "src/main.rs"
 
 [dependencies]
 # 复用驱动侧的跨平台逻辑：led_proto 的报文编码、led_policy 的设备排序判据、
 # brightness 的档位映射都与平台无关，GUI 不另写一套。
-asus-numpad = { path = "..", version = "1.0.3" }
+numdeck = { path = "..", version = "2.0.0" }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -45,5 +45,5 @@ windows = { version = "0.58", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
-# Linux：hidraw 写入走 asus-numpad 的 linux::led（同一份 HIDIOCSFEATURE 实现），
+# Linux：hidraw 写入走 numdeck 的 linux::led（同一份 HIDIOCSFEATURE 实现），
 # 设备号取自同一份 probe_candidates，因此这里不引入 libc、也不重复实现 ioctl。

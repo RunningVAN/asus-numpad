@@ -3,9 +3,12 @@
 use std::path::Path;
 
 use anyhow::Result;
-use asus_numpad::config::Config;
-use asus_numpad::i18n::{self};
-use asus_numpad::sku;
+// 只被 linux 分支的闸门用到，非 Linux 上导入会变成未使用告警。
+#[cfg(target_os = "linux")]
+use numdeck::banner;
+use numdeck::config::Config;
+use numdeck::i18n::{self};
+use numdeck::sku;
 
 use super::*;
 
@@ -43,22 +46,34 @@ pub(crate) fn sku_gate(cfg: &Config) -> Option<i32> {
 /// 判据是触摸板 HID 接口里有没有 FEATURE 报告 `0x0d`。4 区 RGB 键盘的配置（国行
 /// 「魔霸新锐」、同型号的减配档）用同一块触摸板模组，DMI 与模组都分不出来，但描述符里
 /// 没有这条 FEATURE——数字区背光和图标区都不存在，启动起来只会白抓触摸板。
+///
+/// **ARM64 构建不做这道闸门**：`0x0d` 是华硕自家 NumberPad 模组的报告，非华硕触摸板
+/// 上根本不会出现；ARM 包既没有机型表也不认硬件，拦下去等于把每一台机器都挡在门外。
 #[cfg(target_os = "linux")]
 pub(crate) fn numpad_gate() -> Option<i32> {
-    use asus_numpad::linux::{probe_numpad_presence, NumpadPresence};
-    match probe_numpad_presence() {
-        NumpadPresence::Absent => {
-            println!("{}", banner());
-            println!("{}", i18n::t("err.no_numpad"));
-            println!("{}", i18n::t("err.no_numpad.hint"));
-            Some(3)
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    {
+        // 自定义模式下硬件在不在、报文长什么样都由配置决定，启动阶段没有可判的东西。
+        None
+    }
+
+    #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+    {
+        use numdeck::linux::{probe_numpad_presence, NumpadPresence};
+        match probe_numpad_presence() {
+            NumpadPresence::Absent => {
+                println!("{}", banner());
+                println!("{}", i18n::t("err.no_numpad"));
+                println!("{}", i18n::t("err.no_numpad.hint"));
+                Some(3)
+            }
+            NumpadPresence::NoAccess => {
+                // 读不到描述符是权限问题，不能当成「没有这块硬件」把人挡回去
+                eprintln!("{}", i18n::t("err.numpad_no_access"));
+                None
+            }
+            NumpadPresence::Present | NumpadPresence::Unknown => None,
         }
-        NumpadPresence::NoAccess => {
-            // 读不到描述符是权限问题，不能当成「没有这块硬件」把人挡回去
-            eprintln!("{}", i18n::t("err.numpad_no_access"));
-            None
-        }
-        NumpadPresence::Present | NumpadPresence::Unknown => None,
     }
 }
 

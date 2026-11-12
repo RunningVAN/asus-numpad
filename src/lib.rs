@@ -1,4 +1,4 @@
-//! asus-numpad —— ASUS 笔记本触摸板数字小键盘驱动的 Linux 用户态实现。
+//! numdeck —— ASUS 笔记本触摸板数字小键盘驱动的 Linux 用户态实现。
 //!
 //! 结构与官方驱动一一对应：
 //!
@@ -20,6 +20,7 @@
 //! 滑动、NumLock 切不动，先排查此处。
 
 pub mod brightness;
+pub mod compat;
 pub mod config;
 pub mod custom;
 pub mod engine;

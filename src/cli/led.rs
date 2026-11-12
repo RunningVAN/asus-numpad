@@ -1,8 +1,8 @@
 //! `led`：直发背光命令字，排障专用。
 
 use anyhow::Result;
-use asus_numpad::config::Config;
-use asus_numpad::i18n::{self};
+use numdeck::config::Config;
+use numdeck::i18n::{self};
 
 use super::*;
 
@@ -13,7 +13,7 @@ use super::*;
 /// * 驱动发了但**硬件不认这个值**——`led on` 亮、`led 0x41` 不亮，就是档位字节的问题。
 ///
 /// 所以留一条能直发 `0x01 / 0x00 / 0x41..0x48` 的通道，让现场一条命令就能定位：
-/// `asus-numpad led on` → 亮，说明通道好的；`asus-numpad led 0x41` → 不亮，
+/// `numdeck led on` → 亮，说明通道好的；`numdeck led 0x41` → 不亮，
 /// 说明这台机器的 EC 只吃两态、不吃亮度档，那跟随亮度就得整体关掉。
 pub(crate) fn cmd_led(cfg: &Config, value: Option<&str>) -> Result<i32> {
     let raw = value.map(|v| v.trim().to_ascii_lowercase());

@@ -9,7 +9,7 @@
 
 use eframe::egui;
 
-use asus_numpad::partition::{solve_calibration, CornerSamples, GridProbe, RawSamples};
+use numdeck::partition::{solve_calibration, CornerSamples, GridProbe, RawSamples};
 
 use super::calib_view;
 use super::extend::save_snippet;
@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn fragment_roundtrip_keeps_both_sections() {
-        let mut src = asus_numpad::config::Config::default();
+        let mut src = numdeck::config::Config::default();
         src.partition.rect = Some([100.0, 200.0, 3000.0, 2000.0]);
         src.partition.cols = Some(6);
         src.partition.rows = Some(4);
@@ -132,7 +132,7 @@ mod tests {
         src.calibration.x.max = Some(3600);
 
         let text = calib_fragment_of(&src);
-        let mut dst = asus_numpad::config::Config::default();
+        let mut dst = numdeck::config::Config::default();
         let (msg, bad) = apply_calib_fragment(&mut dst, &text);
         assert!(!bad, "{msg}");
         assert_eq!(dst.partition, src.partition);
@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn fragment_rejects_bad_payload() {
-        let mut cfg = asus_numpad::config::Config::default();
+        let mut cfg = numdeck::config::Config::default();
         let (msg, bad) = apply_calib_fragment(&mut cfg, "not json");
         assert!(bad);
         assert!(msg.contains("JSON"), "{msg}");

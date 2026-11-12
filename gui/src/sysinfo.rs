@@ -87,15 +87,15 @@ pub use linux_impl::{service_autostart, service_run, snapshot};
 mod linux_impl {
     use anyhow::{anyhow, Result};
 
-    use asus_numpad::config::Config;
-    use asus_numpad::layout;
-    use asus_numpad::linux::{probe_numpad_presence, resolve_layout, NumpadPresence};
-    use asus_numpad::sku::{self, SkuSource};
+    use numdeck::config::Config;
+    use numdeck::layout;
+    use numdeck::linux::{probe_numpad_presence, resolve_layout, NumpadPresence};
+    use numdeck::sku::{self, SkuSource};
 
     use super::{ServiceState, ServiceVerb, Snapshot};
 
-    /// 用户单元名，与 `packaging/common/asus-numpad.service` 一致。
-    const UNIT: &str = "asus-numpad";
+    /// 用户单元名，与 `packaging/common/numdeck.service` 一致。
+    const UNIT: &str = "numdeck";
 
     pub fn snapshot() -> Snapshot {
         let path = Config::default_path();
@@ -109,7 +109,7 @@ mod linux_impl {
 
         Snapshot {
             subtitle:
-                "数字键与手势由 systemd 用户单元 asus-numpad 处理，本程序只写背光 FEATURE 报文"
+                "数字键与手势由 systemd 用户单元 numdeck 处理，本程序只写背光 FEATURE 报文"
                     .to_string(),
             rows,
             hints: notes,
@@ -127,6 +127,8 @@ mod linux_impl {
                     SkuSource::Manual => "手动指定",
                     SkuSource::Dmi => "DMI 型号命中",
                     SkuSource::Hardware => "触摸板模组命中",
+                    // ARM64 构建不带机型表，机型恒为自定义布局
+                    SkuSource::Custom => "自定义布局（无机型表）",
                 };
                 match &resolved.detail {
                     Some(detail) => format!("{}（{how}：{detail}）", resolved.id()),

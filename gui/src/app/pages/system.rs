@@ -2,7 +2,7 @@
 
 use eframe::egui;
 
-use asus_numpad::led_proto;
+use numdeck::led_proto;
 
 use crate::settings;
 use crate::sysinfo::ServiceVerb;
@@ -76,14 +76,14 @@ impl App {
                     ui,
                     &p,
                     "服务控制",
-                    Some("systemd 用户单元 asus-numpad.service 的启停与重启；重启用于让刚写入的驱动配置生效。"),
+                    Some("systemd 用户单元 numdeck.service 的启停与重启；重启用于让刚写入的驱动配置生效。"),
                     |ui| {
                     theme::actions(
                         ui,
                         &p,
                         &[
-                            ("启动", false, "systemctl --user start asus-numpad"),
-                            ("停止", false, "systemctl --user stop asus-numpad"),
+                            ("启动", false, "systemctl --user start numdeck"),
+                            ("停止", false, "systemctl --user stop numdeck"),
                             ("重启", false, "改完驱动配置后用它让新配置生效"),
                         ],
                     )
@@ -107,7 +107,7 @@ impl App {
         });
     }
 
-    /// 诊断信息出口：内容与 `asus-numpad-gui --selftest` 同一份，省得为了看一眼接口和
+    /// 诊断信息出口：内容与 `numdeck-gui --selftest` 同一份，省得为了看一眼接口和
     /// 报文去开终端。写文件只落在界面自己的配置目录旁边，不碰系统路径。
     pub(in crate::app) fn draw_diagnostics(&mut self, ui: &mut egui::Ui) {
         let p = self.palette;

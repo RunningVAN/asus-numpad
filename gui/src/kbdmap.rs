@@ -8,8 +8,8 @@
 //! 要求从暗到亮不递减），因此灯光页可以直接把它写进驱动配置，让后台服务与界面
 //! 用同一份档位表，不会出现「界面上是这个亮度、拔插后变成另一个亮度」。
 
-use asus_numpad::config::{manual_level_allowed, VAL_BRIGHTNESS_BASE, VAL_BRIGHTNESS_MAX, VAL_OFF};
-use asus_numpad::led_proto;
+use numdeck::config::{manual_level_allowed, VAL_BRIGHTNESS_BASE, VAL_BRIGHTNESS_MAX, VAL_OFF};
+use numdeck::led_proto;
 
 /// 键盘亮度档数（BIOS 固定四档）。
 pub const KBD_STEPS: usize = 4;
@@ -38,7 +38,7 @@ pub fn level_label(value: u8) -> String {
 
 /// 默认映射：与官方四档观感一致——第 1 档熄灭，末档拉到最亮。
 pub fn default_map() -> Vec<u8> {
-    asus_numpad::config::DEFAULT_MANUAL_LEVELS.to_vec()
+    numdeck::config::DEFAULT_MANUAL_LEVELS.to_vec()
 }
 
 /// 把任意值夹进硬件真实档位：`0x00` 保持熄灭，其余夹到 `0x41..=0x48`。

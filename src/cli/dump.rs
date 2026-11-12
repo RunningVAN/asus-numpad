@@ -1,9 +1,9 @@
 //! `dump`：打印生效配置。
 
 use anyhow::Result;
-use asus_numpad::banner;
-use asus_numpad::config::Config;
-use asus_numpad::i18n::{self};
+use numdeck::banner;
+use numdeck::config::Config;
+use numdeck::i18n::{self};
 
 pub(crate) fn cmd_dump(cfg: &Config) -> Result<i32> {
     println!("{}", banner());
@@ -12,7 +12,7 @@ pub(crate) fn cmd_dump(cfg: &Config) -> Result<i32> {
 
     #[cfg(target_os = "linux")]
     {
-        asus_numpad::linux::dump_events(cfg)?;
+        numdeck::linux::dump_events(cfg)?;
         Ok(0)
     }
     #[cfg(not(target_os = "linux"))]

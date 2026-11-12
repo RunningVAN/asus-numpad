@@ -1,6 +1,6 @@
 //! 命令面板的表单状态与参数拼装。
 //!
-//! 这里只负责「界面上的控件值」到「`asus-numpad` 的 argv」的映射，不执行任何东西，
+//! 这里只负责「界面上的控件值」到「`numdeck` 的 argv」的映射，不执行任何东西，
 //! 因此可以脱离界面做单测。拼错参数名、把空串当成有效值、把互斥开关同时勾上这类
 //! 问题，都由 [`CommandForm::argv`] 的测试兜住。
 //!
@@ -170,7 +170,7 @@ mod tests {
     fn preview_quotes_paths_with_spaces() {
         let mut f = form(SubCmd::Dump);
         f.advanced.config = "/tmp/my dir/a.json".to_string();
-        let text = f.preview("asus-numpad");
+        let text = f.preview("numdeck");
         assert!(text.contains("\"/tmp/my dir/a.json\""));
         assert!(text.ends_with("dump"));
     }
@@ -179,7 +179,7 @@ mod tests {
     fn preview_escapes_inner_quotes() {
         let mut f = form(SubCmd::Dump);
         f.advanced.config = "/tmp/a \"b\".json".to_string();
-        let text = f.preview("asus-numpad");
+        let text = f.preview("numdeck");
         assert!(
             text.contains(r#""/tmp/a \"b\".json""#),
             "预览里要能直接粘回终端：{text}"

@@ -357,7 +357,7 @@ mod tests {
     impl FakeLeds {
         fn new(tag: &str, kbd: Option<u32>) -> Self {
             let dir =
-                std::env::temp_dir().join(format!("asus-numpad-leds-{tag}-{}", std::process::id()));
+                std::env::temp_dir().join(format!("numdeck-leds-{tag}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("max_brightness"), "3\n").unwrap();

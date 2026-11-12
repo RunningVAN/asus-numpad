@@ -48,7 +48,7 @@ impl App {
                     &mut on,
                     "开机自启",
                     Some(
-                        "等价于 systemctl --user enable asus-numpad，和系统状态页共用同一份状态。",
+                        "等价于 systemctl --user enable numdeck，和系统状态页共用同一份状态。",
                     ),
                 )
                 .changed()
@@ -129,7 +129,7 @@ impl App {
                 &format!(
                     "界面 {} / 库 {}",
                     env!("CARGO_PKG_VERSION"),
-                    asus_numpad::VERSION
+                    numdeck::VERSION
                 ),
                 Some("界面与驱动库各自的版本；对不上说明装的是混搭包。"),
             );

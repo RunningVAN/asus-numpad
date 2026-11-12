@@ -6,12 +6,12 @@
 //! 四项互不依赖，改哪一项都不影响其它项：布局只影响键位，报文只影响点亮，压感与热键
 //! 只是两种「不用伸手去摸触摸板」的开关方式——原生机型也可以只用其中一项。
 //!
-//! 界面里改的全是驱动配置（`asus-numpad.json`）里的 `custom_layouts` / `led_proto` /
+//! 界面里改的全是驱动配置（`numdeck.json`）里的 `custom_layouts` / `led_proto` /
 //! `pressure_switch` / `hotkeys`，保存走驱动配置页同一套落盘逻辑，不会多出第二份文件。
 
 use eframe::egui;
 
-use asus_numpad::custom::{self, HotkeyAction, HotkeySpec, LedProtoSpec};
+use numdeck::custom::{self, HotkeyAction, HotkeySpec, LedProtoSpec};
 
 use super::{small, Action, App, WARN};
 use crate::theme;
@@ -628,9 +628,9 @@ pub(crate) use proto::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asus_numpad::config::Config;
-    use asus_numpad::custom::{CustomLayoutSpec, LayoutPatch};
-    use asus_numpad::layout::LAYOUTS;
+    use numdeck::config::Config;
+    use numdeck::custom::{CustomLayoutSpec, LayoutPatch};
+    use numdeck::layout::LAYOUTS;
 
     /// 导出再导入必须得到同一份四项配置——片段是对外分享的文件格式，不能单向。
     #[test]
@@ -750,7 +750,7 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&second).unwrap(), "{\"a\":2}");
         assert_eq!(
             first.file_name().unwrap().to_string_lossy(),
-            "asus-numpad-extend.json"
+            "numdeck-extend.json"
         );
         std::fs::remove_file(&first).ok();
         std::fs::remove_file(&second).ok();

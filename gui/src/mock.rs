@@ -11,7 +11,7 @@ use crate::backend::{mark_best, Backend, DeviceInfo};
 pub struct MockBackend {
     numlock: bool,
     /// 已写入的报文，`--selftest` 与界面上都会显示
-    pub sent: Vec<[u8; asus_numpad::led_proto::LED_FEATURE_LEN]>,
+    pub sent: Vec<[u8; numdeck::led_proto::LED_FEATURE_LEN]>,
 }
 
 impl Default for MockBackend {
@@ -70,7 +70,7 @@ impl Backend for MockBackend {
     fn write(
         &mut self,
         _device: &DeviceInfo,
-        frame: [u8; asus_numpad::led_proto::LED_FEATURE_LEN],
+        frame: [u8; numdeck::led_proto::LED_FEATURE_LEN],
     ) -> Result<()> {
         self.sent.push(frame);
         Ok(())
@@ -101,7 +101,7 @@ mod tests {
     fn mock_records_writes() {
         let mut backend = MockBackend::new();
         let devices = backend.scan().unwrap();
-        let frame = asus_numpad::led_proto::encode(0x45).unwrap();
+        let frame = numdeck::led_proto::encode(0x45).unwrap();
         backend.write(&devices[0], frame).unwrap();
         assert_eq!(backend.sent, vec![frame]);
     }

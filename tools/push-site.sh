@@ -1,10 +1,10 @@
 #!/bin/sh
-# 把仓库内的 site/ 发布到组织根域名站点 asus-numpad.github.io。
+# 把仓库内的 site/ 发布到组织根域名站点 numdeck-dev.github.io。
 # 站点源码只存在本仓库 site/ 一处；该脚本负责同步到承载 Pages 的仓库。
-# 需要 ~/.ssh/config 里的 github.com-asus-numpad-org（部署密钥，仅站点仓库可写）。
+# 需要 ~/.ssh/config 里的 github.com-numdeck-org（部署密钥，仅站点仓库可写）。
 set -eu
 
-REMOTE="${SITE_REMOTE:-git@github.com-asus-numpad-org:asus-numpad/asus-numpad.github.io.git}"
+REMOTE="${SITE_REMOTE:-git@github.com-numdeck-org:numdeck-dev/numdeck-dev.github.io.git}"
 BRANCH="${SITE_BRANCH:-main}"
 
 root=$(git rev-parse --show-toplevel)
@@ -29,7 +29,7 @@ if git diff --cached --quiet; then
     echo "站点无变化"
     exit 0
 fi
-git -c user.name="asus-numpad" -c user.email="bot@asus-numpad.github.io" \
-    commit --quiet -m "site: 同步自 asus-numpad/asus-numpad $(git -C "$root" rev-parse --short HEAD)"
+git -c user.name="numdeck" -c user.email="bot@numdeck-dev.github.io" \
+    commit --quiet -m "site: 同步自 numdeck-dev/numdeck $(git -C "$root" rev-parse --short HEAD)"
 git push --quiet origin "$BRANCH"
 echo "已推送：" "$(git rev-parse --short HEAD)"

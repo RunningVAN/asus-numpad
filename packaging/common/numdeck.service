@@ -1,6 +1,6 @@
 [Unit]
 Description=ASUS NumberPad (touchpad numpad) userspace driver
-Documentation=man:asus-numpad(1)
+Documentation=man:numdeck(1)
 # 用户级实例：随登录会话起落，不需要 root。
 # 触摸板节点在 udev 处理完后才稳定，否则会抢在 HID 初始化之前 open 失败。
 After=default.target
@@ -18,10 +18,10 @@ RestartPreventExitStatus=2 3
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/asus-numpad run
+ExecStart=/usr/bin/numdeck run
 Restart=on-failure
 RestartSec=2s
-# 想让改过的配置生效：systemctl --user reload asus-numpad
+# 想让改过的配置生效：systemctl --user reload numdeck
 # 走的是「收尾后以 75 退出、由 systemd 重新拉起」，而不是原地热换配置——
 # 触摸板节点、LED 通道、键盘节点、几何全部重新探测，比热重载可靠。
 ExecReload=/bin/kill -HUP $MAINPID

@@ -42,7 +42,7 @@ jobs:
               packaging/lib/common.sh \
               packaging/deb/make-deb.sh packaging/rpm/make-rpm.sh packaging/arch/make-arch.sh \
               packaging/alpine/make-alpine.sh packaging/tarball/make-tarball.sh \
-              packaging/arch/PKGBUILD packaging/arch/asus-numpad.install \
+              packaging/arch/PKGBUILD packaging/arch/numdeck.install \
               packaging/alpine/APKBUILD \
               tools/repo-gen.sh
       - name: shellcheck 维护脚本（POSIX sh）
@@ -65,14 +65,41 @@ jobs:
       # 在 CI 里能安全跑；没硬件的项它会自己 SKIP 并打印真机命令。
       - name: 扩展功能自检
         run: |
-          cargo build --release --bin asus-numpad
-          bash tools/verify-extend.sh --bin target/release/asus-numpad
+          cargo build --release --bin numdeck
+          bash tools/verify-extend.sh --bin target/release/numdeck
           cat verify-extend.txt
       # 服务侧约定（unit 的重试语义、退出码、锁、通道漂移、配置不被静默丢弃）：
       # 纯静态检查，不起进程、不碰设备。
       - name: 服务侧约定自检
         run: |
           bash tools/verify-service.sh
+
+  # ARM64 包走的是另一套编译分支：不含机型表、不按厂商过滤触摸板、认不出模组时不套
+  # 默认布局。这段代码在 x86 runner 上被 cfg 整段排除，上面那个 test job 根本编译不到，
+  # 所以单开一个原生 arm runner 把「编译 + 单测 + clippy」兜住。
+  test-arm:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: arm64
+      - name: 生成锁文件（若仓库里还没有）
+        run: |
+          if [ ! -f Cargo.lock ]; then cargo generate-lockfile; fi
+      # workspace 里含 gui crate（eframe），链接期要 xkbcommon / wayland / GL
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+              pkg-config libxkbcommon-dev libwayland-dev libgl1-mesa-dev
+      - name: cargo test（ARM64 分支）
+        run: cargo test --all-targets
+      - name: cargo clippy（ARM64 分支）
+        run: |
+          rustup component add clippy
+          cargo clippy --all-targets -- -D warnings
 
   # 每个发行版在自己的容器里出包，这是最贴近用户的验证方式
   package:
@@ -182,7 +209,7 @@ jobs:
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
-          name: asus-numpad-${{ matrix.distro }}
+          name: numdeck-${{ matrix.distro }}
           path: dist/*
           if-no-files-found: error
 

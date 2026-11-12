@@ -1,15 +1,15 @@
-//! 驱动配置文件（`asus-numpad.json`）在界面里的编辑草稿。
+//! 驱动配置文件（`numdeck.json`）在界面里的编辑草稿。
 //!
 //! 界面直接读写驱动自己那份配置，而不是另存一份影子副本：文件格式、字段名、默认值
-//! 全部来自 [`asus_numpad::config`]，和 `asus-numpad config` / 手改文件看到的是同一份东西。
+//! 全部来自 [`numdeck::config`]，和 `numdeck config` / 手改文件看到的是同一份东西。
 //!
 //! 写路径沿用驱动自己的规则（[`Config::writable_path`]）：普通用户落
-//! `~/.config/asus-numpad/asus-numpad.json`，root 才写 `/etc`。界面不 sudo，所以
+//! `~/.config/numdeck/numdeck.json`，root 才写 `/etc`。界面不 sudo，所以
 //! 正常情况永远不需要提权。
 
 use std::path::PathBuf;
 
-use asus_numpad::config::Config;
+use numdeck::config::Config;
 
 /// 一份可编辑的驱动配置。
 pub struct Draft {
@@ -84,7 +84,7 @@ impl Draft {
         })
     }
 
-    /// 当前编辑内容的 JSON 预览（与 `asus-numpad --dump-config` 同一份序列化）。
+    /// 当前编辑内容的 JSON 预览（与 `numdeck --dump-config` 同一份序列化）。
     pub fn json(&self) -> String {
         self.cfg.to_json()
     }
@@ -95,7 +95,7 @@ mod tests {
     use super::*;
 
     fn draft_at(dir: &std::path::Path) -> Draft {
-        let path = dir.join("asus-numpad.json");
+        let path = dir.join("numdeck.json");
         let mut draft = Draft {
             path: path.clone(),
             write_path: path,
@@ -110,7 +110,7 @@ mod tests {
 
     fn tmpdir(tag: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "asus-numpad-gui-driver-{tag}-{}",
+            "numdeck-gui-driver-{tag}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -123,7 +123,7 @@ mod tests {
         let dir = tmpdir("fixed");
         let mut draft = draft_at(&dir);
         // 装不上的热键（只有修饰键）：sanitize 会把它挑出来并夹回可用写法
-        draft.cfg.hotkeys = vec![asus_numpad::custom::HotkeySpec {
+        draft.cfg.hotkeys = vec![numdeck::custom::HotkeySpec {
             gesture: "ctrl+".to_string(),
             action: "on".to_string(),
         }];
@@ -152,7 +152,7 @@ mod tests {
         let mut draft = draft_at(&dir);
         draft.cfg.pressure_switch.enabled = false;
         draft.save().unwrap();
-        let path = dir.join("asus-numpad.json");
+        let path = dir.join("numdeck.json");
         let text = std::fs::read_to_string(&path).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert!(text.trim().ends_with('}'), "落盘内容应是完整 JSON");

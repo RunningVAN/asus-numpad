@@ -117,30 +117,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "175571dd1d178ced59193a6fc02dde1b972eb0bc56c892cde9beeceac5bf0f6b"
 
 [[package]]
-name = "asus-numpad"
-version = "1.0.3"
-dependencies = [
- "anyhow",
- "clap",
- "libc",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "asus-numpad-gui"
-version = "0.2.0"
-dependencies = [
- "ab_glyph",
- "anyhow",
- "asus-numpad",
- "eframe",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1374,6 +1350,30 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "numdeck"
+version = "2.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "numdeck-gui"
+version = "2.0.0"
+dependencies = [
+ "ab_glyph",
+ "anyhow",
+ "eframe",
+ "numdeck",
+ "serde",
+ "serde_json",
+ "windows",
 ]
 
 [[package]]

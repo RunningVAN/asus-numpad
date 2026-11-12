@@ -15,13 +15,13 @@ use super::super::{Action, App, VISIBLE_OUTPUT_LINES};
 impl App {
     /// 命令面板：把 CLI 的全部子命令接到界面上。
     ///
-    /// 做法是拼参数、调 `asus-numpad` 本身，而不是在界面里重写一遍：`check` 要读 DMI，
+    /// 做法是拼参数、调 `numdeck` 本身，而不是在界面里重写一遍：`check` 要读 DMI，
     /// `levels` / `sku` / `lang` 要改配置文件，输出文案又跟着语言文件走，重写必然与
     /// CLI 漂移。界面上显示的命令行与终端里敲下的完全一致，可直接复制过去复现。
     pub(in crate::app) fn draw_commands(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
         let p = self.palette;
         // 页签已经是独立一页，内部不再折叠：收起来等于把功能藏起来。
-        theme::section(ui, &p, "命令行（asus-numpad 全部子命令）", |ui| {
+        theme::section(ui, &p, "命令行（numdeck 全部子命令）", |ui| {
             self.draw_command_target(ui);
             ui.add_space(4.0);
 
@@ -29,7 +29,7 @@ impl App {
                 ui,
                 &p,
                 "子命令",
-                Some("选一条 asus-numpad 子命令，下面的参数会跟着变；执行时拼出的命令行与终端里完全一致。"),
+                Some("选一条 numdeck 子命令，下面的参数会跟着变；执行时拼出的命令行与终端里完全一致。"),
                 |ui| {
                     let combo = egui::ComboBox::from_id_salt("cmd_sub")
                         .width(crate::theme::ctrl_width())
@@ -69,7 +69,7 @@ impl App {
             &p,
             "可执行文件",
             &shown,
-            Some("界面调用的就是同一个 asus-numpad 二进制，输出与终端完全一致。"),
+            Some("界面调用的就是同一个 numdeck 二进制，输出与终端完全一致。"),
         );
         let missing = self.cmd_bin.is_none();
         let picked = theme::row(ui, &p, "", None, |ui| {
@@ -86,13 +86,13 @@ impl App {
             theme::note(
                 ui,
                 &p,
-                "装好驱动包后再点「重新查找」；或用环境变量 ASUS_NUMPAD_BIN 指向可执行文件。",
+                "装好驱动包后再点「重新查找」；或用环境变量 NUMDECK_BIN 指向可执行文件。",
             )
         }
         theme::note(
             ui,
             &p,
-            "这里调的就是同一个 asus-numpad 二进制，输出与终端一致。`run` 是前台常驻引擎，界面上对应的入口在「系统状态」区的服务启停。",
+            "这里调的就是同一个 numdeck 二进制，输出与终端一致。`run` 是前台常驻引擎，界面上对应的入口在「系统状态」区的服务启停。",
         );
     }
 
@@ -225,7 +225,7 @@ impl App {
                     &p,
                     "布局名",
                     &mut self.cmd.layout_name,
-                    "留空＝只查看，如 g614",
+                    "留空＝只查看，如 GH3XLNDZ",
                     Some("填布局名会写配置；留空只打印当前布局与可选列表。"),
                 );
                 theme::check_row(
@@ -274,7 +274,7 @@ impl App {
                         "--config",
                         &mut adv.config,
                         "配置文件路径",
-                        "改用另一份配置文件，默认走系统的 /etc/asus-numpad/config.json。",
+                        "改用另一份配置文件，默认走系统的 /etc/numdeck/config.json。",
                     ),
                     (
                         "--device",
@@ -426,7 +426,7 @@ impl App {
             .cmd_bin
             .as_ref()
             .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "asus-numpad".to_string());
+            .unwrap_or_else(|| "numdeck".to_string());
         let preview = self.cmd.preview(&bin_name);
         let writes = self.cmd.writes_config();
         let p = self.palette;
@@ -479,7 +479,7 @@ impl App {
                 ui,
                 &p,
                 "状态",
-                Some("命令已提交，正在等 asus-numpad 进程退出并回传输出。"),
+                Some("命令已提交，正在等 numdeck 进程退出并回传输出。"),
                 |ui| {
                     ui.horizontal(|ui| {
                         ui.spinner();

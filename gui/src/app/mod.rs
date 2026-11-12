@@ -8,7 +8,7 @@
 //!   手势阈值、背光通道、跟灯参数、时序、语言）都在 [`full`] 里有对应控件，另加系统
 //!   状态、服务启停与命令行兜底。
 //!
-//! 所有档位映射都走 [`asus_numpad::brightness`] 与 [`asus_numpad::led_proto`]——和
+//! 所有档位映射都走 [`numdeck::brightness`] 与 [`numdeck::led_proto`]——和
 //! Linux 侧同一份函数，避免两边灯效暗中不一致。
 
 mod action;
@@ -80,10 +80,10 @@ impl Page {
         }
     }
 
-    /// 启动时落在哪一页。默认灯光；`ASUS_NUMPAD_GUI_PAGE=driver|system|command|settings`
+    /// 启动时落在哪一页。默认灯光；`NUMDECK_GUI_PAGE=driver|system|command|settings`
     /// 可以直接进对应页（文档截图与排障都省一次点击）。
     fn from_env() -> Self {
-        let Ok(value) = std::env::var("ASUS_NUMPAD_GUI_PAGE") else {
+        let Ok(value) = std::env::var("NUMDECK_GUI_PAGE") else {
             return Page::Light;
         };
         match value.trim().to_ascii_lowercase().as_str() {
@@ -137,7 +137,7 @@ pub struct App {
     pub(in crate::app) ui_full: bool,
     /// 右侧当前页（只有全套模式才显示页签）
     pub(in crate::app) tab: Page,
-    /// Linux 侧驱动配置（`asus-numpad.json`）的编辑草稿
+    /// Linux 侧驱动配置（`numdeck.json`）的编辑草稿
     pub(in crate::app) driver: driver::Draft,
     /// 扩展页「校验扩展项」的结果（布局装没装上、HID 打没打架、报文合不合法）
     pub(in crate::app) ext_notes: Vec<String>,
@@ -169,7 +169,7 @@ pub struct App {
     pub(in crate::app) calib_snippet_msg: Option<(String, bool)>,
     /// 后台服务是否开机自启；Windows 用注册表那份，Linux 用这一份
     pub(in crate::app) service_enabled: bool,
-    /// 命令面板：与 `asus-numpad` CLI 同一套实现，界面只负责拼参数
+    /// 命令面板：与 `numdeck` CLI 同一套实现，界面只负责拼参数
     pub(in crate::app) cmd: CommandForm,
     pub(in crate::app) cmd_bin: Option<std::path::PathBuf>,
     pub(in crate::app) cmd_rx: Option<std::sync::mpsc::Receiver<Completion>>,
@@ -269,7 +269,7 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // 文档截图模式（设置了 ASUS_NUMPAD_GUI_SHOT 才生效）
+        // 文档截图模式（设置了 NUMDECK_GUI_SHOT 才生效）
         crate::shot::tick(root.ctx());
 
         let before = self.settings.clone();
@@ -327,7 +327,7 @@ impl eframe::App for App {
                         (
                             Page::Command,
                             Page::Command.title(),
-                            "命令行：把 asus-numpad 全部子命令拼好再执行，输出与终端一致",
+                            "命令行：把 numdeck 全部子命令拼好再执行，输出与终端一致",
                         ),
                         (
                             Page::Settings,
@@ -422,7 +422,7 @@ impl Drop for App {
 const VISIBLE_OUTPUT_LINES: usize = 400;
 
 /// 品牌名：与官网 `site/index.html` 的 `.brand-name` 一致。
-const BRAND: &str = "asus-numpad";
+const BRAND: &str = "numdeck";
 
 /// 「会写配置」「没找到可执行文件」这类提示色。
 ///
