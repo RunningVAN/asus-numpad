@@ -343,10 +343,7 @@ impl App {
                 // 同一条错误只报一次，别把状态栏刷成滚动日志。
                 let text = err.to_string();
                 if self.settings_save_err.as_deref() != Some(text.as_str()) {
-                    self.set_status(
-                        format!("设置没能写入磁盘：{text}（稍后自动重试）"),
-                        true,
-                    );
+                    self.set_status(format!("设置没能写入磁盘：{text}（稍后自动重试）"), true);
                     self.settings_save_err = Some(text);
                 }
                 self.settings_dirty_at = Some(Instant::now());

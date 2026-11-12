@@ -994,7 +994,7 @@ impl Engine {
     pub fn tick(&mut self) {
         let now = self.now();
 
-        // 两段式点灯的第二段：到期后补发亮度档。
+                // 两段式点灯的第二段：到期后补发亮度档。
         // 放在最前面，保证点灯只比按下晚一帧，而不是被 sleep 拖住整个事件循环。
         if let Some(level) = self.pending_level {
             if now >= self.pending_level_at {
@@ -1004,19 +1004,19 @@ impl Engine {
         }
 
         // grab 运行期重试：启动那一下没抓住（被别的进程占着 / 权限刚放开）时，
-    // 事件会同时打到桌面——按数字键既出数字又动光标。只在点亮期间重试，
-    // 熄灭时事件本来就该让给桌面。
-    if crate::lifecycle::should_retry_grab(
-        self.cfg.grab,
-        self.grabbed,
-        self.lit,
-        now - self.grab_retry_at,
-    ) {
-        self.grab_retry_at = now;
-        self.grab();
-    }
+        // 事件会同时打到桌面——按数字键既出数字又动光标。只在点亮期间重试，
+        // 熄灭时事件本来就该让给桌面。
+        if crate::lifecycle::should_retry_grab(
+            self.cfg.grab,
+            self.grabbed,
+            self.lit,
+            now - self.grab_retry_at,
+        ) {
+            self.grab_retry_at = now;
+            self.grab();
+        }
 
-    // 跟随键盘背光：只读 sysfs，按 brightness_poll_ms 节流。
+        // 跟随键盘背光：只读 sysfs，按 brightness_poll_ms 节流。
         // 数字区未点亮时不写 —— 否则会把已经熄灭的灯又点起来。
         if self.lit {
             if let Some(level) = self
