@@ -63,19 +63,10 @@ impl Draft {
     /// 落盘。返回给状态栏用的文案。
     pub fn save(&mut self) -> anyhow::Result<String> {
         self.cfg.sanitize();
-        if let Some(dir) = self.write_path.parent() {
-            std::fs::create_dir_all(dir)
-                .map_err(|err| anyhow::anyhow!("创建目录 {} 失败：{err}", dir.display()))?;
-        }
-        let text = self.cfg.to_json();
-        std::fs::write(&self.write_path, format!("{text}\n"))
+        let text = format!("{}\n", self.cfg.to_json());
+        // 复用设置的原子写：临时文件 + rename，写一半崩了也不会把配置文件截断
+        crate::settings::write_atomic(&self.write_path, &text)
             .map_err(|err| anyhow::anyhow!("写入 {} 失败：{err}", self.write_path.display()))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ =
-                std::fs::set_permissions(&self.write_path, std::fs::Permissions::from_mode(0o644));
-        }
         self.notes.clear();
         self.dirty = false;
         self.existed = true;

@@ -9,9 +9,7 @@
 
 use eframe::egui;
 
-use asus_numpad::partition::{
-    solve_calibration, CornerSamples, GridProbe, RawSamples,
-};
+use asus_numpad::partition::{solve_calibration, CornerSamples, GridProbe, RawSamples};
 
 use super::calib_view;
 use super::extend::save_snippet;
@@ -104,7 +102,9 @@ impl App {
                 ui,
                 &p,
                 "分区",
-                Some("直接用边界把网格切成任意行列。坐标是触摸板的原始值，与 evtest 里看到的一致。"),
+                Some(
+                    "直接用边界把网格切成任意行列。坐标是触摸板的原始值，与 evtest 里看到的一致。",
+                ),
             );
             ui.add_space(4.0);
 
@@ -181,12 +181,8 @@ impl App {
                      底下一整块是触摸板，网格之外就是光标区。",
                 ),
                 |ui| {
-                    let (hover, _err) = calib_view::plate(
-                        ui,
-                        &p,
-                        &self.driver.cfg,
-                        &self.calib_probes,
-                    );
+                    let (hover, _err) =
+                        calib_view::plate(ui, &p, &self.driver.cfg, &self.calib_probes);
                     if !self.calib_probes.is_empty() {
                         let at = self.calib_probes.len();
                         ui.label(
@@ -521,13 +517,7 @@ impl App {
                 &p,
                 "样本文件",
                 Some("JSON：corners 四角 + first_point / last_point 两个对角格中心。"),
-                |ui| {
-                    theme::text_field(
-                        ui,
-                        &mut self.calib_samples_path,
-                        "/path/to/samples.json",
-                    )
-                },
+                |ui| theme::text_field(ui, &mut self.calib_samples_path, "/path/to/samples.json"),
             );
 
             let mut cols = self.calib_cols;
@@ -584,7 +574,11 @@ impl App {
             // 点在手边时最常犯的错就是「按到了隔壁格」，数字全对、键全错一格。
             if let Some(err) = self.calib_probe_msg.clone() {
                 ui.add_space(4.0);
-                theme::note(ui, &p, format!("样本没读成：{err}（预览图上暂时没有样本点）"));
+                theme::note(
+                    ui,
+                    &p,
+                    format!("样本没读成：{err}（预览图上暂时没有样本点）"),
+                );
             } else if !self.calib_probes.is_empty() {
                 if let Ok(grid) = calib_view::resolve(&self.driver.cfg) {
                     let issues = calib_view::probe_check(&grid, &self.calib_probes);
@@ -636,8 +630,7 @@ impl App {
                     if resp.clicked() {
                         self.calib_snippet = calib_fragment_of(&self.driver.cfg);
                         let len = self.calib_snippet.len();
-                        self.calib_snippet_msg =
-                            Some((format!("已生成 {len} 字节的片段"), false));
+                        self.calib_snippet_msg = Some((format!("已生成 {len} 字节的片段"), false));
                     }
                     let resp = theme::secondary(ui, &p, "复制");
                     if resp.clicked() {
@@ -653,11 +646,10 @@ impl App {
                     }
                     let resp = theme::secondary(ui, &p, "存成文件");
                     if resp.clicked() {
-                        self.calib_snippet_msg =
-                            Some(match save_snippet(&self.calib_snippet) {
-                                Ok(path) => (format!("已写入 {}", path.display()), false),
-                                Err(err) => (err, true),
-                            });
+                        self.calib_snippet_msg = Some(match save_snippet(&self.calib_snippet) {
+                            Ok(path) => (format!("已写入 {}", path.display()), false),
+                            Err(err) => (err, true),
+                        });
                     }
                     let resp = theme::secondary(ui, &p, "应用");
                     let resp = theme::tip(
@@ -791,7 +783,9 @@ impl App {
             }
         };
         match parse_samples(&text) {
-            Ok(samples) => self.calib_probes = probes_of(&samples, self.calib_cols, self.calib_rows),
+            Ok(samples) => {
+                self.calib_probes = probes_of(&samples, self.calib_cols, self.calib_rows)
+            }
             Err(err) => self.calib_probe_msg = Some(err),
         }
     }
@@ -809,9 +803,7 @@ fn parse_samples(text: &str) -> Result<RawSamples, String> {
         pair(item).ok_or_else(|| format!("corners.{name} 必须是 [x, y] 两个整数"))
     };
     let point = |name: &str| -> Result<(i32, i32), String> {
-        let item = value
-            .get(name)
-            .ok_or_else(|| format!("样本缺少 {name}"))?;
+        let item = value.get(name).ok_or_else(|| format!("样本缺少 {name}"))?;
         pair(item).ok_or_else(|| format!("{name} 必须是 [x, y] 两个整数"))
     };
     Ok(RawSamples {
@@ -846,13 +838,13 @@ fn calib_fragment_of(cfg: &asus_numpad::config::Config) -> String {
 }
 
 /// 片段写回配置：两段先都解析成功，再一次性写回。
-fn apply_calib_fragment(
-    cfg: &mut asus_numpad::config::Config,
-    text: &str,
-) -> (String, bool) {
+fn apply_calib_fragment(cfg: &mut asus_numpad::config::Config, text: &str) -> (String, bool) {
     let text = text.trim();
     if text.is_empty() {
-        return ("片段是空的：先点「导出」，或粘贴别人的片段".to_string(), true);
+        return (
+            "片段是空的：先点「导出」，或粘贴别人的片段".to_string(),
+            true,
+        );
     }
     let value: serde_json::Value = match serde_json::from_str(text) {
         Ok(value) => value,
@@ -889,7 +881,6 @@ fn apply_calib_fragment(
     }
     (format!("已应用：{}", touched.join("、")), false)
 }
-
 
 /// 样本 → 预览图上的点。
 ///
@@ -988,9 +979,11 @@ mod tests {
         let err = parse_samples("{\"corners\":{}}").unwrap_err();
         assert!(err.contains("corners.top_left"), "{err}");
 
-        let err = parse_samples("{\"corners\":{\"top_left\":[1,2],\"top_right\":[3,4],\
-             \"bottom_left\":[5,6],\"bottom_right\":[7,8]}}")
-            .unwrap_err();
+        let err = parse_samples(
+            "{\"corners\":{\"top_left\":[1,2],\"top_right\":[3,4],\
+             \"bottom_left\":[5,6],\"bottom_right\":[7,8]}}",
+        )
+        .unwrap_err();
         assert!(err.contains("first_point"), "{err}");
     }
 

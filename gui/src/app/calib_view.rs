@@ -50,11 +50,11 @@ pub(super) struct Grid {
 
 impl Grid {
     pub fn cols(&self) -> usize {
-        self.x.len().saturating_sub(1).max(1)
+        self.x.len().saturating_sub(1)
     }
 
     pub fn rows(&self) -> usize {
-        self.y.len().saturating_sub(1).max(1)
+        self.y.len().saturating_sub(1)
     }
 
     /// 落点属于哪一格；`snap` 打开时网格外吸附到最近一格，与驱动行为一致。
@@ -63,24 +63,32 @@ impl Grid {
         let row = bracket(&self.y, y);
         match (col, row) {
             (Some(col), Some(row)) => Some((row, col)),
-            _ if self.snap => Some((
-                nearest(&self.y, y),
-                nearest(&self.x, x),
-            )),
+            _ if self.snap && self.rows() > 0 && self.cols() > 0 => {
+                Some((nearest(&self.y, y), nearest(&self.x, x)))
+            }
             _ => None,
         }
     }
 
     /// 格宽 / 格高的平均值，给「格 720x550」这类提示用。
+    /// 格宽 / 格高的平均值，给「格 720x550」这类提示用。
+    ///
+    /// 用首尾边界相减而不是 `x[cols()]`：网格退化到 0 或 1 条边界时也返回 0，
+    /// 不会越界。除法前保证除数至少为 1。
     pub fn cell_size(&self) -> (f64, f64) {
-        let w = (self.x[self.cols()] - self.x[0]) / self.cols() as f64;
-        let h = (self.y[self.rows()] - self.y[0]) / self.rows() as f64;
-        (w, h)
+        let span = |edges: &[f64]| -> f64 {
+            let (Some(first), Some(last)) = (edges.first(), edges.last()) else {
+                return 0.0;
+            };
+            let n = edges.len().saturating_sub(1).max(1) as f64;
+            (last - first) / n
+        };
+        (span(&self.x), span(&self.y))
     }
 }
 
 fn bracket(edges: &[f64], v: f64) -> Option<usize> {
-    if v < *edges.first()? || v > *edges.last()? {
+    if edges.len() < 2 || v < *edges.first()? || v > *edges.last()? {
         return None;
     }
     // 落在内部边界上归左边的那一格（与驱动 `cell_of` 同侧包含规则）
@@ -125,7 +133,16 @@ fn preview_panel(cfg: &Config) -> Panel {
         // 毫米到原始值的比例不变，矩形不会跟着漂。
         let ux = side_x as f64 / (cfg.touchpad_width_mm * 1000.0).max(1.0);
         let uy = side_y as f64 / (cfg.touchpad_height_mm * 1000.0).max(1.0);
-        grow([mm[0] * 1000.0 * ux, mm[1] * 1000.0 * uy, mm[2] * 1000.0 * ux, mm[3] * 1000.0 * uy], &mut side_x, &mut side_y);
+        grow(
+            [
+                mm[0] * 1000.0 * ux,
+                mm[1] * 1000.0 * uy,
+                mm[2] * 1000.0 * ux,
+                mm[3] * 1000.0 * uy,
+            ],
+            &mut side_x,
+            &mut side_y,
+        );
     }
     Panel {
         xmin: 0,
@@ -253,8 +270,10 @@ pub(super) fn plate(
 
     let span_x = (grid.panel.xmax - grid.panel.xmin).max(1) as f64;
     let span_y = (grid.panel.ymax - grid.panel.ymin).max(1) as f64;
-    let map_x = |x: f64| rect.left() + ((x - grid.panel.xmin as f64) / span_x) as f32 * rect.width();
-    let map_y = |y: f64| rect.top() + ((y - grid.panel.ymin as f64) / span_y) as f32 * rect.height();
+    let map_x =
+        |x: f64| rect.left() + ((x - grid.panel.xmin as f64) / span_x) as f32 * rect.width();
+    let map_y =
+        |y: f64| rect.top() + ((y - grid.panel.ymin as f64) / span_y) as f32 * rect.height();
 
     // 触摸板全貌：比卡片凹一档的底色，网格区再抬起来，一眼分得清「板」和「网格」
     painter.rect_filled(rect, CornerRadius::same(8), board_color(p));
@@ -626,15 +645,22 @@ pub(super) fn lint_notes(ui: &mut egui::Ui, p: &Palette, cfg: &Config) {
     }
     if sorted.len() > LIMIT {
         ui.label(
-            egui::RichText::new(format!("另有 {} 项，都在本节各行的说明里。", sorted.len() - LIMIT))
-                .size(11.5)
-                .color(p.text_weak),
+            egui::RichText::new(format!(
+                "另有 {} 项，都在本节各行的说明里。",
+                sorted.len() - LIMIT
+            ))
+            .size(11.5)
+            .color(p.text_weak),
         );
     }
 }
 
 /// 预览图下方那行读数：没有悬停时说网格概况，有悬停时说到格。
-pub(super) fn readout(p: &Palette, grid: Option<&Grid>, hover: Option<&Hover>) -> (String, Color32) {
+pub(super) fn readout(
+    p: &Palette,
+    grid: Option<&Grid>,
+    hover: Option<&Hover>,
+) -> (String, Color32) {
     let Some(grid) = grid else {
         return ("先修好上面的问题，这里才能画图。".to_string(), p.text_weak);
     };
@@ -648,10 +674,7 @@ pub(super) fn readout(p: &Palette, grid: Option<&Grid>, hover: Option<&Hover>) -
         }
     };
     let (cw, ch) = grid.cell_size();
-    let (cw_mm, ch_mm) = (
-        mm(cw, 0.0, grid.panel.ux),
-        mm(ch, 0.0, grid.panel.uy),
-    );
+    let (cw_mm, ch_mm) = (mm(cw, 0.0, grid.panel.ux), mm(ch, 0.0, grid.panel.uy));
     match hover {
         Some(h) => match h.cell {
             Some((row, col)) => {
@@ -679,8 +702,9 @@ pub(super) fn readout(p: &Palette, grid: Option<&Grid>, hover: Option<&Hover>) -
         None if cw_mm > 0.1 && ch_mm > 0.1 => (
             format!(
                 "{} 行 × {} 列 · 每格约 {cw_mm:.0} × {ch_mm:.0} mm · 移上去看落点",
-                grid.rows(),
-                grid.cols()
+                // 网格退化（没有可用边界）时仍然报 1 行 1 列，不显示「0 行」
+                grid.rows().max(1),
+                grid.cols().max(1)
             ),
             p.text_weak,
         ),
@@ -800,6 +824,40 @@ mod tests {
             "{:?}",
             errs.iter().map(|l| &l.text).collect::<Vec<_>>()
         );
+    }
+
+    /// 网格退化（空边界 / 只有一条边界）时，取格尺寸与落点判定都不能越界 panic。
+    #[test]
+    fn degenerate_grid_never_panics() {
+        let panel = Panel {
+            xmin: 0,
+            xmax: 200,
+            ymin: 0,
+            ymax: 100,
+            ux: 0.0077,
+            uy: 0.0125,
+        };
+        for (x, y) in [
+            (vec![], vec![]),
+            (vec![0.0], vec![0.0]),
+            (vec![0.0, 100.0], vec![0.0]),
+        ] {
+            let grid = Grid {
+                x: x.clone(),
+                y: y.clone(),
+                nl: None,
+                snap: true,
+                panel,
+            };
+            let (w, h) = grid.cell_size();
+            assert!(w.is_finite() && h.is_finite(), "{x:?} {y:?} → {w}x{h}");
+            // 退化时 cols/rows 为 0，snap 分支也不能返回会被拿去索引的坐标
+            for raw in [(0.0, 0.0), (50.0, 50.0), (-10.0, 500.0)] {
+                if let Some((row, col)) = grid.cell_of(raw.0, raw.1) {
+                    assert!(row < grid.rows().max(1) && col < grid.cols().max(1));
+                }
+            }
+        }
     }
 
     /// 样本落错格要报出来：解算只保证矩形，落哪格得自己看一眼。

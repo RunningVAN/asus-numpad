@@ -239,7 +239,9 @@ impl PartitionSpec {
     /// 是否对这套布局生效（`auto` / 空 = 一律生效）。
     pub fn applies_to(&self, layout_name: &str) -> bool {
         let want = self.layout.trim();
-        want.is_empty() || want.eq_ignore_ascii_case("auto") || want.eq_ignore_ascii_case(layout_name)
+        want.is_empty()
+            || want.eq_ignore_ascii_case("auto")
+            || want.eq_ignore_ascii_case(layout_name)
     }
 
     /// 解算成可直接喂给 [`crate::layout::Geometry::with_partition`] 的边界。
@@ -366,13 +368,7 @@ pub struct ResolvedPartition {
 }
 
 /// 把 `[0,1]` 区间按权重切成 `n` 段的边界（长度 `n+1`）。
-fn split(
-    lo: f64,
-    hi: f64,
-    n: usize,
-    ratios: &[f64],
-    what: &str,
-) -> Result<Vec<f64>, String> {
+fn split(lo: f64, hi: f64, n: usize, ratios: &[f64], what: &str) -> Result<Vec<f64>, String> {
     let span = hi - lo;
     if ratios.is_empty() {
         return Ok((0..=n).map(|i| lo + span * i as f64 / n as f64).collect());
@@ -594,7 +590,9 @@ mod tests {
             rows: Some(3),
             ..Default::default()
         };
-        let r = p.resolve(panel(), (100.0, 100.0, 900.0, 600.0), (5, 4)).unwrap();
+        let r = p
+            .resolve(panel(), (100.0, 100.0, 900.0, 600.0), (5, 4))
+            .unwrap();
         assert_eq!(r.x_edges.len(), 5);
         assert_eq!(r.y_edges.len(), 4);
         assert_eq!(r.x_edges[0], 100.0);
@@ -646,7 +644,9 @@ mod tests {
             cols: Some(7),
             ..Default::default()
         };
-        let r = p.resolve(panel(), (100.0, 100.0, 900.0, 600.0), (5, 4)).unwrap();
+        let r = p
+            .resolve(panel(), (100.0, 100.0, 900.0, 600.0), (5, 4))
+            .unwrap();
         assert_eq!(r.notes, vec![PartitionNote::ExtraCols(5, 7)]);
     }
 
@@ -718,10 +718,7 @@ mod tests {
         assert_eq!((p.xmin, p.xmax), (0, 4752));
         assert_eq!(
             notes,
-            vec![
-                CalNote::Inverted("x"),
-                CalNote::BadUnitsPerMm("x"),
-            ]
+            vec![CalNote::Inverted("x"), CalNote::BadUnitsPerMm("x"),]
         );
     }
 
@@ -836,7 +833,8 @@ mod tests {
         assert_eq!(p.layout, "HANDMADE");
         assert_eq!(p.cols, Some(5));
         assert!(p.snap_outside);
-        let back: PartitionSpec = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        let back: PartitionSpec =
+            serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(back, p);
         // 拼错字段必须报错，而不是静默忽略
         assert!(serde_json::from_str::<PartitionSpec>(r#"{"rectt": [1,2,3,4]}"#).is_err());

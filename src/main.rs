@@ -2022,10 +2022,7 @@ fn read_raw_samples(path: &Path) -> Result<asus_numpad::partition::RawSamples> {
         // anyhow 直接把 String 当错误装进去时 Display 会自带引号
         // （`Error: "..." ...`），用格式化包一层，报错文案就是语言文件里那句。
         fn bad(name: &str) -> anyhow::Error {
-            anyhow::anyhow!(
-                "{}",
-                i18n::tf("calibrate.samples.bad_pair", &[("k", name)])
-            )
+            anyhow::anyhow!("{}", i18n::tf("calibrate.samples.bad_pair", &[("k", name)]))
         }
         let arr = obj
             .get(name)
@@ -2050,7 +2047,10 @@ fn read_raw_samples(path: &Path) -> Result<asus_numpad::partition::RawSamples> {
         )
     })?;
     let corners = v.get("corners").ok_or_else(|| {
-        anyhow::anyhow!("{}", i18n::tf("calibrate.samples.missing", &[("k", "corners")]))
+        anyhow::anyhow!(
+            "{}",
+            i18n::tf("calibrate.samples.missing", &[("k", "corners")])
+        )
     })?;
     Ok(RawSamples {
         corners: CornerSamples {
@@ -2171,10 +2171,7 @@ fn cmd_calibrate(
         "{}",
         i18n::tf(
             "calibrate.cell_size",
-            &[
-                ("w", &format!("{col_w:.1}")),
-                ("h", &format!("{row_h:.1}")),
-            ]
+            &[("w", &format!("{col_w:.1}")), ("h", &format!("{row_h:.1}")),]
         )
     );
     println!();
@@ -2198,7 +2195,10 @@ fn cmd_calibrate(
         let real = Config::writable_path(cfg_path);
         println!(
             "{}",
-            i18n::tf("calibrate.written", &[("path", &real.display().to_string())])
+            i18n::tf(
+                "calibrate.written",
+                &[("path", &real.display().to_string())]
+            )
         );
         return Ok(0);
     }

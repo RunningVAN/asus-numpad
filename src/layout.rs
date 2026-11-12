@@ -400,8 +400,14 @@ impl Geometry {
 
     pub fn in_numlock(&self, x: i32, y: i32) -> bool {
         let (x, y) = (x as f64, y as f64);
-        let (x0, x1) = (self.col_edges[self.nl_cell.1], self.col_edges[self.nl_cell.1 + 1]);
-        let (y0, y1) = (self.row_edges[self.nl_cell.0], self.row_edges[self.nl_cell.0 + 1]);
+        let (x0, x1) = (
+            self.col_edges[self.nl_cell.1],
+            self.col_edges[self.nl_cell.1 + 1],
+        );
+        let (y0, y1) = (
+            self.row_edges[self.nl_cell.0],
+            self.row_edges[self.nl_cell.0 + 1],
+        );
         x >= x0 && x <= x1 && y >= y0 && y <= y1
     }
 

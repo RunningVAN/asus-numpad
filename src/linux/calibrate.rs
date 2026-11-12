@@ -80,8 +80,7 @@ fn sample_point(dev: &InputDevice, prompt: &str) -> io::Result<(i32, i32)> {
                 xs.push(cur.0);
                 ys.push(cur.1);
                 if let Some((sec, usec)) = collecting_since {
-                    let elapsed_ms =
-                        (ev.sec - sec) * 1000 + (ev.usec - usec) / 1000;
+                    let elapsed_ms = (ev.sec - sec) * 1000 + (ev.usec - usec) / 1000;
                     if elapsed_ms >= STABLE_MS as i64 && !xs.is_empty() {
                         println!();
                         return Ok((median(&mut xs), median(&mut ys)));

@@ -99,20 +99,64 @@ pub fn load() -> Settings {
 }
 
 /// 写配置。
+/// 原子写：先写同目录临时文件再 rename 覆盖。
+///
+/// 直写目标文件一旦在写入中途失败（断电、磁盘满、进程被杀），配置就剩半截，
+/// 下次启动解析失败、用户调好的设置全丢。临时文件 + rename 保证目标要么是旧版
+/// 要么是完整新版，不会出现中间态。rename 之后权限随临时文件走，因此 unix 上
+/// 在这里顺手把临时文件设成 0o644。
+pub(crate) fn write_atomic(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+    let dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    std::fs::create_dir_all(dir)?;
+    let file_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "config.json".to_string());
+    let tmp = dir.join(format!(".{file_name}.tmp-{}", std::process::id()));
+    let write_result = (|| -> std::io::Result<()> {
+        std::fs::write(&tmp, text)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o644))?;
+        }
+        std::fs::rename(&tmp, path)
+    })();
+    if write_result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    write_result
+}
+
 pub fn save(settings: &Settings) -> Result<()> {
     let path = config_path();
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)
-            .with_context(|| format!("创建配置目录失败：{}", dir.display()))?;
-    }
     let text = serde_json::to_string_pretty(settings).context("序列化设置失败")?;
-    std::fs::write(&path, text).with_context(|| format!("写入设置失败：{}", path.display()))?;
+    write_atomic(&path, &text).with_context(|| format!("写入设置失败：{}", path.display()))?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 原子写：目标已存在时被完整替换，且不留临时文件。
+    #[test]
+    fn write_atomic_replaces_and_cleans_up() {
+        let dir = std::env::temp_dir().join(format!("asus-numpad-test-{}", std::process::id()));
+        let path = dir.join("cfg.json");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_atomic(&path, "first").expect("首次写入");
+        write_atomic(&path, "second-and-longer").expect("覆盖写入");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "second-and-longer");
+        let leftovers: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|name| name != "cfg.json")
+            .collect();
+        assert!(leftovers.is_empty(), "残留临时文件：{leftovers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn defaults_are_consistent() {

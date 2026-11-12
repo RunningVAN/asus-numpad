@@ -277,7 +277,10 @@ fn run_gui() -> Result<()> {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size(size)
             .with_min_inner_size(min_size)
-            .with_title(app::window_title()),
+            .with_title(app::window_title())
+            // 与官网 favicon 同一枚标记：窗口标题栏、任务栏、Dock 都有图标，
+            // 不再是一枚通用占位方块。
+            .with_icon(crate::theme::app_icon(128)),
         ..Default::default()
     };
     eframe::run_native(

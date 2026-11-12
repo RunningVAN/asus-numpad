@@ -13,11 +13,12 @@ const CANDIDATES: &[&str] = &[
     r"C:\Windows\Fonts\simhei.ttf",
     r"C:\Windows\Fonts\simsun.ttc",
     r"C:\Windows\Fonts\Deng.ttf",
-    // macOS（开发机预览用）
+    // macOS（开发机预览用）：官网中文正文走 PingFang SC，这里优先装同一族；
+    // 解析不了再退到 Arial Unicode / Hiragino，保证预览与目标平台观感一致。
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/Library/Fonts/Arial Unicode.ttf",
-    "/System/Library/Fonts/Hiragino Sans GB.ttc",
-    "/System/Library/Fonts/PingFang.ttc",
     // Linux（交叉预览用）
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",

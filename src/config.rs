@@ -666,7 +666,10 @@ impl Config {
                     self.partition.rows = None;
                 }
             }
-            for (what, rect) in [("rect", self.partition.rect), ("rect_mm", self.partition.rect_mm)] {
+            for (what, rect) in [
+                ("rect", self.partition.rect),
+                ("rect_mm", self.partition.rect_mm),
+            ] {
                 if let Some(r) = rect {
                     if !(r[2] > r[0] && r[3] > r[1]) {
                         notes.push(crate::i18n::tf(
@@ -723,7 +726,10 @@ impl Config {
                     v.iter().any(|r| !(r.is_finite() && *r > 0.0))
                 };
                 if bad {
-                    notes.push(crate::i18n::tf("note.partition_ratio_bad", &[("what", what)]));
+                    notes.push(crate::i18n::tf(
+                        "note.partition_ratio_bad",
+                        &[("what", what)],
+                    ));
                     if what == "col_ratios" {
                         self.partition.col_ratios.clear();
                     } else {
@@ -952,18 +958,12 @@ impl Config {
                     (g.with_snap_outside(r.snap_outside), notes)
                 }
                 Err(err) => {
-                    notes.push(crate::i18n::tf(
-                        "note.partition_invalid",
-                        &[("err", &err)],
-                    ));
+                    notes.push(crate::i18n::tf("note.partition_invalid", &[("err", &err)]));
                     (geo, notes)
                 }
             },
             Err(err) => {
-                notes.push(crate::i18n::tf(
-                    "note.partition_invalid",
-                    &[("err", &err)],
-                ));
+                notes.push(crate::i18n::tf("note.partition_invalid", &[("err", &err)]));
                 (geo, notes)
             }
         }
@@ -1936,7 +1936,10 @@ mod tests {
         // 列数越界
         let mut c: Config = serde_json::from_str(r#"{"partition":{"cols":9}}"#).unwrap();
         let notes = c.sanitize();
-        assert!(notes.iter().any(|n| n.contains("9") && n.contains("1..=8")), "{notes:?}");
+        assert!(
+            notes.iter().any(|n| n.contains("9") && n.contains("1..=8")),
+            "{notes:?}"
+        );
         assert_eq!(c.partition.cols, None);
         assert!(c.partition.is_unset());
 
@@ -1944,9 +1947,17 @@ mod tests {
         let mut c: Config =
             serde_json::from_str(r#"{"partition":{"rect":[3000,2000,400,500]}}"#).unwrap();
         let notes = c.sanitize();
-        assert!(notes.iter().any(|n| n.contains("rect") && n.contains("3000")), "{notes:?}");
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("rect") && n.contains("3000")),
+            "{notes:?}"
+        );
         assert_eq!(c.partition.rect, None);
-        assert!(!notes.iter().any(|n| n.contains("custom partition active")), "{notes:?}");
+        assert!(
+            !notes.iter().any(|n| n.contains("custom partition active")),
+            "{notes:?}"
+        );
 
         // 权重长度不符
         let mut c: Config =
@@ -1957,13 +1968,14 @@ mod tests {
         assert_eq!(c.partition.cols, Some(5), "列数本身是好的，不该一起丢掉");
 
         // 权重里有 0 / 负数
-        let mut c: Config = serde_json::from_str(
-            r#"{"partition":{"cols":5,"rows":4,"col_ratios":[1,-1,1,1,1]}}"#,
-        )
-        .unwrap();
+        let mut c: Config =
+            serde_json::from_str(r#"{"partition":{"cols":5,"rows":4,"col_ratios":[1,-1,1,1,1]}}"#)
+                .unwrap();
         let notes = c.sanitize();
         assert!(
-            notes.iter().any(|n| n.contains("col_ratios") && n.contains("non-positive")),
+            notes
+                .iter()
+                .any(|n| n.contains("col_ratios") && n.contains("non-positive")),
             "{notes:?}"
         );
         assert!(c.partition.col_ratios.is_empty());
@@ -1977,14 +1989,20 @@ mod tests {
         assert!(notes.iter().any(|n| n.contains("NumLock")), "{notes:?}");
         assert_eq!(c.partition.numlock_cell, None);
         assert_eq!(c.partition.cols, Some(5));
-        assert!(notes.iter().any(|n| n.contains("layout: auto")), "{notes:?}");
+        assert!(
+            notes.iter().any(|n| n.contains("layout: auto")),
+            "{notes:?}"
+        );
 
         // layout 留空归一成 auto，提示里不再出现空括号
         let mut c: Config =
             serde_json::from_str(r#"{"partition":{"cols":5,"layout":"  "}}"#).unwrap();
         let notes = c.sanitize();
         assert_eq!(c.partition.layout, "auto");
-        assert!(notes.iter().any(|n| n.contains("layout: auto")), "{notes:?}");
+        assert!(
+            notes.iter().any(|n| n.contains("layout: auto")),
+            "{notes:?}"
+        );
 
         // 好配置一条坏提示都不该有
         let mut c: Config = serde_json::from_str(

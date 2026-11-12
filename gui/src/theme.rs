@@ -35,10 +35,20 @@ pub struct Palette {
     pub text: Color32,
     /// 次要正文（说明文字）
     pub text_weak: Color32,
-    /// 强调色（选中、主按钮、进度）
+    /// 强调色（选中、焦点描边、进度、页签指示条）
     pub accent: Color32,
     /// 强调色的淡底
     pub accent_soft: Color32,
+    /// 实心主按钮的底色。
+    ///
+    /// 和 `accent` 分开是官网上写明的取舍：强调色要亮（高亮、描边都要它），
+    /// 但按钮上压着白字，亮红只能到 3.6:1，压深一档的 `#d81b45` 才有 5:1。
+    pub btn: Color32,
+    /// 主按钮渐变的**下缘**色（站点 `--btn-b`）。
+    ///
+    /// 官网上 `.btn-primary` 是 180° 渐变 `--btn-a → --btn-b`；egui 的按钮只有单色，
+    /// 所以底色仍用 `btn`，再在下缘压一层这个色做「上亮下深」，远看是同一枚按钮。
+    pub btn_deep: Color32,
     /// 正常状态
     pub ok: Color32,
     /// 告警
@@ -47,45 +57,62 @@ pub struct Palette {
     pub bad: Color32,
 }
 
-/// 深色：近黑的中性灰，强调色是偏冷的蓝，长时间看不刺眼。
+/// 深色：与官网 `html[data-theme="dark"]` 的令牌一一对应。
+///
+/// 官网页面的卡片底是 `rgba(255,255,255,.035)` 叠在 `#0a0b0f` 上，egui 的 `Frame`
+/// 只能给实色，所以这里写的是**叠完之后**的等效实色（10 + 245×0.035 ≈ 19），
+/// `sunk` / `field` / `stroke` 同理按 .06 / .06 / .09 的透明度折算好。改站点配色时
+/// 照这个公式重算一次即可，不需要 GUI 另立一套设计语言。
 pub const DARK: Palette = Palette {
-    bg: Color32::from_rgb(11, 13, 17),
-    panel: Color32::from_rgb(16, 19, 25),
-    card: Color32::from_rgb(21, 24, 31),
-    sunk: Color32::from_rgb(30, 34, 43),
-    field: Color32::from_rgb(27, 31, 39),
-    stroke: Color32::from_rgb(38, 43, 53),
-    text: Color32::from_rgb(232, 235, 240),
-    text_weak: Color32::from_rgb(154, 163, 178),
-    accent: Color32::from_rgb(124, 156, 255),
-    // 17% 透明度的强调色，已按预乘写好（egui 用预乘 alpha）
-    accent_soft: Color32::from_rgba_premultiplied(21, 26, 44, 44),
-    ok: Color32::from_rgb(74, 202, 138),
-    warn: Color32::from_rgb(233, 176, 78),
-    bad: Color32::from_rgb(240, 110, 110),
+    // 站点 --bg / --bg-alt
+    bg: Color32::from_rgb(10, 11, 15),
+    panel: Color32::from_rgb(13, 15, 21),
+    card: Color32::from_rgb(19, 21, 26),
+    sunk: Color32::from_rgb(26, 28, 34),
+    field: Color32::from_rgb(33, 35, 40),
+    stroke: Color32::from_rgb(40, 42, 47),
+    // --text / --text-2：次要文字 8.4:1，压住 4.5:1
+    text: Color32::from_rgb(236, 238, 244),
+    text_weak: Color32::from_rgb(169, 173, 186),
+    // --accent（品牌红）
+    accent: Color32::from_rgb(255, 45, 85),
+    // 品牌红 17% 叠在 --bg 上的预乘值（egui 用预乘 alpha）：52,17,27,44
+    accent_soft: Color32::from_rgba_premultiplied(52, 17, 27, 44),
+    // --btn-a：品牌红压深一档，白字 5.05:1
+    btn: Color32::from_rgb(216, 27, 69),
+    // --btn-b
+    btn_deep: Color32::from_rgb(179, 18, 58),
+    ok: Color32::from_rgb(52, 211, 153),
+    warn: Color32::from_rgb(240, 180, 41),
+    bad: Color32::from_rgb(255, 92, 122),
 };
 
-/// 浅色：白卡片浮在中性浅灰底上，强调色用偏深的蓝，保证在浅底上也有足够对比。
+/// 浅色：与官网 `html[data-theme="light"]` 对应。规则同上，底色换 `#f7f8fa`、
+/// 强调色压深到 `#b8163c`（亮底上亮红只有 2.8:1，看不清）。
 pub const LIGHT: Palette = Palette {
-    bg: Color32::from_rgb(244, 245, 247),
+    bg: Color32::from_rgb(247, 248, 250),
     panel: Color32::from_rgb(255, 255, 255),
     card: Color32::from_rgb(255, 255, 255),
-    sunk: Color32::from_rgb(241, 243, 246),
+    sunk: Color32::from_rgb(235, 236, 239),
     field: Color32::from_rgb(255, 255, 255),
-    stroke: Color32::from_rgb(227, 229, 233),
-    text: Color32::from_rgb(22, 24, 29),
-    text_weak: Color32::from_rgb(107, 114, 128),
-    accent: Color32::from_rgb(37, 99, 235),
-    accent_soft: Color32::from_rgba_premultiplied(4, 11, 26, 28),
-    ok: Color32::from_rgb(18, 133, 90),
+    stroke: Color32::from_rgb(232, 233, 236),
+    text: Color32::from_rgb(20, 22, 31),
+    text_weak: Color32::from_rgb(77, 82, 98),
+    accent: Color32::from_rgb(184, 22, 60),
+    // 品牌红 11% 叠在 --bg 上的预乘值：240,223,229,28
+    accent_soft: Color32::from_rgba_premultiplied(240, 223, 229, 28),
+    btn: Color32::from_rgb(192, 20, 60),
+    // --btn-b
+    btn_deep: Color32::from_rgb(156, 15, 48),
+    ok: Color32::from_rgb(4, 120, 87),
     warn: Color32::from_rgb(180, 83, 9),
-    bad: Color32::from_rgb(220, 38, 38),
+    bad: Color32::from_rgb(185, 28, 28),
 };
 
-/// 卡片圆角，比控件大一档，视觉上才能把里面的控件「装」住。
-const CARD_RADIUS: u8 = 16;
-/// 控件圆角。
-const WIDGET_RADIUS: u8 = 8;
+/// 卡片圆角：官网 `--radius: 14px`。
+const CARD_RADIUS: u8 = 14;
+/// 控件圆角：官网 `.btn { border-radius: 10px }`。
+const WIDGET_RADIUS: u8 = 10;
 
 /// 装上主题，返回当前生效的调色板。
 pub fn install(ctx: &egui::Context) -> Palette {
@@ -329,18 +356,109 @@ fn wash(ui: &egui::Ui, resp: &Response, p: &Palette, radius: CornerRadius) {
     ui.painter().rect_filled(resp.rect, radius, tint);
 }
 
-/// 主按钮：实心强调色，用于「点亮」这类主动作。
+/// 主按钮：品牌红渐变，用于「点亮」这类主动作。
+///
+/// 官网上 `.btn-primary` 是 180° 渐变 `--btn-a → --btn-b`，egui 的 `Button` 只能给一个
+/// 单色填充，所以这里自己画：先按 16 条色带铺出渐变（上下两端各自成圆角，中间直角，
+/// 圆角区因此不会被色带切成台阶），再叠悬停浮色，最后把文字压在中心。
+///
+/// 用自绘而不是「给 Button 加 fill 再盖一层」的原因：`add()` 之后再画的东西都在文字
+/// 之上，盖深色会把白字压脏。自绘保住 `Sense::click` —— 命中、悬停、按下、点击回执
+/// 与 `ui.button` 完全一致，外层 `tip()` 的说明气泡也照常工作。
 pub fn primary(ui: &mut egui::Ui, p: &Palette, text: &str) -> Response {
-    // 两套调色板的强调色都足够深，白字始终是安全的
-    let resp = ui.add(
-        egui::Button::new(RichText::new(text).color(Color32::WHITE).strong())
-            .fill(p.accent)
-            .stroke(Stroke::new(0.0, Color32::TRANSPARENT))
-            .corner_radius(CornerRadius::same(WIDGET_RADIUS))
-            .min_size(Vec2::new(BTN_W, CTRL_H)),
+    let font = TextStyle::Button.resolve(ui.style());
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_owned(), font.clone(), Color32::WHITE);
+    let pad = ui.spacing().button_padding;
+    let size = Vec2::new(
+        (galley.size().x + pad.x * 2.0).max(BTN_W),
+        CTRL_H.max(galley.size().y + pad.y * 2.0),
     );
-    wash(ui, &resp, p, CornerRadius::same(WIDGET_RADIUS));
-    resp
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        let radius = CornerRadius::same(WIDGET_RADIUS);
+        let enabled = ui.is_enabled();
+        // 按下时整块用下缘色：没有位移和阴影可借，颜色加深是唯一还读得出来的反馈。
+        let (top, bottom) = if !enabled {
+            (p.sunk, p.sunk)
+        } else if resp.is_pointer_button_down_on() {
+            (p.btn_deep, p.btn_deep)
+        } else {
+            (p.btn, p.btn_deep)
+        };
+        if top == bottom {
+            ui.painter()
+                .rect_filled(rect, radius, if enabled { p.btn_deep } else { p.sunk });
+        } else {
+            gradient(ui.painter(), rect, radius, top, bottom);
+        }
+        if enabled && resp.hovered() {
+            ui.painter()
+                .rect_filled(rect, radius, Color32::from_white_alpha(14));
+        }
+        // 顶部一道 1px 亮边，对应站点按钮的高光
+        if enabled {
+            ui.painter().rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(rect.left() + 1.0, rect.top() + 1.0),
+                    egui::pos2(rect.right() - 1.0, rect.top() + 2.0),
+                ),
+                CornerRadius::same(1),
+                Color32::from_white_alpha(30),
+            );
+        }
+        let ink = if enabled {
+            Color32::WHITE
+        } else {
+            Color32::from_white_alpha(130)
+        };
+        ui.painter()
+            .galley(rect.center() - galley.size() / 2.0, galley, ink);
+    }
+    if ui.is_enabled() {
+        resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+    } else {
+        resp
+    }
+}
+
+/// 竖向渐变：`top → bottom`，上下两端按 `radius` 收圆角，中间各带直角。
+///
+/// 16 条色带在 32px 高的按钮上每带两像素，色差不到 3，肉眼看是连续过渡。
+fn gradient(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    radius: CornerRadius,
+    top: Color32,
+    bottom: Color32,
+) {
+    const BANDS: usize = 16;
+    let h = rect.height();
+    for i in 0..BANDS {
+        let t = (i as f32 + 0.5) / BANDS as f32;
+        let band = egui::Rect::from_min_max(
+            egui::pos2(rect.left(), rect.top() + h * i as f32 / BANDS as f32),
+            egui::pos2(rect.right(), rect.top() + h * (i + 1) as f32 / BANDS as f32),
+        );
+        painter.rect_filled(
+            band,
+            CornerRadius {
+                nw: if i == 0 { radius.nw } else { 0 },
+                ne: if i == 0 { radius.ne } else { 0 },
+                sw: if i + 1 == BANDS { radius.sw } else { 0 },
+                se: if i + 1 == BANDS { radius.se } else { 0 },
+            },
+            mix(top, bottom, t),
+        );
+    }
+}
+
+/// 两个色之间按 `t` 线性取色。
+fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let f = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    Color32::from_rgb(f(a.r(), b.r()), f(a.g(), b.g()), f(a.b(), b.b()))
 }
 
 /// 次级按钮：白底 + 细描边，和主按钮并排时不抢注意力。
@@ -415,6 +533,56 @@ pub fn pill(ui: &mut egui::Ui, text: &str, color: Color32) -> Response {
     );
     ui.painter()
         .galley(rect.center() - galley.size() / 2.0, galley, color);
+    resp
+}
+
+/// 品牌标记：官网页头那枚键盘图标，24×24 视框等比放大到 `size`。
+///
+/// 与 `site/index.html` 里的 `.brand-mark` 是同一套几何：19×15 的圆角外框加四个
+/// 键位短线。用矢量画而不是塞位图——深浅两套主题、任意缩放和高 DPI 都清晰，
+/// 仓库里也不用维护多份 PNG（站点那边只有一枚 favicon.svg）。
+pub fn logo(ui: &mut egui::Ui, p: &Palette, size: f32) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
+    paint_logo(ui.painter(), rect, p.accent);
+    resp
+}
+
+/// 把品牌标记画进任意矩形，供 [`logo`] 和窗口图标复用同一套坐标。
+pub fn paint_logo(painter: &egui::Painter, rect: egui::Rect, color: Color32) {
+    let s = (rect.width().min(rect.height()) / 24.0).max(0.1);
+    let at = |x: f32, y: f32| egui::pos2(rect.left() + x * s, rect.top() + y * s);
+    // 外框：视框内 (2.5,4.5) 起、19×15、圆角 3、线宽 1.6
+    let body = egui::Rect::from_min_max(at(2.5, 4.5), at(21.5, 19.5));
+    painter.rect_stroke(
+        body,
+        CornerRadius::same(((3.0 * s).round() as u8).max(2)),
+        Stroke::new((1.6 * s).max(1.0), color),
+        egui::StrokeKind::Inside,
+    );
+    // 四个键位：站点上是 `M8 10h2` 这一组短线，小尺寸下比实心方块更清楚
+    let w = (1.6 * s).max(1.0);
+    for (x, y) in [(8.0, 10.0), (14.0, 10.0), (8.0, 14.5), (14.0, 14.5)] {
+        painter.line_segment([at(x, y), at(x + 2.0, y)], Stroke::new(w, color));
+    }
+}
+
+/// 版本胶囊：官网页头 `.brand-tag` 的同款——等宽字体、细描边、全圆角。
+///
+/// 摆在品牌名右边当「这是哪个版本」的角标，比在正文里单开一行写版本号省地方。
+pub fn tag(ui: &mut egui::Ui, p: &Palette, text: &str) -> Response {
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_owned(), FontId::monospace(11.0), p.text_weak);
+    let size = Vec2::new(galley.size().x + 14.0, galley.size().y + 4.0);
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::hover());
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same((size.y / 2.0) as u8),
+        Stroke::new(1.0, p.stroke),
+        egui::StrokeKind::Inside,
+    );
+    ui.painter()
+        .galley(rect.center() - galley.size() / 2.0, galley, p.text_weak);
     resp
 }
 
@@ -987,7 +1155,7 @@ pub fn actions(ui: &mut egui::Ui, p: &Palette, items: &[(&str, bool, &str)]) -> 
         for (index, (text, primary_style, help)) in items.iter().enumerate() {
             let button = if *primary_style {
                 egui::Button::new(RichText::new(*text).color(Color32::WHITE).strong())
-                    .fill(p.accent)
+                    .fill(p.btn)
                     .stroke(Stroke::new(0.0, Color32::TRANSPARENT))
                     .corner_radius(CornerRadius::same(WIDGET_RADIUS))
                     .min_size(Vec2::new(btn_w, CTRL_H))
@@ -1110,4 +1278,262 @@ pub fn note(ui: &mut egui::Ui, p: &Palette, text: impl Into<String>) {
             );
         });
     });
+}
+
+/// 圆角矩形的有符号距离：负数在内部，正数在外部。
+///
+/// 图标光栅化用，`x`/`y` 是左上角，`w`/`h` 是宽高，`r` 是圆角半径。
+fn sd_round_rect(px: f32, py: f32, x: f32, y: f32, w: f32, h: f32, r: f32) -> f32 {
+    let (cx, cy) = (x + w / 2.0, y + h / 2.0);
+    let qx = (px - cx).abs() - (w / 2.0 - r);
+    let qy = (py - cy).abs() - (h / 2.0 - r);
+    let outside = (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt();
+    outside + qx.max(qy).min(0.0) - r
+}
+
+/// 窗口 / 任务栏图标：`site/assets/favicon.svg` 的光栅版。
+///
+/// 站点上那枚 favicon 就是本项目的标记（黑底圆角方块 + 红框键盘 + 六键），这里按
+/// 32×32 视框逐点判定 SDF 再 4×4 超采样，得到任意尺寸的 RGBA。不引 resvg / tiny-skia：
+/// 为一张图标拉一条 SVG 解析链不划算，而这点几何用距离函数几行就写完了。
+///
+/// 返回值直接喂 `eframe::egui::IconData`，Linux / Windows 的窗口标题栏与任务栏都会用。
+pub fn app_icon(size: u32) -> egui::IconData {
+    let size = size.clamp(8, 1024);
+    let n = size as f32;
+    // 视框 32 → 像素的缩放
+    let k = n / 32.0;
+    /// 每像素在一维上的采样数，4×4 = 16 个采样点，足够把圆角磨平。
+    const SS: u32 = 4;
+    // favicon 里的颜色
+    let plate = (10u8, 11u8, 15u8);
+    let accent = (255u8, 45u8, 85u8);
+    let light = (236u8, 238u8, 244u8);
+    // 六个键位：前三后三，最后一枚是亮色（NumLock 打开的样子）
+    let keys = [
+        (8.0f32, 12.0f32, accent),
+        (14.3, 12.0, accent),
+        (20.6, 12.0, accent),
+        (8.0, 17.4, accent),
+        (14.3, 17.4, accent),
+        (20.6, 17.4, light),
+    ];
+
+    let mut rgba = vec![0u8; (size * size * 4) as usize];
+    let step = 1.0 / SS as f32;
+    for py in 0..size {
+        for px in 0..size {
+            let mut rgb = [0f32; 3];
+            let mut hits = 0u32;
+            for sy in 0..SS {
+                for sx in 0..SS {
+                    // 采样点取像素中心偏移，避免整体左上半像素的漂移
+                    let x = (px as f32 + (sx as f32 + 0.5) * step) / k;
+                    let y = (py as f32 + (sy as f32 + 0.5) * step) / k;
+                    // 自底向上叠：外框描边和键位都画在底板上，底板不透明所以三点式取色即可
+                    let mut color = None;
+                    if sd_round_rect(x, y, 4.5, 8.0, 23.0, 16.0, 3.5) < 0.0
+                        && sd_round_rect(x, y, 4.5 + 1.8, 8.0 + 1.8, 23.0 - 3.6, 16.0 - 3.6, 2.5)
+                            > 0.0
+                    {
+                        color = Some(accent);
+                    }
+                    for (kx, ky, key) in keys {
+                        if sd_round_rect(x, y, kx, ky, 3.4, 3.4, 1.0) < 0.0 {
+                            color = Some(key);
+                        }
+                    }
+                    if color.is_none() && sd_round_rect(x, y, 0.0, 0.0, 32.0, 32.0, 7.0) < 0.0 {
+                        color = Some(plate);
+                    }
+                    if let Some((r, g, b)) = color {
+                        rgb[0] += r as f32;
+                        rgb[1] += g as f32;
+                        rgb[2] += b as f32;
+                        hits += 1;
+                    }
+                }
+            }
+            let idx = ((py * size + px) * 4) as usize;
+            if hits == 0 {
+                // 圆角外的空白：全透明
+                continue;
+            }
+            let coverage = hits as f32 / (SS * SS) as f32;
+            rgba[idx] = (rgb[0] / hits as f32).round() as u8;
+            rgba[idx + 1] = (rgb[1] / hits as f32).round() as u8;
+            rgba[idx + 2] = (rgb[2] / hits as f32).round() as u8;
+            rgba[idx + 3] = (coverage * 255.0).round() as u8;
+        }
+    }
+    egui::IconData {
+        rgba,
+        width: size,
+        height: size,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icon_has_expected_shape() {
+        let icon = app_icon(64);
+        assert_eq!(icon.rgba.len(), 64 * 64 * 4);
+        assert_eq!((icon.width, icon.height), (64, 64));
+    }
+
+    #[test]
+    fn icon_corner_is_transparent_and_body_is_opaque() {
+        let icon = app_icon(64);
+        let px = |x: u32, y: u32| {
+            let i = ((y * 64 + x) * 4) as usize;
+            (
+                icon.rgba[i],
+                icon.rgba[i + 1],
+                icon.rgba[i + 2],
+                icon.rgba[i + 3],
+            )
+        };
+        // 圆角之外必须透明，否则图标在浅色任务栏上是个黑方块
+        assert_eq!(px(0, 0).3, 0);
+        // 底板中心不透明
+        assert_eq!(px(32, 16).3, 255);
+        // 取一处分明的区域：键盘框下方那条底板（视框 y≈29），颜色应当接近 #0a0b0f
+        let (r, g, b, _) = px(32, 58);
+        assert!(r < 40 && g < 40 && b < 40, "底板像素偏亮：{r},{g},{b}");
+    }
+
+    /// 把一帧里所有矩形摊平，便于按「按钮的形状」去断言。
+    fn walk_rects(s: &egui::Shape, out: &mut Vec<(egui::Rect, Color32)>) {
+        match s {
+            egui::Shape::Rect(r) => out.push((r.rect, r.fill)),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk_rects(s, out)),
+            _ => {}
+        }
+    }
+
+    /// 跑一帧，把主按钮画出来，返回帧内所有矩形。
+    fn frame_with_primary(p: &Palette) -> Vec<(egui::Rect, Color32)> {
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.add_space(8.0);
+            primary(ui, p, "OK");
+        });
+        // 字体图集是给渲染器用的，测试里没人消费，丢掉前要显式 clear
+        out.textures_delta.clear();
+        let mut all = Vec::new();
+        out.shapes
+            .iter()
+            .for_each(|c| walk_rects(&c.shape, &mut all));
+        all
+    }
+
+    #[test]
+    fn primary_button_gets_a_vertical_gradient() {
+        let rects = frame_with_primary(&DARK);
+        // 渐变色带：宽度就是按钮宽，高度只有 32/16=2px
+        let mut bands: Vec<(f32, Color32)> = rects
+            .iter()
+            .filter(|(r, c)| {
+                (r.width() - BTN_W).abs() < 1.0
+                    && r.height() < 3.0
+                    && c.r() > 150
+                    && c.g() < 70
+                    && (40..110).contains(&c.b())
+            })
+            .map(|(r, c)| (r.top(), *c))
+            .collect();
+        bands.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        assert!(
+            bands.len() >= 8,
+            "主按钮没画出渐变，只找到 {} 条色带",
+            bands.len()
+        );
+        // 上到下只会越压越深，不会回弹
+        for w in bands.windows(2) {
+            assert!(
+                w[1].1.r() <= w[0].1.r() + 1,
+                "色带上下顺序反了：{:?} 在 {:?} 之下",
+                w[1],
+                w[0]
+            );
+        }
+        // 端点必须真的分别落在 --btn-a 与 --btn-b 上，否则等于没渐变
+        let top = bands.first().unwrap().1;
+        let bottom = bands.last().unwrap().1;
+        assert!(
+            (top.r() as i32 - DARK.btn.r() as i32).abs() <= 3,
+            "上缘色不对：{top:?} vs {:?}",
+            DARK.btn
+        );
+        assert!(
+            (bottom.r() as i32 - DARK.btn_deep.r() as i32).abs() <= 3,
+            "下缘色不对：{bottom:?} vs {:?}",
+            DARK.btn_deep
+        );
+    }
+
+    #[test]
+    fn primary_button_keeps_its_label_on_top() {
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.add_space(8.0);
+            primary(ui, &DARK, "OK");
+        });
+        out.textures_delta.clear();
+        let mut labels = Vec::new();
+        fn walk_text(s: &egui::Shape, out: &mut Vec<(egui::Rect, Color32)>) {
+            match s {
+                egui::Shape::Text(t) => out.push((
+                    egui::Rect::from_min_size(t.pos, t.galley.size()),
+                    t.fallback_color,
+                )),
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk_text(s, out)),
+                _ => {}
+            }
+        }
+        out.shapes
+            .iter()
+            .for_each(|c| walk_text(&c.shape, &mut labels));
+        // 文字必须存在、是白的，且落在按钮的垂直中线附近——不能被色带盖住
+        let (text_rect, color) = labels
+            .iter()
+            .find(|(r, _)| (r.width() - 24.0).abs() < 12.0 && r.height() > 8.0)
+            .map(|(r, c)| (r, *c))
+            .or_else(|| labels.first().map(|(r, c)| (r, *c)))
+            .expect("主按钮没画出文字");
+        assert_eq!(color, Color32::WHITE, "主按钮文字不是白色");
+        assert!(
+            text_rect.width() > 4.0 && text_rect.height() > 4.0,
+            "主按钮文字尺寸异常：{text_rect:?}"
+        );
+    }
+
+    #[test]
+    fn primary_button_keeps_its_size_and_click_zone() {
+        // 自绘后仍要走 allocate_exact_size，否则点击区域会缩成 0
+        let ctx = egui::Context::default();
+        let mut resp_rect = egui::Rect::NOTHING;
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.add_space(8.0);
+            let r = primary(ui, &DARK, "OK");
+            resp_rect = r.rect;
+            // 单行文字撑不出 BTN_W，按钮必须自己撑到最窄宽度
+            assert!((r.rect.width() - BTN_W).abs() < 1.0);
+            assert!((r.rect.height() - CTRL_H).abs() < 1.0);
+            assert!(r.interact_rect.contains(r.rect.center()));
+        });
+        out.textures_delta.clear();
+        assert!(resp_rect.width() > 0.0);
+    }
+
+    #[test]
+    fn icon_size_is_clamped() {
+        // 传 0 也不能炸：夹到最小边再算，长度自洽
+        let icon = app_icon(0);
+        assert_eq!(icon.rgba.len(), (icon.width * icon.height * 4) as usize);
+        assert!(icon.width >= 8);
+    }
 }

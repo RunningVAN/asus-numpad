@@ -40,6 +40,12 @@ const MAX_LOG: usize = 200;
 /// 平台状态里 systemctl 要真起进程，别每帧都刷。
 const STATE_REFRESH: Duration = Duration::from_secs(10);
 
+/// 设置落盘的静默时间：拖滑块/数字框时每帧都在变，停手这么久才写一次文件。
+///
+/// 早先是「一有变化就写」，拖动一次亮度滑块能连写几十次磁盘；现在只在停手后
+/// 落一次，窗口关闭时（[`App::drop`]）再兜一次，不会丢最后的改动。
+const SETTINGS_SAVE_QUIET: Duration = Duration::from_millis(400);
+
 struct LogEntry {
     at: String,
     frame: String,
@@ -123,6 +129,10 @@ pub struct App {
     devices: Vec<backend::DeviceInfo>,
     selected: Option<usize>,
     settings: Settings,
+    /// 设置改过但还没落盘
+    settings_dirty: bool,
+    /// 最后一次改动的时间，用来判断「停手了没有」
+    settings_dirty_at: Option<Instant>,
     log: VecDeque<LogEntry>,
     status: String,
     status_bad: bool,
@@ -200,6 +210,8 @@ impl App {
             devices: Vec::new(),
             selected: None,
             settings,
+            settings_dirty: false,
+            settings_dirty_at: None,
             log: VecDeque::new(),
             status: String::new(),
             status_bad: false,
@@ -253,6 +265,24 @@ impl App {
             .as_ref()
             .map(|s| s.enabled.trim() == "enabled")
             .unwrap_or(false);
+    }
+
+    /// 设置脏了且已经停手，就写一次盘；还没停手则约好下一次重绘，别让计时停住。
+    fn flush_settings(&mut self, ctx: &egui::Context) {
+        if !self.settings_dirty {
+            return;
+        }
+        let waited = self
+            .settings_dirty_at
+            .map(|at| at.elapsed())
+            .unwrap_or(SETTINGS_SAVE_QUIET);
+        if waited < SETTINGS_SAVE_QUIET {
+            ctx.request_repaint_after(SETTINGS_SAVE_QUIET - waited);
+            return;
+        }
+        let _ = settings::save(&self.settings);
+        self.settings_dirty = false;
+        self.settings_dirty_at = None;
     }
 
     fn set_status(&mut self, text: String, bad: bool) {
@@ -540,6 +570,11 @@ impl App {
             return;
         };
         self.last_numlock = Some(on);
+        // 第一次读到状态只用来对齐：硬件此刻就是这个状态，没必要再写一遍让灯闪一下
+        if self.sent_numlock.is_none() {
+            self.sent_numlock = Some(on);
+            return;
+        }
         if self.sent_numlock == Some(on) {
             return;
         }
@@ -577,19 +612,25 @@ impl App {
             )
             .show(root, |ui| {
                 ui.horizontal(|ui| {
-                    brand_mark(ui, &p);
-                    ui.add_space(6.0);
+                    theme::logo(ui, &p, 26.0);
+                    ui.add_space(9.0);
                     ui.vertical(|ui| {
+                        // 与官网页头同构：品牌名 + 版本角标一行，下面一行小字交代
+                        // 「这是哪个界面、连着哪块硬件」。
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 7.0;
+                            ui.label(egui::RichText::new(BRAND).size(15.5).strong().color(p.text));
+                            theme::tag(ui, &p, concat!("v", env!("CARGO_PKG_VERSION")))
+                                .on_hover_text("界面版本；和驱动库版本对不上说明装的是混搭包");
+                        });
                         ui.label(
-                            egui::RichText::new(self.window_title())
-                                .size(18.0)
-                                .strong()
-                                .color(p.text),
-                        );
-                        ui.label(
-                            egui::RichText::new(self.state.subtitle.clone())
-                                .size(11.5)
-                                .color(p.text_weak),
+                            egui::RichText::new(format!(
+                                "{} · {}",
+                                self.window_title(),
+                                self.state.subtitle
+                            ))
+                            .size(11.5)
+                            .color(p.text_weak),
                         );
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1216,22 +1257,14 @@ impl App {
                     "提示",
                     Some("驱动运行时给出的即时提示，出现这行黄字说明某项配置需要留意。"),
                     |ui| {
-                        ui.label(
-                            egui::RichText::new(hint.clone())
-                                .small()
-                                .color(egui::Color32::from_rgb(200, 150, 40)),
-                        );
+                        ui.label(egui::RichText::new(hint.clone()).small().color(p.warn));
                     },
                 );
             }
 
             if let Some(service) = &self.state.service {
                 ui.add_space(4.0);
-                let color = if service.is_active() {
-                    egui::Color32::from_rgb(90, 170, 90)
-                } else {
-                    egui::Color32::from_rgb(200, 150, 40)
-                };
+                let color = if service.is_active() { p.ok } else { p.warn };
                 // 服务状态是一行值，走 read_row 就落在控件列；三颗按钮另起一行平分控件列，
                 // 不再让「一段状态文字 + 三颗按钮」挤在一行、右边缘和别处对不上。
                 theme::row(
@@ -1897,11 +1930,7 @@ impl App {
             return;
         }
 
-        let color = if self.cmd_ok {
-            ui.visuals().text_color()
-        } else {
-            egui::Color32::from_rgb(210, 90, 90)
-        };
+        let color = if self.cmd_ok { p.text } else { p.bad };
         egui::ScrollArea::vertical()
             .id_salt("cmd_output")
             .max_height(240.0)
@@ -2143,7 +2172,12 @@ impl App {
             Action::SaveSettings => {
                 self.settings.sanitize();
                 match settings::save(&self.settings) {
-                    Ok(()) => self.set_status("设置已保存".to_string(), false),
+                    Ok(()) => {
+                        // 显式保存已落盘，节流待写标志一并清掉，避免 400 ms 后又重复写一次
+                        self.settings_dirty = false;
+                        self.settings_dirty_at = None;
+                        self.set_status("设置已保存".to_string(), false);
+                    }
                     Err(err) => self.set_status(format!("保存设置失败：{err:#}"), true),
                 }
             }
@@ -2348,15 +2382,32 @@ impl eframe::App for App {
             self.run_action(action);
         }
 
-        // 设置改动即时落盘，避免「调好了没保存」这类丢失
+        // 设置改动等停手再落盘：拖动中的中间值没有必要每次都写文件
         if self.settings != before {
             self.settings.sanitize();
-            let _ = settings::save(&self.settings);
+            self.settings_dirty = true;
+            self.settings_dirty_at = Some(Instant::now());
         }
+        self.flush_settings(root.ctx());
 
-        if self.settings.follow_numlock {
-            root.ctx()
-                .request_repaint_after(Duration::from_millis(self.settings.poll_ms));
+        // 界面空闲时也要定期醒来：NumLock 跟随要按 poll_ms 轮询，机型/服务状态
+        // 也靠 `STATE_REFRESH` 过期重读。少了这个请求，窗口静止时状态会一直停在
+        // 打开那一刻，插拔设备、在别处启停服务都看不见。
+        let wait = if self.settings.follow_numlock {
+            Duration::from_millis(self.settings.poll_ms).min(Duration::from_secs(1))
+        } else {
+            Duration::from_secs(1)
+        };
+        root.ctx().request_repaint_after(wait);
+    }
+}
+
+impl Drop for App {
+    /// 关窗口时兜一次：节流窗口内（[`SETTINGS_SAVE_QUIET`]）改完就退出的设置也要落盘。
+    fn drop(&mut self) {
+        if self.settings_dirty {
+            let _ = settings::save(&self.settings);
+            self.settings_dirty = false;
         }
     }
 }
@@ -2408,37 +2459,8 @@ pub fn window_title() -> &'static str {
     }
 }
 
-/// 顶栏左侧的品牌块：强调色圆角方块 + 白色「NP」。
-///
-/// 纯色块比放一张位图省事，深浅色主题下都成立，也不占资源。
-fn brand_mark(ui: &mut egui::Ui, p: &Palette) {
-    let (rect, _) = ui.allocate_exact_size(egui::Vec2::splat(34.0), egui::Sense::hover());
-    let painter = ui.painter();
-    painter.rect_filled(rect, egui::CornerRadius::same(10), p.accent);
-    // 顶部压一道极淡的白色内高光：单色圆角方块看起来是贴上去的色块，
-    // 有高光之后更像一枚有厚度的图标，成本只有一次圆角矩形填充。
-    let sheen = egui::Rect::from_min_max(
-        rect.shrink(1.0).left_top(),
-        egui::pos2(rect.right() - 1.0, rect.top() + 15.0),
-    );
-    painter.rect_filled(
-        sheen,
-        egui::CornerRadius {
-            nw: 9,
-            ne: 9,
-            sw: 0,
-            se: 0,
-        },
-        egui::Color32::from_white_alpha(26),
-    );
-    painter.text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        "NP",
-        egui::FontId::proportional(14.5),
-        egui::Color32::WHITE,
-    );
-}
+/// 品牌名：与官网 `site/index.html` 的 `.brand-name` 一致。
+const BRAND: &str = "asus-numpad";
 
 fn small(text: impl Into<String>) -> egui::RichText {
     egui::RichText::new(text.into()).small().weak()
@@ -2453,8 +2475,11 @@ fn hex_table(table: &[u8]) -> String {
         .join("  ")
 }
 
-/// 「会写配置」「没找到可执行文件」这类提示色，和系统状态区的告警保持一致。
-const WARN: egui::Color32 = egui::Color32::from_rgb(200, 150, 40);
+/// 「会写配置」「没找到可执行文件」这类提示色。
+///
+/// 取深色主题的告警色：这些提示都落在深色卡片上的实心文字，浅色主题下同一枚
+/// 琥珀色在白底上也有 3.9:1，够用；这样界面里只剩一套状态色，不再各处各写一个 RGB。
+const WARN: egui::Color32 = crate::theme::DARK.warn;
 
 /// 下拉框：`items` 里第一项通常就是默认值，找不到匹配时显示空串而不是 panic。
 fn combo<T: PartialEq + Copy>(
