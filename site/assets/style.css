@@ -147,12 +147,11 @@ h1, h2, h3, h4 { line-height: 1.2; letter-spacing: -.022em; margin: 0; font-weig
 }
 
 .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: -.01em; }
-.brand-mark { display: grid; place-items: center; width: 26px; height: 26px; color: var(--accent); }
+.brand-mark { display: grid; place-items: center; width: 26px; height: 26px; color: var(--accent); transition: transform .18s var(--ease); }
 .brand-mark svg, .brand-mark img { width: 100%; height: 100%; display: block; }
 .brand-mark img { border-radius: 6px; }
 .brand { transition: opacity .18s var(--ease); }
 .brand:hover .brand-mark { transform: translateY(-1px); }
-.brand-mark { transition: transform .18s var(--ease); }
 .brand-name { font-size: 15.5px; }
 .brand-tag {
   font-family: var(--mono);
@@ -529,9 +528,15 @@ html[data-theme="light"] .cell.lit {
 
 /* install tabs */
 .install { position: relative; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
-.tabs {
-  display: flex; flex-wrap: wrap; gap: 2px; padding: 8px 8px 0;
+/* tab 行与复制按钮同一行：换 tab 时按钮不再跟着面板高度上下跳 */
+.install-head {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 10px 0;
   border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
+.tabs {
+  display: flex; flex-wrap: wrap; gap: 2px; flex: 1 1 auto; min-width: 0;
+  padding: 0; border-bottom: 0; background: transparent;
 }
 .tab {
   border: 0; background: transparent; cursor: pointer;
@@ -548,9 +553,9 @@ html[data-theme="light"] .cell.lit {
 
 .pane { padding: 20px 22px 22px; }
 .pane-note { margin: 0 0 12px; font-size: 12.5px; color: var(--text-3); }
-.pane pre { margin: 0; padding: 16px 92px 16px 18px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+.pane pre { margin: 0; padding: 16px 18px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
 .pane pre code { background: none; padding: 0; white-space: pre; font-size: 12.6px; line-height: 1.8; color: var(--text-2); }
-.copy-pane { top: auto; bottom: 30px; right: 30px; }
+.copy-pane { position: static; flex: 0 0 auto; margin: 2px 0 8px; }
 
 .other-ways { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 .other-ways > div { border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; background: var(--surface); }
@@ -561,7 +566,7 @@ pre.mini { margin: 0; background: var(--code-bg); border: 1px solid var(--line);
 pre.mini code { background: none; padding: 0; font-size: 12.6px; }
 
 /* usage */
-.use-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.use-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .use-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 20px; }
 .use-card h3 { font-size: 14px; margin-bottom: 12px; color: var(--text); }
 .use-card pre { margin: 0; overflow-x: auto; }
@@ -576,6 +581,18 @@ pre.mini code { background: none; padding: 0; font-size: 12.6px; }
 }
 .gui-shot figcaption { margin-top: 12px; font-size: 13px; line-height: 1.75; color: var(--text-3); }
 .gui-shot figcaption code { font-size: 12.4px; }
+
+/* 扩展 / 校准 / 驱动三页并排，窄屏回落单列 */
+.gui-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+.gui-strip figure { margin: 0; }
+.gui-strip img {
+  width: 100%; height: auto; display: block;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface);
+}
+.gui-strip figcaption { margin-top: 9px; font-size: 12.6px; line-height: 1.7; color: var(--text-3); }
+
+@media (max-width: 900px) { .gui-strip { grid-template-columns: 1fr; } }
 
 /* faq */
 .faq { display: grid; gap: 10px; }
@@ -636,7 +653,7 @@ details p { margin: 0; padding: 0 0 16px; color: var(--text-2); font-size: 14px;
   background: var(--surface);
 }
 .foot-note { margin: 0; font-size: 13px; color: var(--text-3); max-width: 34ch; }
-.foot-col h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin-bottom: 12px; }
+.foot-col h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin-bottom: 12px; }
 .foot-col a { display: block; font-size: 13.5px; color: var(--text-2); padding: 4px 0; transition: color .18s; }
 .foot-col a:hover { color: var(--accent); }
 .foot-bottom {
@@ -772,7 +789,7 @@ html.js .reveal.in { opacity: 1; transform: none; }
   .quick-cmd { max-width: 100%; }
   .qcode { padding-right: 16px; }
   .copy-btn { margin: 0 10px; }
-  .copy-pane { bottom: 12px; right: 12px; }
+  .copy-pane { margin: 0 0 8px; }
   .pane { padding: 16px; }
   .distro-strip { margin-top: 44px; gap: 14px; }
 
@@ -827,3 +844,18 @@ html.js .reveal.in { opacity: 1; transform: none; }
   line-height: 1.65;
 }
 .notice code { color: var(--text); font-size: .95em; }
+.arch-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.arch-note code { color: var(--text-2); }
+
+/* ---------- 代码块软折行 ----------
+   安装命令里有 100+ 字符的整行（apt 的 tee、dnf 的 --import），窄屏下横向滚动
+   看不出后面还有内容。改成在容器内折行：折行不写入任何字符，复制拿到的仍是原文。 */
+.term pre, .pane pre, pre.mini, .use-card pre { overflow-x: auto; }
+.term code, .pane pre code, .qcode code, pre.mini code, .use-card code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -368,7 +368,7 @@ asus-numpad --allow-unverified run    # 或在設定中設 allow_unverified_layo
 同一個解算函式，真機上採一次，介面裡就能反覆解。底部「設定片段」把 `partition` + `calibration`
 打包，方便搬給同機型的人；片段不含鍵表，鍵表在 `custom_layouts` 裡。
 
-![校準頁：分區、手動校準、樣本回放、設定片段](site/assets/screenshots/gui-calib.png)
+![校準頁：分區、手動校準、樣本回放、設定片段](site/assets/screenshots/gui-calib.webp)
 
 ### 把設定搬給同機型的人
 
@@ -390,12 +390,12 @@ tools/verify-extend.sh
 `~/.config`，也不寫任何 hidraw 裝置。需要手指按觸控板的三項（壓感切換、熱鍵、
 自訂報文）只印出指令，不代你執行。
 
-![擴充頁：自訂佈局、點亮報文、壓感切換、全域熱鍵](site/assets/screenshots/gui-extend.png)
+![擴充頁：自訂佈局、點亮報文、壓感切換、全域熱鍵](site/assets/screenshots/gui-extend.webp)
 
 每一行參數、每個區塊標題和按鈕都掛了懸浮說明，不用把 README 攤在旁邊：
 
-![擴充頁的懸浮說明（淺色）](site/assets/screenshots/gui-extend-hover-light.png)
-![擴充頁的懸浮說明（深色）](site/assets/screenshots/gui-extend-hover-dark.png)
+![擴充頁的懸浮說明（淺色）](site/assets/screenshots/gui-extend-hover-light.webp)
+![擴充頁的懸浮說明（深色）](site/assets/screenshots/gui-extend-hover-dark.webp)
 
 ### 與機型表、佈局校驗的關係
 
@@ -492,7 +492,7 @@ asusctl 側實作同樣的功能，兩條路都歡迎。
 
 同一份 crate 出兩個視窗：Windows 上只管燈光，Linux 上是完整的控制中心。
 
-![Windows 上的燈光控制視窗](site/assets/screenshots/gui-win.png)
+![Windows 上的燈光控制視窗](site/assets/screenshots/gui-win.webp)
 
 `gui/` 送的報文與 CLI 完全相同，兩端都出自共用的 `led_proto` 層，位元組不會漂移。
 
@@ -511,7 +511,7 @@ Linux 上是全套，分七個頁籤：
 | 命令列 | 每個 `asus-numpad` 子命令一張表單，執行時跑同一個執行檔 |
 | 設定 | 檔位數、跟隨 NumLock、輪詢間隔、開機自啟 |
 
-![Linux 控制中心](site/assets/screenshots/gui-main.png)
+![Linux 控制中心](site/assets/screenshots/gui-main.webp)
 
 改動在按下儲存之前只停在記憶體裡；「儲存並重啟」會寫檔並重啟 `asus-numpad` 使用者單元，一步到位。
 介面上不重寫一遍 CLI 的邏輯：命令頁執行的就是真二進位，輸出原樣貼回。

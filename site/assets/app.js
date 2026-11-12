@@ -26,10 +26,12 @@
     "hero.cta2": "下载安装包",
     "hero.note": "脚本会添加软件源并安装软件包。分步命令见<a href=\"#install\">安装</a>。",
     "copy": "复制",
+    "copy.pane": "复制当前命令",
     "theme.toggle": "切换主题",
     "a11y.skip": "跳到正文",
     "a11y.nav": "主导航",
     "a11y.code": "安装命令",
+    "a11y.quick": "快速安装",
 
     "strip.label": "发行版打包",
 
@@ -38,7 +40,7 @@
     "feat.1.t": "不动系统组件",
     "feat.1.d": "输入取自 evdev，输出经 uinput。不替换厂商模块，不覆盖 ACPI 对象，内核升级不受影响，卸载后恢复原状。",
     "feat.2.t": "每种包格式单独构建",
-    "feat.2.d": "deb 在 glibc 2.35 上编译，覆盖 Ubuntu 22.04–24.04 与 Debian 12/13；rpm 在 el9 上编译，覆盖 RHEL 9–10、Fedora 与 openSUSE。发版前 CI 会在每个目标系统上各完成一次安装验证。仓库与 release 附件仅提供 x86_64。",
+    "feat.2.d": "deb 在 glibc 2.35 上编译，覆盖 Ubuntu 22.04–24.04 与 Debian 12/13；rpm 在 el9 上编译，覆盖 RHEL 9–10、Fedora 与 openSUSE。发版前 CI 在对应发行版容器里各自构建一次，并校验产物元数据。仓库与 release 附件仅提供 x86_64。",
     "feat.3.t": "运行期识别机型",
     "feat.3.d": "由 DMI 字段与触摸板模组决定格位中心与键表，包名不含机型，因此不存在装错包的问题。<code>asus-numpad sku</code> 会说明识别结果和依据。",
     "feat.4.t": "四档背光与亮度跟随",
@@ -84,6 +86,7 @@
     "inst.pacman.n": "Arch、Manjaro、EndeavourOS，AUR 源码包名为 <code>asus-numpad-rs</code>",
     "inst.apk.n": "Alpine 3.19+（musl 构建）",
     "inst.nix.n": "Flake，无需添加源",
+    "inst.arch": "这些软件源目前只提供 <code>x86_64</code> / <code>amd64</code>；其他架构请从源码构建：<code>cargo build --release</code>。",
     "inst.notice": "从旧仓库 <code>RunningVAN/asus-numpad</code> 过来的用户：包名相同但来源不同，无法就地升级，换源前先执行一次 <code>sudo apt remove asus-numpad</code>（rpm 用 <code>dnf remove</code>）。这里的源只发布 1.0.0 起，版本号低于旧的 1.2.4，包管理器不会提示升级。",
     "inst.other1.t": "Gentoo 与静态 tarball",
     "inst.other1.d": "Releases 里有适合 ebuild 的静态 tarball，也有 deb、rpm、pkg.tar.zst、apk 供离线安装。",
@@ -93,11 +96,15 @@
 
     "use.title": "常用命令",
     "use.sub": "守护进程由 systemd 启动，命令行用于排查与调参。",
-    "use.gui": "可选的 egui 窗口（<code>asus-numpad-gui</code>）写的是同一份 FEATURE <code>0x0d</code> 报文。Linux 上它是完整的控制中心，分六个页签：灯光（含键盘四档到触摸板亮度的映射，逐档可改）、驱动配置的全部字段、系统状态与服务启停、每个 <code>asus-numpad</code> 子命令的表单、扩展（自定义布局、点亮报文、压感切换、全局热键），以及窗口自身的设置。命令页执行的是同一个可执行文件，不重写逻辑，也就不会漂移。界面按卡片分组，跟随系统的深浅色主题；亮度用逐档的档位条而不是滑块，一格一档。",
+    "use.gui": "可选的 egui 窗口（<code>asus-numpad-gui</code>）写的是同一份 FEATURE <code>0x0d</code> 报文。Linux 上它是完整的控制中心，分七个页签：灯光（含键盘四档到触摸板亮度的映射，逐档可改）、驱动配置的全部字段、系统状态与服务启停、每个 <code>asus-numpad</code> 子命令的表单、扩展（自定义布局、点亮报文、压感切换、全局热键）、给表外机型做网格分区与手动落点校准的校准页，以及窗口自身的设置。命令页执行的是同一个可执行文件，不重写逻辑，也就不会漂移。界面按卡片分组，跟随系统的深浅色主题；亮度用逐档的档位条而不是滑块，一格一档。",
     "use.guiWin": "Windows 上只做灯光：接口、档位、跟随 NumLock、写入日志。小键盘输入交给官方驱动。",
+    "use.shot1": "扩展页：自定义布局、重写点亮报文、压感切换、全局热键。",
+    "use.shot2": "校准页：分区、手动校准、样本回放，以及对应的配置片段。",
+    "use.shot3": "驱动配置页：每个字段都在旁边标出官方 INF 会取的值。",
     "use.a.t": "运行与自检",
     "use.b.t": "背光",
     "use.c.t": "布局与语言",
+    "use.d.t": "机型与校准",
     "use.fine": "配置位于 <code>~/.config/asus-numpad/asus-numpad.json</code>，以 root 运行时读 <code>/etc/asus-numpad/</code>。未写的键沿用厂商默认值：<code>numlock</code>、<code>mixed_mode</code>、<code>grab</code>、<code>follow_keyboard_brightness</code>、<code>allow_unverified_layout</code> 以及两张亮度表。",
 
     "faq.title": "常见问题",
@@ -126,6 +133,7 @@
     "foot.docs": "文档",
     "foot.install": "安装指南",
     "foot.verify": "发布记录",
+    "foot.src": "纯静态页面 · 无追踪",
     "foot.right": "© 2026 asus-numpad · GPL-3.0-or-later"
   };
 
@@ -150,10 +158,12 @@
     "hero.cta2": "下載套件",
     "hero.note": "腳本會加入軟體來源並安裝套件。分步指令見<a href=\"#install\">安裝</a>。",
     "copy": "複製",
+    "copy.pane": "複製目前指令",
     "theme.toggle": "切換主題",
     "a11y.skip": "跳至正文",
     "a11y.nav": "主導覽",
     "a11y.code": "安裝指令",
+    "a11y.quick": "快速安裝",
 
     "strip.label": "發行版打包",
 
@@ -162,7 +172,7 @@
     "feat.1.t": "不動系統元件",
     "feat.1.d": "輸入取自 evdev，輸出經 uinput。不替換廠商模組，不覆寫 ACPI 物件，核心升級不受影響，移除套件後回復原狀。",
     "feat.2.t": "每種套件格式分開建置",
-    "feat.2.d": "deb 在 glibc 2.35 上編譯，涵蓋 Ubuntu 22.04–24.04 與 Debian 12/13；rpm 在 el9 上編譯，涵蓋 RHEL 9–10、Fedora 與 openSUSE。發版前 CI 會在每個目標系統上各完成一次安裝驗證。倉庫與 release 附件僅提供 x86_64。",
+    "feat.2.d": "deb 在 glibc 2.35 上編譯，涵蓋 Ubuntu 22.04–24.04 與 Debian 12/13；rpm 在 el9 上編譯，涵蓋 RHEL 9–10、Fedora 與 openSUSE。發版前 CI 在對應發行版容器裡各自建置一次，並校驗產物中繼資料。倉庫與 release 附件僅提供 x86_64。",
     "feat.3.t": "執行期辨識機型",
     "feat.3.d": "由 DMI 欄位與觸控板模組決定格位中心與鍵表，套件名稱不含機型，因此不存在裝錯套件的問題。<code>asus-numpad sku</code> 會說明辨識結果與依據。",
     "feat.4.t": "四段背光與亮度跟隨",
@@ -208,6 +218,7 @@
     "inst.pacman.n": "Arch、Manjaro、EndeavourOS，AUR 來源套件名為 <code>asus-numpad-rs</code>",
     "inst.apk.n": "Alpine 3.19+（musl 建置）",
     "inst.nix.n": "Flake，無需加入來源",
+    "inst.arch": "這些軟體來源目前只提供 <code>x86_64</code> / <code>amd64</code>；其他架構請從原始碼建置：<code>cargo build --release</code>。",
     "inst.notice": "從舊倉庫 <code>RunningVAN/asus-numpad</code> 過來的使用者：套件名稱相同但來源不同，無法就地升級，換來源前先執行一次 <code>sudo apt remove asus-numpad</code>（rpm 用 <code>dnf remove</code>）。這裡的源只發佈 1.0.0 起，版本號低於舊的 1.2.4，套件管理器不會提示升級。",
     "inst.other1.t": "Gentoo 與靜態 tarball",
     "inst.other1.d": "Releases 裡有適合 ebuild 的靜態 tarball，也有 deb、rpm、pkg.tar.zst、apk 供離線安裝。",
@@ -217,11 +228,15 @@
 
     "use.title": "常用指令",
     "use.sub": "守護行程由 systemd 啟動，命令列用於排查與調參。",
-    "use.gui": "可選的 egui 視窗（<code>asus-numpad-gui</code>）寫的是同一份 FEATURE <code>0x0d</code> 報文。Linux 上它是完整的控制中心，分六個頁籤：燈光（含鍵盤四檔到觸控板亮度的對映，逐檔可改）、驅動設定的全部欄位、系統狀態與服務啟停、每個 <code>asus-numpad</code> 子命令的表單、擴充（自訂佈局、點亮報文、壓感切換、全域熱鍵），以及視窗自行的設定。命令頁執行的是同一個執行檔，不重寫邏輯，也就不會漂移。介面按卡片分組，跟隨系統的深淺色主題；亮度用逐檔的檔位條而不是滑桿，一格一檔。",
+    "use.gui": "可選的 egui 視窗（<code>asus-numpad-gui</code>）寫的是同一份 FEATURE <code>0x0d</code> 報文。Linux 上它是完整的控制中心，分七個頁籤：燈光（含鍵盤四檔到觸控板亮度的對映，逐檔可改）、驅動設定的全部欄位、系統狀態與服務啟停、每個 <code>asus-numpad</code> 子命令的表單、擴充（自訂佈局、點亮報文、壓感切換、全域熱鍵）、給表外機型做網格分割與手動落點校準的校準頁，以及視窗自行的設定。命令頁執行的是同一個執行檔，不重寫邏輯，也就不會漂移。介面按卡片分組，跟隨系統的深淺色主題；亮度用逐檔的檔位條而不是滑桿，一格一檔。",
     "use.guiWin": "Windows 上只做燈光：介面、檔位、跟隨 NumLock、寫入日誌。小鍵盤輸入交給官方驅動。",
+    "use.shot1": "擴充頁：自訂佈局、重寫點亮報文、壓感切換、全域熱鍵。",
+    "use.shot2": "校準頁：分區、手動校準、樣本回放，以及對應的設定片段。",
+    "use.shot3": "驅動設定頁：每個欄位都在旁邊標出官方 INF 會取的值。",
     "use.a.t": "執行與自我檢查",
     "use.b.t": "背光",
     "use.c.t": "佈局與語言",
+    "use.d.t": "機型與校準",
     "use.fine": "設定檔位於 <code>~/.config/asus-numpad/asus-numpad.json</code>，以 root 執行時讀 <code>/etc/asus-numpad/</code>。未寫的鍵沿用廠商預設值：<code>numlock</code>、<code>mixed_mode</code>、<code>grab</code>、<code>follow_keyboard_brightness</code>、<code>allow_unverified_layout</code> 以及兩張亮度表。",
 
     "faq.title": "常見問題",
@@ -249,6 +264,7 @@
     "foot.docs": "文件",
     "foot.install": "安裝指南",
     "foot.verify": "發佈記錄",
+    "foot.src": "純靜態頁面 · 無追蹤",
     "foot.right": "© 2026 asus-numpad · GPL-3.0-or-later"
   };
 
@@ -262,6 +278,7 @@
   /* 只出现在 aria-label 上的键：标签文字是符号，没有可快照的可见文本 */
   I18N.en["a11y.nav"] = "Main";
   I18N.en["a11y.code"] = "Install command";
+  I18N.en["a11y.quick"] = "Quick install";
 
   var LANGS = ["en", "zh-CN", "zh-TW"];
 

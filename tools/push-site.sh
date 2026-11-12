@@ -18,7 +18,10 @@ git clone --quiet --depth 1 --branch "$BRANCH" "$REMOTE" "$work/site"
 
 # 清空站点仓库工作区（.git 除外），再整体覆盖为 site/ 的内容
 find "$work/site" -mindepth 1 -maxdepth 1 ! -name .git -exec command rm -rf {} +
-cp -R "$src/index.html" "$src/site.webmanifest" "$src/.nojekyll" "$src/assets" "$work/site/"
+# 整体覆盖为 site/ 的全部内容（含 .nojekyll 这类隐藏文件）：
+# 以后新增页面或资源不必再改这份白名单
+cp -R "$src"/. "$work/site"/
+find "$work/site" -name '.DS_Store' -delete
 
 cd "$work/site"
 git add -A

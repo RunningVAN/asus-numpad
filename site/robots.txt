@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://asus-numpad.github.io/sitemap.xml

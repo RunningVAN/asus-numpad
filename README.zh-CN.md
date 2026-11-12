@@ -367,7 +367,7 @@ asus-numpad --allow-unverified run    # 或在配置中设 allow_unverified_layo
 同一个解算函数，真机上采一次，界面里就能反复解。底部「配置片段」把 `partition` + `calibration`
 打包，方便搬给同机型的人；片段不含键表，键表在 `custom_layouts` 里。
 
-![校准页：分区、手动校准、样本回放、配置片段](site/assets/screenshots/gui-calib.png)
+![校准页：分区、手动校准、样本回放、配置片段](site/assets/screenshots/gui-calib.webp)
 
 ### 把配置搬给同机型的人
 
@@ -389,12 +389,12 @@ tools/verify-extend.sh
 hidraw 设备。需要手指按触摸板的三项（压感切换、热键、自定义报文）只打印命令，
 不代替你执行。
 
-![扩展页：自定义布局、点亮报文、压感切换、全局热键](site/assets/screenshots/gui-extend.png)
+![扩展页：自定义布局、点亮报文、压感切换、全局热键](site/assets/screenshots/gui-extend.webp)
 
 每一行参数、每个区块标题和按钮都挂了悬浮说明，不用把 README 摊在旁边：
 
-![扩展页的悬浮说明（浅色）](site/assets/screenshots/gui-extend-hover-light.png)
-![扩展页的悬浮说明（深色）](site/assets/screenshots/gui-extend-hover-dark.png)
+![扩展页的悬浮说明（浅色）](site/assets/screenshots/gui-extend-hover-light.webp)
+![扩展页的悬浮说明（深色）](site/assets/screenshots/gui-extend-hover-dark.webp)
 
 ### 与机型表、布局校验的关系
 
@@ -491,7 +491,7 @@ ACPI 对象，任意多点触控板走的是同一条代码路径。移植工作
 
 同一份 crate 出两个窗口：Windows 上只管灯光，Linux 上是完整的控制中心。
 
-![Windows 上的灯光控制窗口](site/assets/screenshots/gui-win.png)
+![Windows 上的灯光控制窗口](site/assets/screenshots/gui-win.webp)
 
 `gui/` 发的报文与 CLI 完全相同，两端都出自共用的 `led_proto` 层，字节不会漂移。
 
@@ -510,7 +510,7 @@ Linux 上是全套，分七个页签：
 | 命令行 | 每个 `asus-numpad` 子命令一张表单，执行时跑同一个可执行文件 |
 | 设置 | 档位数、跟随 NumLock、轮询间隔、开机自启 |
 
-![Linux 控制中心](site/assets/screenshots/gui-main.png)
+![Linux 控制中心](site/assets/screenshots/gui-main.webp)
 
 改动在按保存之前只停在内存里；「保存并重启」会写盘并重启 `asus-numpad` 用户单元，一步到位。
 界面上不重写一遍 CLI 的逻辑：命令页执行的就是真二进制，输出原样贴回。

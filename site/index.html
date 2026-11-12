@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <title>asus-numpad — NumberPad on Linux</title>
 <meta name="description" content="Linux userspace driver for the ASUS NumberPad. No kernel module replaced, no ACPI patched. One package per ecosystem, model detected at runtime.">
 <link rel="canonical" href="https://asus-numpad.github.io/">
@@ -10,6 +11,7 @@
 <meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)">
 
 <!-- brand: icons -->
+<link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="icon" href="assets/favicon-16.png" sizes="16x16" type="image/png">
@@ -25,6 +27,7 @@
 <meta property="og:image" content="https://asus-numpad.github.io/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/png">
 <meta property="og:image:alt" content="asus-numpad — the ASUS NumberPad, native on Linux">
 <meta property="og:locale" content="en_US">
 <meta property="og:locale:alternate" content="zh_CN">
@@ -48,7 +51,7 @@
   "codeRepository": "https://github.com/asus-numpad/asus-numpad",
   "downloadUrl": "https://github.com/asus-numpad/asus-numpad/releases",
   "softwareVersion": "1.0.3",
-  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "license": "https://spdx.org/licenses/GPL-3.0-or-later.html",
   "inLanguage": ["en", "zh-Hans", "zh-Hant"],
   "isAccessibleForFree": true,
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -137,7 +140,7 @@
           <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact2">Single command install</span></li>
           <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3 8.4 3.3 3.3L13 4.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="hero.fact3">Packages GPG-signed</span></li>
         </ul>
-        <div class="quick-cmd" role="group" aria-label="Quick install">
+        <div class="quick-cmd" role="group" aria-label="Quick install" data-i18n-aria="a11y.quick">
           <div class="quick-tabs">
             <button class="qtab active" type="button" aria-pressed="true" data-qt="sh">apt / dnf / zypper / pacman / apk</button>
             <button class="qtab" type="button" aria-pressed="false" data-qt="nix">Nix</button>
@@ -195,7 +198,7 @@
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5 12 4l8.5 4.5v7L12 20l-8.5-4.5v-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3.5 8.5 12 13l8.5-4.5M12 13v7" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
           <h3 data-i18n="feat.2.t">Each format is built separately</h3>
-          <p data-i18n="feat.2.d">The deb is built on glibc 2.35 and covers Ubuntu 22.04–24.04 with Debian 12/13; the rpm is built on el9 and covers RHEL 9–10, Fedora and openSUSE. Before publishing, CI installs the same package on every target system. Repositories and release assets are x86_64 only.</p>
+          <p data-i18n="feat.2.d">The deb is built on glibc 2.35 and covers Ubuntu 22.04–24.04 with Debian 12/13; the rpm is built on el9 and covers RHEL 9–10, Fedora and openSUSE. CI builds each package inside its own distribution container and checks the artifact metadata before publishing. Repositories and release assets are x86_64 only.</p>
         </article>
         <article class="card reveal">
           <div class="card-ic"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
@@ -272,28 +275,28 @@ Backlight channel hidraw (FEATURE 0x0d, 4 steps)
       </header>
       <div class="model-shots reveal">
         <figure>
-          <img src="assets/models/g533.webp" alt="ROG Strix SCAR 15 / G15 (2022)" width="900" height="645" decoding="async">
+          <img src="assets/models/g533.webp" alt="ROG Strix SCAR 15 / G15 (2022)" width="900" height="645" loading="lazy" decoding="async">
           <figcaption>
             <code>g533</code><span data-i18n="models.m533">ROG Strix SCAR 15 / Strix G15 (2022): G533*, G513*</span>
             <em data-i18n="models.n533">2021 variants ship without a NumberPad and are not matched</em>
           </figcaption>
         </figure>
         <figure>
-          <img src="assets/models/g614.webp" alt="ROG Strix SCAR 16 / G16 (2023)" width="900" height="690" decoding="async">
+          <img src="assets/models/g614.webp" alt="ROG Strix SCAR 16 / G16 (2023)" width="900" height="690" loading="lazy" decoding="async">
           <figcaption>
             <code>g614</code><span data-i18n="models.m614">ROG Strix SCAR 16 / Strix G16 (2023–2024): G614, G634</span>
             <em data-i18n="models.n614">Verified on G634JY; the Chinese-market Strix G (魔霸新锐) is a 4-zone RGB SKU and carries no pad</em>
           </figcaption>
         </figure>
         <figure>
-          <img src="assets/models/g615.webp" alt="ROG Strix SCAR 16 (2025)" width="900" height="716" decoding="async">
+          <img src="assets/models/g615.webp" alt="ROG Strix SCAR 16 (2025)" width="900" height="716" loading="lazy" decoding="async">
           <figcaption>
             <code>g615</code><span data-i18n="models.m615">ROG Strix SCAR 16 / Strix G16 (2025–2026): G615, G635</span>
             <em data-i18n="models.n615">2026 keeps the same codes; the 2025 Chinese-market Strix G (魔霸新锐) is 4-zone RGB as well</em>
           </figcaption>
         </figure>
         <figure>
-          <img src="assets/models/gx550.webp" alt="ROG Zephyrus Duo 16 (GX650)" width="900" height="655" decoding="async">
+          <img src="assets/models/gx550.webp" alt="ROG Zephyrus Duo 16 (GX650)" width="900" height="655" loading="lazy" decoding="async">
           <figcaption>
             <code>gx550</code><span data-i18n="models.mgx">ROG Zephyrus Duo 15 / Duo 15 SE / Duo 16 (2020–2023): GX550, GX551, GX650</span>
             <em data-i18n="models.ngx">Side-mounted pad; number mode is a keyboard key</em>
@@ -335,13 +338,16 @@ Backlight channel hidraw (FEATURE 0x0d, 4 steps)
       </div>
 
       <div class="install reveal">
-        <div class="tabs" role="tablist">
-          <button class="tab active" role="tab" id="tab-apt" aria-selected="true" aria-controls="pane-apt" data-tab="apt">apt</button>
-          <button class="tab" role="tab" id="tab-dnf" aria-selected="false" aria-controls="pane-dnf" data-tab="dnf">dnf</button>
-          <button class="tab" role="tab" id="tab-zypper" aria-selected="false" aria-controls="pane-zypper" data-tab="zypper">zypper</button>
-          <button class="tab" role="tab" id="tab-pacman" aria-selected="false" aria-controls="pane-pacman" data-tab="pacman">pacman</button>
-          <button class="tab" role="tab" id="tab-apk" aria-selected="false" aria-controls="pane-apk" data-tab="apk">apk</button>
-          <button class="tab" role="tab" id="tab-nix" aria-selected="false" aria-controls="pane-nix" data-tab="nix">nix</button>
+        <div class="install-head">
+          <div class="tabs" role="tablist">
+            <button type="button" class="tab active" role="tab" id="tab-apt" aria-selected="true" aria-controls="pane-apt" data-tab="apt">apt</button>
+            <button type="button" class="tab" role="tab" id="tab-dnf" aria-selected="false" aria-controls="pane-dnf" data-tab="dnf">dnf</button>
+            <button type="button" class="tab" role="tab" id="tab-zypper" aria-selected="false" aria-controls="pane-zypper" data-tab="zypper">zypper</button>
+            <button type="button" class="tab" role="tab" id="tab-pacman" aria-selected="false" aria-controls="pane-pacman" data-tab="pacman">pacman</button>
+            <button type="button" class="tab" role="tab" id="tab-apk" aria-selected="false" aria-controls="pane-apk" data-tab="apk">apk</button>
+            <button type="button" class="tab" role="tab" id="tab-nix" aria-selected="false" aria-controls="pane-nix" data-tab="nix">nix</button>
+          </div>
+          <button class="copy-btn copy-pane" type="button" aria-label="Copy current command" data-i18n-aria="copy.pane"><span data-i18n="copy">Copy</span></button>
         </div>
 
         <div class="pane" role="tabpanel" id="pane-apt" aria-labelledby="tab-apt" data-pane="apt">
@@ -418,8 +424,9 @@ sudo apk add asus-numpad</code></pre>
 # NixOS
 services.asus-numpad.enable = true;</code></pre>
         </div>
-        <button class="copy-btn copy-pane" type="button" aria-label="Copy"><span data-i18n="copy">Copy</span></button>
       </div>
+
+      <p class="arch-note reveal" data-i18n="inst.arch">These repositories ship <code>x86_64</code> / <code>amd64</code> only. On other architectures, build from source: <code>cargo build --release</code>.</p>
 
       <p class="notice reveal" data-i18n="inst.notice">
         Coming from <code>RunningVAN/asus-numpad</code>? The package name is the same but the source
@@ -473,6 +480,13 @@ asus-numpad layout auto
 asus-numpad lang zh-CN
 asus-numpad --lang en check</code></pre>
         </div>
+        <div class="use-card reveal">
+          <h3 data-i18n="use.d.t">Model and calibration</h3>
+          <pre><code>asus-numpad sku                    # detected model and its parameters
+asus-numpad sku g614               # pin a model by hand
+asus-numpad calibrate --samples samples.json
+asus-numpad calibrate --samples samples.json --write</code></pre>
+        </div>
       </div>
       <p class="fine reveal" data-i18n="use.fine">
         Config lives in <code>~/.config/asus-numpad/asus-numpad.json</code>, or <code>/etc/asus-numpad/</code> under root.
@@ -480,23 +494,39 @@ asus-numpad --lang en check</code></pre>
         <code>follow_keyboard_brightness</code>, <code>allow_unverified_layout</code> and the brightness tables.
       </p>
       <figure class="gui-shot reveal">
-        <img src="assets/screenshots/gui-main.png" alt="asus-numpad-gui control center on Linux: HID interface cards on the left, lighting and driver config tabs on the right" width="1180" height="900" loading="lazy" decoding="async">
+        <img src="assets/screenshots/gui-main.webp" alt="asus-numpad-gui control center on Linux: HID interface cards on the left, lighting and driver config tabs on the right" width="1180" height="900" loading="lazy" decoding="async">
         <figcaption data-i18n="use.gui">
           The optional egui window (<code>asus-numpad-gui</code>) writes the same FEATURE <code>0x0d</code> report.
-          On Linux it is the whole control center in six tabs: lighting — including the keyboard's four brightness
+          On Linux it is the whole control center in seven tabs: lighting — including the keyboard's four brightness
           steps mapped onto touchpad levels, editable step by step — every driver config field, system state with
           unit control, a form for each <code>asus-numpad</code> subcommand, the extension tab for custom layouts,
-          LED report, hard-press switching and global hotkeys, and the window's own settings. The
+          LED report, hard-press switching and global hotkeys, the calibration tab for grids and manual calibration
+          on machines outside the table, and the window's own settings. The
           command tab runs the same binary, so the two never drift apart. The window groups everything into cards, follows the system light/dark theme, and steps brightness with a per-step bar instead of a slider.
         </figcaption>
       </figure>
       <figure class="gui-shot compact reveal">
-        <img src="assets/screenshots/gui-win.png" alt="asus-numpad-gui lighting window on Windows" width="980" height="780" loading="lazy" decoding="async">
+        <img src="assets/screenshots/gui-win.webp" alt="asus-numpad-gui lighting window on Windows" width="980" height="780" loading="lazy" decoding="async">
         <figcaption data-i18n="use.guiWin">
           On Windows the window only covers light: interfaces, steps, NumLock follow, write log. Numpad input is
           left to the vendor driver.
         </figcaption>
       </figure>
+
+      <div class="gui-strip reveal">
+        <figure>
+          <img src="assets/screenshots/gui-extend.webp" alt="Extension tab: custom layouts, LED report, hard-press toggle, global hotkeys" width="1180" height="900" loading="lazy" decoding="async">
+          <figcaption data-i18n="use.shot1">Extension tab: custom layouts, a rewritten LED report, hard-press switching and global hotkeys.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/screenshots/gui-calib.webp" alt="Calibrate tab: partition, manual calibration, sample replay, config snippet" width="1180" height="900" loading="lazy" decoding="async">
+          <figcaption data-i18n="use.shot2">Calibrate tab: partition, manual calibration, sample replay and the matching config snippet.</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/screenshots/gui-driver.webp" alt="Driver tab: every config field with the vendor default beside it" width="1180" height="900" loading="lazy" decoding="async">
+          <figcaption data-i18n="use.shot3">Driver tab: every config field, with the value the vendor INF would use shown beside it.</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
@@ -546,7 +576,7 @@ asus-numpad --lang en check</code></pre>
       <div>
         <div class="brand foot-brand">
           <span class="brand-mark" aria-hidden="true">
-            <img src="assets/logo.svg" alt="" width="26" height="26" decoding="async">
+            <img src="assets/logo.svg" alt="" width="26" height="26" decoding="async" loading="lazy">
           </span>
           <span class="brand-name">asus-numpad</span>
         </div>
@@ -560,14 +590,14 @@ asus-numpad --lang en check</code></pre>
         </ul>
       </div>
       <div class="foot-col">
-        <h4 data-i18n="foot.project">Project</h4>
+        <h3 data-i18n="foot.project">Project</h3>
         <a href="https://github.com/asus-numpad/asus-numpad" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/asus-numpad/asus-numpad/releases" target="_blank" rel="noopener">Releases</a>
         <a href="https://github.com/asus-numpad/asus-numpad/blob/main/docs/machines.md" target="_blank" rel="noopener" data-i18n="foot.machines">Model notes</a>
         <a href="https://github.com/asus-numpad/asus-numpad/issues" target="_blank" rel="noopener">Issues</a>
       </div>
       <div class="foot-col">
-        <h4 data-i18n="foot.docs">Docs</h4>
+        <h3 data-i18n="foot.docs">Docs</h3>
         <a href="https://github.com/asus-numpad/asus-numpad#readme" target="_blank" rel="noopener">README</a>
         <a href="https://github.com/asus-numpad/asus-numpad/blob/main/docs/install.md" target="_blank" rel="noopener" data-i18n="foot.install">Install guide</a>
         <a href="https://github.com/asus-numpad/asus-numpad/blob/main/docs/release-notes/1.0.3.md" target="_blank" rel="noopener" data-i18n="foot.verify">Release notes</a>
@@ -577,7 +607,7 @@ asus-numpad --lang en check</code></pre>
     </div>
     <div class="wrap foot-bottom">
       <span data-i18n="foot.right">© 2026 asus-numpad · GPL-3.0-or-later</span>
-      <span class="foot-src">site/index.html · 1.0.3</span>
+      <span class="foot-src" data-i18n="foot.src">Static site · no trackers</span>
     </div>
   </footer>
 

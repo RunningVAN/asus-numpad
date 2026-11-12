@@ -358,7 +358,7 @@
   热键解析不出来，现在点一下就全报出来，不必存盘再去 `check` 对账。
 - 新增 `ASUS_NUMPAD_GUI_SIZE=1180x900` 覆盖初始窗口尺寸（会被最小尺寸和屏幕高度夹住），
   文档截图要靠它把整页拍全。
-- 三语 README 的扩展一节补扩展页截图 `site/assets/screenshots/gui-extend.png`。
+- 三语 README 的扩展一节补扩展页截图 `site/assets/screenshots/gui-extend.webp`。
 
 ### 排障输出里三处会误导人的地方
 

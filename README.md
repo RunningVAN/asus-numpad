@@ -414,7 +414,7 @@ match the column count or that contains zero/negative weights, a `numlock_cell` 
 rejected as the config is loaded and named in the notes, so `asus-numpad check` reports them instead of
 silently drawing a wrong grid. Only the offending field is dropped; everything else still applies.
 
-![Calibrate tab: partition, manual calibration, sample replay, snippet](site/assets/screenshots/gui-calib.png)
+![Calibrate tab: partition, manual calibration, sample replay, snippet](site/assets/screenshots/gui-calib.webp)
 
 ### Handing a config to someone with the same model
 
@@ -440,13 +440,13 @@ of silently applied. It works on a `mktemp` config - nothing under `~/.config` o
 hidraw device is touched. Items that need fingers on the touchpad (hard-press toggle,
 hotkey, custom report) are printed as commands to paste, not executed.
 
-![Extension page: custom layouts, LED report, pressure toggle, global hotkeys](site/assets/screenshots/gui-extend.png)
+![Extension page: custom layouts, LED report, pressure toggle, global hotkeys](site/assets/screenshots/gui-extend.webp)
 
 Every field, block title and button carries a hover explanation, so the page is usable
 without the README open:
 
-![Hover explanation on the extension page (light)](site/assets/screenshots/gui-extend-hover-light.png)
-![Hover explanation on the extension page (dark)](site/assets/screenshots/gui-extend-hover-dark.png)
+![Hover explanation on the extension page (light)](site/assets/screenshots/gui-extend-hover-light.webp)
+![Hover explanation on the extension page (dark)](site/assets/screenshots/gui-extend-hover-dark.webp)
 
 ### How this relates to model detection and layout validation
 
@@ -557,7 +557,7 @@ with FEATURE `0x0d` takes priority, then ASUS `0b05:*`, then i2c (`0x38` / `0x15
 
 Two windows, one crate. Windows gets a lighting panel; Linux gets the full control center.
 
-![ASUS NumberPad lighting window on Windows](site/assets/screenshots/gui-win.png)
+![ASUS NumberPad lighting window on Windows](site/assets/screenshots/gui-win.webp)
 
 `gui/` writes the same FEATURE `0x0d` report the CLI does, so the traffic on both platforms comes
 from the shared `led_proto` layer and stays byte-identical.
@@ -578,7 +578,7 @@ On Linux it is the whole thing, split into seven tabs:
 | Command line | one form per `asus-numpad` subcommand, spawning the real binary |
 | Settings | step count, NumLock follow, poll interval, enable on login |
 
-![Linux control center](site/assets/screenshots/gui-main.png)
+![Linux control center](site/assets/screenshots/gui-main.webp)
 
 Edits live in memory until you press save, or "save and restart", which writes the file and restarts
 the `asus-numpad` user unit in one go. Nothing duplicates the CLI: the command tab spawns the same

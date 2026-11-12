@@ -31,15 +31,15 @@ Windows 侧只做灯光：向设备的 HID FEATURE 报文写入亮度命令字�
 
 Windows 只有灯光这一页——那边的键位处理是官方驱动的事，不需要本程序插手：
 
-![Windows 灯光控制窗口](../site/assets/screenshots/gui-win.png)
+![Windows 灯光控制窗口](../site/assets/screenshots/gui-win.webp)
 
 Linux 是全套。灯光页：
 
-![Linux 控制中心 · 灯光](../site/assets/screenshots/gui-main.png)
+![Linux 控制中心 · 灯光](../site/assets/screenshots/gui-main.webp)
 
 驱动配置页：
 
-![Linux 控制中心 · 驱动配置](../site/assets/screenshots/gui-driver.png)
+![Linux 控制中心 · 驱动配置](../site/assets/screenshots/gui-driver.webp)
 
 「驱动配置」页按驱动配置文件（`~/.config/asus-numpad/asus-numpad.json`，root 下 `/etc/asus-numpad/asus-numpad.json`）的字段分组，改完不写盘、只在内存里攒草稿，底部按钮才落盘：
 
@@ -110,7 +110,7 @@ ASUS_NUMPAD_GUI_THEME=light ASUS_NUMPAD_GUI_SHOT=hover.ppm ./target/release/asus
 
 ## 命令面板
 
-![ASUS NumberPad 背光控制窗口](../site/assets/screenshots/gui-main.png)
+![ASUS NumberPad 背光控制窗口](../site/assets/screenshots/gui-main.webp)
 
 窗口里那张「命令行」面板把 `asus-numpad` 的子命令逐个接进来。它不是另写一份实现：表单拼出
 argv，后台跑同一个可执行文件，stdout / stderr 原样贴回输出框，面板上还显示完整的命令行，方便
