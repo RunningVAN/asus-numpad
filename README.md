@@ -408,6 +408,12 @@ through the same solver, so a sample taken on the machine can be solved from the
 re-running the CLI. The tab also packs `partition` + `calibration` into a snippet for copying to
 another machine of the same model - the keymap is not included, that lives in `custom_layouts`.
 
+Values that can be judged wrong without touching the panel - a column or row count outside 1..=8, a
+rect with the right and left edges swapped (or no area at all), a ratio list whose length does not
+match the column count or that contains zero/negative weights, a `numlock_cell` outside the grid - are
+rejected as the config is loaded and named in the notes, so `asus-numpad check` reports them instead of
+silently drawing a wrong grid. Only the offending field is dropped; everything else still applies.
+
 ![Calibrate tab: partition, manual calibration, sample replay, snippet](site/assets/screenshots/gui-calib.png)
 
 ### Handing a config to someone with the same model
