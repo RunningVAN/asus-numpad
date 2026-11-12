@@ -68,6 +68,11 @@ jobs:
           cargo build --release --bin asus-numpad
           bash tools/verify-extend.sh --bin target/release/asus-numpad
           cat verify-extend.txt
+      # 服务侧约定（unit 的重试语义、退出码、锁、通道漂移、配置不被静默丢弃）：
+      # 纯静态检查，不起进程、不碰设备。
+      - name: 服务侧约定自检
+        run: |
+          bash tools/verify-service.sh
 
   # 每个发行版在自己的容器里出包，这是最贴近用户的验证方式
   package:

@@ -729,6 +729,11 @@ impl Engine {
         self.led_off(&crate::i18n::t("engine.reason.exit"));
         self.numlock_restore_state();
         self.numlock_forced = false;
+        // 退出前把手里的键放开：uinput 节点销毁时内核也会补释放，但「先灭灯、
+        // 再松 grab」之间还有几毫秒，这几毫秒里用户看到的是一颗卡住的键。
+        if let Some(k) = self.pressed_key.take() {
+            self.release(k);
+        }
         self.ungrab();
         self.enabled = false;
         self.armed_key = None;

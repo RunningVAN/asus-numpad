@@ -690,8 +690,10 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<ServiceExit> {
     // 键盘节点的失败计数与上次枚举时刻：键盘拔插后要能自己找回来
     let mut kb_failures = 0u32;
     let mut last_kb_scan: Option<std::time::Instant> = None;
-    // 上一帧的挂起感知时钟：差值异常大 = 期间系统睡过，硬件状态要重新对齐
-    let mut last_boot_ms = SystemClock::boottime_ms();
+    // 上一帧的挂起感知时钟：差值异常大 = 期间系统睡过，硬件状态要重新对齐。
+    // 存 Option 而不是裸值：clock_gettime 理论上会失败（返回 0），拿 0 参与差值
+    // 会得出一个天文数字，把「读数失败」误判成「刚睡醒」，白白重刷一次灯。
+    let mut last_boot_ms: Option<f64> = None;
     // 设备真没了时的退出原因：先正常收尾（灭灯 / 松 grab），再以非零码退出，
     // 让 systemd 的 Restart=on-failure 把服务拉起来
     let mut lost_reason: Option<String> = None;
@@ -701,22 +703,31 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<ServiceExit> {
         //    而引擎内部仍是「已点亮」。不主动补一次灯，用户看到的就是
         //    「唤醒之后数字区一直黑着，得手动重启服务」。
         let boot_now = SystemClock::boottime_ms();
-        if crate::lifecycle::resume_detected(boot_now - last_boot_ms) {
-            engine.resync_after_resume();
+        if boot_now > 0.0 {
+            // 首个有效读数只记基准，不参与判定（否则第一帧就会被当成「刚睡醒」）
+            if let Some(prev) = last_boot_ms {
+                if crate::lifecycle::resume_detected(boot_now - prev) {
+                    engine.resync_after_resume();
+                }
+            }
+            last_boot_ms = Some(boot_now);
         }
-        last_boot_ms = boot_now;
 
         // 1) 触摸板事件
         let ready = match tpad.borrow().wait_readable(frame_ms) {
             Ok(ready) => ready,
             Err(err) => {
-                read_failures += 1;
-                if device_gone(&err, read_failures) {
-                    lost_reason = Some(crate::i18n::tf(
-                        "run.device_lost",
-                        &[("err", &err.to_string())],
-                    ));
-                    break;
+                // poll 被信号打断（每次 reload / stop 都会来一发）不算设备失效：
+                // 这条路径每秒可能走一次，计进失败次数就会凑够阈值把服务踢下去。
+                if err.kind() != std::io::ErrorKind::Interrupted {
+                    read_failures += 1;
+                    if device_gone(&err, read_failures) {
+                        lost_reason = Some(crate::i18n::tf(
+                            "run.device_lost",
+                            &[("err", &err.to_string())],
+                        ));
+                        break;
+                    }
                 }
                 false
             }
@@ -730,7 +741,9 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<ServiceExit> {
                     }
                 }
                 Err(err) => {
-                    read_failures += 1;
+                    if err.kind() != std::io::ErrorKind::Interrupted {
+                        read_failures += 1;
+                    }
                     if device_gone(&err, read_failures) {
                         lost_reason = Some(crate::i18n::tf(
                             "run.device_lost",

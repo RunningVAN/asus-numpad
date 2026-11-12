@@ -144,6 +144,15 @@ pub struct App {
     /// 平台状态快照（机型、布局、背光通道、后台服务）
     state: Snapshot,
     state_at: Instant,
+    /// 后台重读平台状态的收件口。`snapshot()` 在 Linux 上要起几个 `systemctl`
+    /// 子进程，同步跑会每隔 10 秒把界面卡住几十毫秒（systemd 忙的时候更久），
+    /// 所以改成「发给线程、下一帧取回」，与命令面板同一套路。
+    state_rx: Option<std::sync::mpsc::Receiver<Snapshot>>,
+    /// 有人要求「刷新一下状态」。放在这里而不是直接调用，是因为发起刷新的地方
+    /// （命令执行完、点了刷新按钮）未必手上有 `egui::Context`。
+    state_want: bool,
+    /// 上一次设置写盘失败的原因：同一条错误只往状态栏报一次，避免每 400 ms 刷一遍。
+    settings_save_err: Option<String>,
     /// 是否画 Linux 全套面板；Windows 只画灯光
     ui_full: bool,
     /// 右侧当前页（只有全套模式才显示页签）
@@ -222,6 +231,9 @@ impl App {
             font_note,
             state,
             state_at: Instant::now(),
+            state_rx: None,
+            state_want: false,
+            settings_save_err: None,
             ui_full: ui_full(),
             tab: Page::from_env(),
             driver,
@@ -256,15 +268,54 @@ impl App {
     }
 
     /// 重读平台状态。服务启停之后必须调用，否则界面还显示旧状态。
-    fn refresh_state(&mut self) {
-        self.state = sysinfo::snapshot();
+    ///
+    /// 起子进程读 systemd 状态这一步放到线程里：界面线程只负责发包、收包。
+    /// 还在读的时候再调一次不会排队（`state_rx` 占着就跳过）。
+    fn refresh_state(&mut self, ctx: &egui::Context) {
+        if self.state_rx.is_some() {
+            // 上一次还没回来：留着这个请求，等收包后再发起，别把「刚重启完服务，
+            // 界面还显示旧状态」拖到下一个 10 秒周期
+            self.state_want = true;
+            return;
+        }
+        self.state_want = false;
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(sysinfo::snapshot());
+        });
+        self.state_rx = Some(rx);
         self.state_at = Instant::now();
-        self.service_enabled = self
-            .state
-            .service
-            .as_ref()
-            .map(|s| s.enabled.trim() == "enabled")
-            .unwrap_or(false);
+        // 结果到达时得有下一次重绘，否则最快也要等下一次鼠标移动才更新
+        ctx.request_repaint_after(Duration::from_millis(120));
+    }
+
+    /// 把后台读到的平台状态收进来。
+    fn poll_state(&mut self, ctx: &egui::Context) {
+        let Some(rx) = self.state_rx.as_ref() else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(snap) => {
+                self.state = snap;
+                self.service_enabled = self
+                    .state
+                    .service
+                    .as_ref()
+                    .map(|s| s.enabled.trim() == "enabled")
+                    .unwrap_or(false);
+                self.state_rx = None;
+                ctx.request_repaint();
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                // 线程还没回话：约一帧之后再试，别把界面挂在等待上
+                ctx.request_repaint_after(Duration::from_millis(120));
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                // 线程没了（理论上不会）：清掉占位，允许重新发起，别永久卡住刷新
+                self.state_rx = None;
+                self.state_at = Instant::now();
+            }
+        }
     }
 
     /// 设置脏了且已经停手，就写一次盘；还没停手则约好下一次重绘，别让计时停住。
@@ -280,9 +331,28 @@ impl App {
             ctx.request_repaint_after(SETTINGS_SAVE_QUIET - waited);
             return;
         }
-        let _ = settings::save(&self.settings);
-        self.settings_dirty = false;
-        self.settings_dirty_at = None;
+        match settings::save(&self.settings) {
+            Ok(()) => {
+                self.settings_dirty = false;
+                self.settings_dirty_at = None;
+                self.settings_save_err = None;
+            }
+            Err(err) => {
+                // 写不进去（磁盘满、目录被删、权限被改）绝不能静默：界面其他地方都在
+                // 说「已保存」，实际重启之后就没了。保留脏标记，等 400 ms 再试一次；
+                // 同一条错误只报一次，别把状态栏刷成滚动日志。
+                let text = err.to_string();
+                if self.settings_save_err.as_deref() != Some(text.as_str()) {
+                    self.set_status(
+                        format!("设置没能写入磁盘：{text}（稍后自动重试）"),
+                        true,
+                    );
+                    self.settings_save_err = Some(text);
+                }
+                self.settings_dirty_at = Some(Instant::now());
+                ctx.request_repaint_after(SETTINGS_SAVE_QUIET);
+            }
+        }
     }
 
     fn set_status(&mut self, text: String, bad: bool) {
@@ -394,7 +464,7 @@ impl App {
 
         // 写配置的子命令会改机型 / 布局 / 档位 / 语言，界面上的状态跟着重读一次
         if ok && wrote {
-            self.refresh_state();
+            self.state_want = true;
         }
     }
 
@@ -2207,7 +2277,7 @@ impl App {
                     Err(err) => self.set_status(format!("{err:#}"), true),
                 }
                 // 服务状态刚变过，立刻重读，否则界面还显示旧值
-                self.refresh_state();
+                self.state_want = true;
             }
             Action::ServiceAutostart(on) => {
                 match sysinfo::service_autostart(on) {
@@ -2217,9 +2287,9 @@ impl App {
                     }
                     Err(err) => self.set_status(format!("{err:#}"), true),
                 }
-                self.refresh_state();
+                self.state_want = true;
             }
-            Action::RefreshState => self.refresh_state(),
+            Action::RefreshState => self.state_want = true,
             Action::RunCommand => self.run_command(),
             Action::SaveDriver => match self.driver.save() {
                 Ok(msg) => self.set_status(msg, false),
@@ -2235,7 +2305,7 @@ impl App {
                     },
                     Err(err) => self.set_status(format!("保存驱动配置失败：{err:#}"), true),
                 }
-                self.refresh_state();
+                self.state_want = true;
             }
             Action::ReloadDriver => {
                 self.driver.reload();
@@ -2273,10 +2343,11 @@ impl eframe::App for App {
 
         self.poll_numlock();
         self.poll_command();
+        self.poll_state(root.ctx());
 
         // 机型 / 服务状态在会话里会变（插拔、systemctl 被别处调用），定期重读一次
-        if self.state_at.elapsed() > STATE_REFRESH {
-            self.refresh_state();
+        if self.state_want || self.state_at.elapsed() > STATE_REFRESH {
+            self.refresh_state(root.ctx());
         }
 
         self.draw_header(root, &mut action);

@@ -50,6 +50,10 @@ chk "hidraw 背光通道可重连" src/linux/led.rs 'fn reattach\('
 chk "按 (vid,pid) 找回而不是按 hidrawN" src/led_policy.rs 'fn reattach_channel'
 chk "键盘背光 sysfs 路径每次读失败重新解析" src/brightness.rs 'let fresh = resolve_dir'
 
+echo "== 界面不被后台探测拖住 ==" | tee -a "$OUT"
+chk "平台状态在后台线程读（同步起 systemctl 会卡帧）" gui/src/app/mod.rs 'state_rx: Option<std::sync::mpsc::Receiver<Snapshot>>'
+chk "命令面板在后台线程跑" gui/src/app/mod.rs 'std::thread::spawn\(move \|\| \{'
+
 echo "== 键位/配置不被静默丢弃 ==" | tee -a "$OUT"
 chk "配置坏字段前移 sanitize" src/config.rs 'fn sanitize'
 chk "片段应用先全量解析" gui/src/app/extend.rs 'apply_fragment'

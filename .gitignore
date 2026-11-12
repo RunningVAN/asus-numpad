@@ -32,3 +32,7 @@ keys-private/
 
 # 自检脚本输出
 verify-*.txt
+
+# 离屏截图产物：tools/verify-gui-shots.sh 与手工排障都会生成，几十 MB 一张，
+# 不进仓库（曾经误提交过，history 里因此多背了二十多兆）
+/shots_auto/
