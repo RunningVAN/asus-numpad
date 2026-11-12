@@ -156,6 +156,10 @@ pub struct App {
     /// 有人要求「刷新一下状态」。放在这里而不是直接调用，是因为发起刷新的地方
     /// （命令执行完、点了刷新按钮）未必手上有 `egui::Context`。
     state_want: bool,
+    /// 服务动作（启停 / 重启 / 开机自启）的收件口。`systemctl restart` 要等服务真
+    /// 起来才返回，慢盘或者 systemd 忙的时候一两秒，同步跑就是明显的卡顿；同一时刻
+    /// 只放行一件，免得连点几下「重启」派出几条 systemctl 互相打架。
+    op_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     /// 上一次设置写盘失败的原因：同一条错误只往状态栏报一次，避免每 400 ms 刷一遍。
     settings_save_err: Option<String>,
     /// 是否画 Linux 全套面板；Windows 只画灯光
@@ -238,6 +242,7 @@ impl App {
             state_at: Instant::now(),
             state_rx: None,
             state_want: false,
+            op_rx: None,
             settings_save_err: None,
             ui_full: ui_full(),
             tab: Page::from_env(),
@@ -292,6 +297,56 @@ impl App {
         self.state_at = Instant::now();
         // 结果到达时得有下一次重绘，否则最快也要等下一次鼠标移动才更新
         ctx.request_repaint_after(Duration::from_millis(120));
+    }
+
+    /// 把一次服务动作丢给线程，做完下一帧取结果。
+    ///
+    /// 已经在跑的时候直接忽略新请求：`systemctl restart` 连点两下等于让两条命令抢同一个
+    /// 单元，最后的状态谁也说不准，还都卡在界面线程上。
+    fn start_op<F>(&mut self, ctx: &egui::Context, busy: &str, job: F)
+    where
+        F: FnOnce() -> Result<String, String> + Send + 'static,
+    {
+        if self.op_rx.is_some() {
+            self.set_status("上一步服务操作还没结束，稍等一下".to_string(), false);
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(job());
+        });
+        self.op_rx = Some(rx);
+        self.set_status(busy.to_string(), false);
+        ctx.request_repaint_after(Duration::from_millis(120));
+    }
+
+    /// 收服务动作的结果。
+    fn poll_op(&mut self, ctx: &egui::Context) {
+        let Some(rx) = self.op_rx.as_ref() else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(Ok(msg)) => {
+                self.op_rx = None;
+                self.set_status(msg, false);
+                // 服务刚动过，状态区要立刻重读，否则还显示旧值
+                self.state_want = true;
+                ctx.request_repaint();
+            }
+            Ok(Err(err)) => {
+                self.op_rx = None;
+                self.set_status(err, true);
+                self.state_want = true;
+                ctx.request_repaint();
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                ctx.request_repaint_after(Duration::from_millis(120));
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.op_rx = None;
+                self.set_status("服务操作没有回话（执行线程异常退出）".to_string(), true);
+            }
+        }
     }
 
     /// 把后台读到的平台状态收进来。
@@ -2255,7 +2310,7 @@ impl App {
             .hline(r.x_range(), r.top(), egui::Stroke::new(1.0, p.stroke));
     }
 
-    fn run_action(&mut self, action: Action) {
+    fn run_action(&mut self, ctx: &egui::Context, action: Action) {
         match action {
             Action::Rescan => self.rescan(),
             Action::SendOff => {
@@ -2305,22 +2360,20 @@ impl App {
                 }
             }
             Action::ServiceRun(verb) => {
-                match sysinfo::service_run(verb) {
-                    Ok(msg) => self.set_status(msg, false),
-                    Err(err) => self.set_status(format!("{err:#}"), true),
-                }
-                // 服务状态刚变过，立刻重读，否则界面还显示旧值
-                self.state_want = true;
+                let busy = match verb {
+                    ServiceVerb::Start => "正在启动后台服务…",
+                    ServiceVerb::Stop => "正在停止后台服务…",
+                    ServiceVerb::Restart => "正在重启后台服务…",
+                };
+                self.start_op(ctx, busy, move || {
+                    sysinfo::service_run(verb).map_err(|err| format!("{err:#}"))
+                });
             }
             Action::ServiceAutostart(on) => {
-                match sysinfo::service_autostart(on) {
-                    Ok(msg) => {
-                        self.service_enabled = on;
-                        self.set_status(msg, false);
-                    }
-                    Err(err) => self.set_status(format!("{err:#}"), true),
-                }
-                self.state_want = true;
+                self.service_enabled = on;
+                self.start_op(ctx, "正在更新开机自启…", move || {
+                    sysinfo::service_autostart(on).map_err(|err| format!("{err:#}"))
+                });
             }
             Action::RefreshState => self.state_want = true,
             Action::RunCommand => self.run_command(),
@@ -2383,6 +2436,7 @@ impl eframe::App for App {
 
         self.poll_numlock();
         self.poll_command();
+        self.poll_op(root.ctx());
         self.poll_state(root.ctx());
 
         // 机型 / 服务状态在会话里会变（插拔、systemctl 被别处调用），定期重读一次
@@ -2490,7 +2544,7 @@ impl eframe::App for App {
             });
 
         if let Some(action) = action {
-            self.run_action(action);
+            self.run_action(root.ctx(), action);
         }
 
         // 设置改动等停手再落盘：拖动中的中间值没有必要每次都写文件

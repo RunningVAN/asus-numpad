@@ -53,6 +53,11 @@ chk "键盘背光 sysfs 路径每次读失败重新解析" src/brightness.rs 'le
 echo "== 界面不被后台探测拖住 ==" | tee -a "$OUT"
 chk "平台状态在后台线程读（同步起 systemctl 会卡帧）" gui/src/app/mod.rs 'state_rx: Option<std::sync::mpsc::Receiver<Snapshot>>'
 chk "命令面板在后台线程跑" gui/src/app/mod.rs 'std::thread::spawn\(move \|\| \{'
+chk "服务启停走后台线程（systemctl restart 慢时会卡界面）" gui/src/app/mod.rs 'op_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>'
+chk "服务操作同一时刻只放行一件" gui/src/app/mod.rs '上一步服务操作还没结束'
+chk "状态读取有超时上限（否则重读被永久挡住）" gui/src/app/mod.rs 'STATE_TIMEOUT'
+chk "原子写先 fsync 临时文件再改名" gui/src/settings.rs 'f\.sync_all\(\)'
+chk "命令输出有采集上限" gui/src/cli_bridge.rs 'MAX_CAPTURE'
 
 echo "== 键位/配置不被静默丢弃 ==" | tee -a "$OUT"
 chk "配置坏字段前移 sanitize" src/config.rs 'fn sanitize'
