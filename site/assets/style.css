@@ -494,6 +494,12 @@ html[data-theme="light"] .cell.lit {
 .card-ic svg { width: 100%; height: 100%; }
 .card h3 { font-size: 15.5px; margin-bottom: 8px; }
 .card p { margin: 0; font-size: 14px; color: var(--text-2); line-height: 1.62; }
+/* 卡片数为奇数时把最后一张居中：三列网格末尾只挂一张会明显偏左 */
+.cards .card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  width: calc((100% - 32px) / 3);
+  justify-self: center;
+}
 
 /* steps */
 .steps { list-style: none; margin: 0 0 34px; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: s; }
@@ -678,6 +684,8 @@ html.js .reveal.in { opacity: 1; transform: none; }
   .hero-visual { order: -1; }
   .pad { max-width: 100%; }
   .cards, .steps, .use-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 两列时奇数张同样居中，宽度按两列算 */
+  .cards .card:last-child:nth-child(odd) { width: calc((100% - 16px) / 2); }
 
   /* 窄屏保留锚点导航：折叠为第二行的可横滑二级条，与 nav 合并为一块实心底 */
   .nav-inner { height: auto; min-height: 62px; flex-wrap: wrap; align-content: center; row-gap: 0; }
@@ -733,6 +741,8 @@ html.js .reveal.in { opacity: 1; transform: none; }
   .hero-facts li { font-size: 12.5px; padding: 5px 11px 5px 9px; }
   .section { padding: 66px 0; }
   .cards, .steps, .use-grid, .other-ways, .foot-grid { grid-template-columns: minmax(0, 1fr); }
+  /* 单列时不再需要居中收尾，恢复整行宽度 */
+  .cards .card:last-child:nth-child(odd) { width: 100%; }
   .sec-head { margin-bottom: 32px; }
   .quick-cmd { max-width: 100%; }
   .qcode { padding-right: 16px; }
