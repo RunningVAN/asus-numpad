@@ -27,14 +27,28 @@ use dev::{AbsInfo, InputDevice, RawInputEvent, VirtualDevice, MAX_EVENTS_PER_REA
 
 pub struct SystemClock;
 
+fn now_of(clock: libc::clockid_t) -> f64 {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    unsafe { libc::clock_gettime(clock, &mut ts) };
+    ts.tv_sec as f64 * 1000.0 + ts.tv_nsec as f64 / 1_000_000.0
+}
+
+impl SystemClock {
+    /// 含休眠计时的时间源：挂起期间继续走，用来发现「这一帧之前系统睡过」。
+    ///
+    /// 引擎内部一律用 `CLOCK_MONOTONIC`（挂起不计时，空闲熄灭不会被睡眠时间误触发），
+    /// 所以挂起检测必须另取一个时钟，不能让单调时钟既当节拍又当唤醒探测器。
+    fn boottime_ms() -> f64 {
+        now_of(libc::CLOCK_BOOTTIME)
+    }
+}
+
 impl Clock for SystemClock {
     fn now_ms(&self) -> f64 {
-        let mut ts = libc::timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
-        unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
-        ts.tv_sec as f64 * 1000.0 + ts.tv_nsec as f64 / 1_000_000.0
+        now_of(libc::CLOCK_MONOTONIC)
     }
 }
 
@@ -46,16 +60,47 @@ struct UInputKeys {
     dev: Rc<RefCell<VirtualDevice>>,
 }
 
+/// 往虚拟设备写一条事件，写不出去就地重建并重试。
+///
+/// 以前这里直接 `let _ =` 吞掉错误：uinput 会话失效之后驱动照样「在跑」，
+/// 但一个键都发不出来，只能靠重启服务恢复。现在失败会重建会话并把结果说出来。
+fn feed_virtual(dev: &Rc<RefCell<VirtualDevice>>, ev: &Event) {
+    let mut d = dev.borrow_mut();
+    let before = d.rebuilds;
+    if let Err(err) = d.write_or_recover(ev) {
+        eprintln!(
+            "{}",
+            crate::i18n::tf("dev.warn.uinput_write", &[("err", &err.to_string())])
+        );
+        return;
+    }
+    if d.rebuilds > before {
+        eprintln!("{}", crate::i18n::t("dev.warn.uinput_rebuild"));
+    }
+}
+
 impl KeySink for UInputKeys {
     fn press(&mut self, code: u16) {
-        let dev = self.dev.borrow();
-        let _ = dev.write_event(&Event::key(code, 1));
-        let _ = dev.syn();
+        feed_virtual(&self.dev, &Event::key(code, 1));
+        feed_virtual(
+            &self.dev,
+            &Event {
+                etype: kc::EV_SYN,
+                code: 0,
+                value: 0,
+            },
+        );
     }
     fn release(&mut self, code: u16) {
-        let dev = self.dev.borrow();
-        let _ = dev.write_event(&Event::key(code, 0));
-        let _ = dev.syn();
+        feed_virtual(&self.dev, &Event::key(code, 0));
+        feed_virtual(
+            &self.dev,
+            &Event {
+                etype: kc::EV_SYN,
+                code: 0,
+                value: 0,
+            },
+        );
     }
 }
 
@@ -75,10 +120,16 @@ impl PointerSink for UInputPointer {
         if !allowed {
             return;
         }
-        let dev = self.dev.borrow();
-        let _ = dev.write_event(ev);
+        feed_virtual(&self.dev, ev);
         if ev.etype == kc::EV_SYN {
-            let _ = dev.syn();
+            feed_virtual(
+                &self.dev,
+                &Event {
+                    etype: kc::EV_SYN,
+                    code: 0,
+                    value: 0,
+                },
+            );
         }
     }
 }
@@ -106,12 +157,15 @@ impl GrabSink for DevGrab {
 }
 
 struct LedBits {
-    dev: Rc<RefCell<InputDevice>>,
+    /// `None` = 当前没有可用的键盘节点（启动时没找到，或热插拔后尚未重开）。
+    /// 用 `Option` 而不是在构造时定死：键盘被换掉后这里要能换成新节点，
+    /// 否则 NumLock 联动会一直读那个已经失效的 fd，直到重启服务。
+    dev: Rc<RefCell<Option<InputDevice>>>,
 }
 
 impl NumLockSource for LedBits {
     fn numlock_on(&self) -> Option<bool> {
-        self.dev.borrow().read_led_numl().ok()
+        self.dev.borrow().as_ref()?.read_led_numl().ok()
     }
 }
 
@@ -410,13 +464,8 @@ pub fn probe_report(cfg: &Config) -> Result<(Geometry, Vec<String>)> {
 /// 读失败到第几次才认定设备已经不在：偶发的 `EINTR` / `EAGAIN` 会被内核自己吸收，
 /// 真到 `ENODEV`（拔掉、驱动卸载）时没必要再等——继续空转只会刷日志。
 fn device_gone(err: &std::io::Error, failures: u32) -> bool {
-    use std::io::ErrorKind;
-    matches!(
-        err.kind(),
-        ErrorKind::NotFound | ErrorKind::BrokenPipe | ErrorKind::UnexpectedEof
-    ) || err.raw_os_error() == Some(libc::ENODEV)
-        || err.raw_os_error() == Some(libc::ENXIO)
-        || failures >= 8
+    // 判定条件放在跨平台模块里，便于无真机时按样本验证
+    crate::lifecycle::device_lost(Some(err.kind()), err.raw_os_error(), failures)
 }
 
 /// 打印原始事件（排查用）。
@@ -448,10 +497,16 @@ pub fn dump_events(cfg: &Config) -> Result<()> {
 // --------------------------------------------------------------------------- //
 
 static STOP: AtomicBool = AtomicBool::new(false);
+/// 收到 SIGHUP（`systemctl --user reload`）：收尾后重来，让新配置生效。
+static RELOAD: AtomicBool = AtomicBool::new(false);
 
-extern "C" fn on_signal(_sig: libc::c_int) {
+extern "C" fn on_signal(sig: libc::c_int) {
     // 只置位，真正的清理在主循环里做（signal handler 内不能分配内存）
-    STOP.store(true, Ordering::SeqCst);
+    if sig == libc::SIGHUP {
+        RELOAD.store(true, Ordering::SeqCst);
+    } else {
+        STOP.store(true, Ordering::SeqCst);
+    }
 }
 
 fn install_signals() {
@@ -463,12 +518,62 @@ fn install_signals() {
     }
 }
 
-pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
+/// 服务怎么结束的：正常停（用户 stop）还是要求重载（reload）。
+///
+/// 两者的区别只在退出码上：`Restart=on-failure` 只认非零，所以 reload 必须
+/// 以非零码退出，否则 `systemctl --user reload` 会把服务**停掉**而不是重来。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceExit {
+    Stopped,
+    Reload,
+    /// 已经有一个实例在跑。systemd 场景下这通常意味着上一个进程还没退干净
+    /// （restart 收尾），用非零码退出让 systemd 稍后再试，比停在 inactive 好。
+    Busy,
+}
+
+/// 单实例锁。
+///
+/// 两个实例会互抢触摸板的独占抓取：抢输的那个每 4 秒重试一次，桌面上的表现
+/// 就是数字键时灵时不灵。锁挂在 `XDG_RUNTIME_DIR`（登录会话结束自动清掉），
+/// 拿不到说明已经有实例在跑——此时**正常退出**，让 systemd 别再来重启。
+fn acquire_single_instance() -> Result<Option<std::fs::File>> {
+    use std::os::unix::io::AsRawFd;
+    let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
+    let path = format!("{dir}/asus-numpad.lock");
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .with_context(|| format!("lock {path}"))?;
+    // SAFETY: fd 来自上面的 File，调用期间保持有效
+    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    if rc != 0 {
+        let err = std::io::Error::last_os_error();
+        if err.raw_os_error() == Some(libc::EWOULDBLOCK) {
+            return Ok(None);
+        }
+        return Err(err).with_context(|| format!("flock {path}"));
+    }
+    Ok(Some(file))
+}
+
+pub fn run_service(cfg: Config, verbose: bool) -> Result<ServiceExit> {
+    // 锁必须在 open 任何设备之前拿：先占设备再抢锁会出现「锁没拿到、grab 已经放掉了」
+    let _lock = match acquire_single_instance()? {
+        Some(l) => l,
+        None => {
+            eprintln!("{}", crate::i18n::t("run.already_running"));
+            return Ok(ServiceExit::Busy);
+        }
+    };
     install_signals();
     STOP.store(false, Ordering::SeqCst);
+    RELOAD.store(false, Ordering::SeqCst);
 
     let tpad = Rc::new(RefCell::new(find_touchpad(&cfg)?));
-    let kb = find_keyboard(&cfg).map(|d| Rc::new(RefCell::new(d)));
+    // NumLock 灯源：节点可替换（键盘热插拔后重新枚举）
+    let kb_slot: Rc<RefCell<Option<InputDevice>>> = Rc::new(RefCell::new(find_keyboard(&cfg)));
 
     // 布局先定死：`auto` 时按触摸板 HID 硬件 ID 自动识别，未验证的布局默认拦下
     let mut cfg = cfg;
@@ -541,9 +646,9 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
         pointer: pointer_dev
             .clone()
             .map(|d| Box::new(UInputPointer { dev: d }) as Box<dyn PointerSink>),
-        numlock: kb
-            .clone()
-            .map(|d| Box::new(LedBits { dev: d }) as Box<dyn NumLockSource>),
+        numlock: Some(Box::new(LedBits {
+            dev: kb_slot.clone(),
+        }) as Box<dyn NumLockSource>),
         grabber: Some(Box::new(DevGrab { dev: tpad.clone() }) as Box<dyn GrabSink>),
     };
 
@@ -582,18 +687,35 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
     let mut kb_events: Vec<RawInputEvent> = Vec::with_capacity(8);
     // 连续读失败次数：偶发 EINTR/EIO 不该退出，设备真没了才收工
     let mut read_failures = 0u32;
+    // 键盘节点的失败计数与上次枚举时刻：键盘拔插后要能自己找回来
+    let mut kb_failures = 0u32;
+    let mut last_kb_scan: Option<std::time::Instant> = None;
+    // 上一帧的挂起感知时钟：差值异常大 = 期间系统睡过，硬件状态要重新对齐
+    let mut last_boot_ms = SystemClock::boottime_ms();
+    // 设备真没了时的退出原因：先正常收尾（灭灯 / 松 grab），再以非零码退出，
+    // 让 systemd 的 Restart=on-failure 把服务拉起来
+    let mut lost_reason: Option<String> = None;
 
     while engine.is_running() && !STOP.load(Ordering::Relaxed) {
+        // 0) 挂起恢复检测：合盖唤醒后 EC 侧背光被清零、LED 类设备可能重建，
+        //    而引擎内部仍是「已点亮」。不主动补一次灯，用户看到的就是
+        //    「唤醒之后数字区一直黑着，得手动重启服务」。
+        let boot_now = SystemClock::boottime_ms();
+        if crate::lifecycle::resume_detected(boot_now - last_boot_ms) {
+            engine.resync_after_resume();
+        }
+        last_boot_ms = boot_now;
+
         // 1) 触摸板事件
         let ready = match tpad.borrow().wait_readable(frame_ms) {
             Ok(ready) => ready,
             Err(err) => {
                 read_failures += 1;
                 if device_gone(&err, read_failures) {
-                    println!(
-                        "{}",
-                        crate::i18n::tf("run.device_lost", &[("err", &err.to_string())])
-                    );
+                    lost_reason = Some(crate::i18n::tf(
+                        "run.device_lost",
+                        &[("err", &err.to_string())],
+                    ));
                     break;
                 }
                 false
@@ -610,10 +732,10 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
                 Err(err) => {
                     read_failures += 1;
                     if device_gone(&err, read_failures) {
-                        println!(
-                            "{}",
-                            crate::i18n::tf("run.device_lost", &[("err", &err.to_string())])
-                        );
+                        lost_reason = Some(crate::i18n::tf(
+                            "run.device_lost",
+                            &[("err", &err.to_string())],
+                        ));
                         break;
                     }
                 }
@@ -621,9 +743,17 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
         }
 
         // 2) 物理键盘 LED 变化（NumLock 按下）
-        if let Some(kb_dev) = &kb {
-            // 键盘只用来读 NumLock 灯，读失败（例如键盘被热插拔换掉）不影响数字区
-            if kb_dev.borrow().read_events_into(&mut kb_events).is_ok() {
+        //
+        // 键盘只用来读 NumLock 灯，读失败不影响数字区本身；但一直抱着一个失效的
+        // 节点会让「NumLock 亮时点灯」永久失灵，所以连续失败到阈值就重新枚举。
+        kb_events.clear();
+        let kb_read = match kb_slot.borrow().as_ref() {
+            Some(dev) => Some(dev.read_events_into(&mut kb_events)),
+            None => None,
+        };
+        match kb_read {
+            Some(Ok(())) => {
+                kb_failures = 0;
                 for raw in &kb_events {
                     let ev = raw.to_event();
                     if ev.etype == kc::EV_LED
@@ -635,6 +765,23 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
                     if ev.etype == kc::EV_KEY {
                         engine.handle_hotkey_event(&ev);
                     }
+                }
+            }
+            Some(Err(_)) => kb_failures += 1,
+            // 当前没有键盘节点：下面按节流重扫
+            None => kb_failures = crate::lifecycle::KEYBOARD_REOPEN_FAILURES,
+        }
+        if crate::lifecycle::should_reopen_keyboard(kb_failures) {
+            let elapsed = last_kb_scan
+                .map(|t| t.elapsed().as_millis() as f64)
+                .unwrap_or(-1.0);
+            if crate::lifecycle::should_rescan(elapsed) {
+                last_kb_scan = Some(std::time::Instant::now());
+                // 找到新节点就换上；找不到则保留旧节点（可能只是暂时读不动，
+                // 下一次间隔到了再试），不会把已有的灯源弄丢
+                if let Some(found) = find_keyboard(&cfg) {
+                    *kb_slot.borrow_mut() = Some(found);
+                    kb_failures = 0;
                 }
             }
         }
@@ -657,5 +804,13 @@ pub fn run_service(cfg: Config, verbose: bool) -> Result<()> {
             println!("  {line}");
         }
     }
-    Ok(())
+    // 设备消失必须以失败收尾：退出码 0 会被 systemd 当成正常结束而不再拉起，
+    // 表现为「合盖唤醒 / USB 重枚举之后数字键盘彻底消失」。
+    if let Some(reason) = lost_reason {
+        return Err(anyhow!(reason));
+    }
+    if RELOAD.load(Ordering::SeqCst) {
+        return Ok(ServiceExit::Reload);
+    }
+    Ok(ServiceExit::Stopped)
 }

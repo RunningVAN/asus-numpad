@@ -197,6 +197,21 @@ impl BrightnessFollower {
         None
     }
 
+    /// 外部强行让缓存失效（引擎在挂起恢复、手动改写灯之后调用）。
+    pub fn invalidate(&mut self) {
+        self.forget_cached();
+    }
+
+    /// 忘掉「上次看到的键盘亮度」和「上次下发的档位」。
+    ///
+    /// 读一次失败就说明这条链路可能整体被打断（合盖唤醒后 asus-wmi 会重建 LED
+    /// 类设备，EC 侧背光同时被清零）。此时宁可下次多下发一次，也不要拿过期缓存
+    /// 判成「没有变化」而一直不补灯 —— 那是「唤醒之后数字区再也不亮」的典型成因。
+    fn forget_cached(&mut self) {
+        self.last_kbd = None;
+        self.current = None;
+    }
+
     /// 点灯时下发的命令字：能读到键盘背光就用跟随档位，否则退回普通点亮值。
     pub fn on_value(&mut self) -> u8 {
         if !self.enabled() {
@@ -205,6 +220,9 @@ impl BrightnessFollower {
         let kbd = match self.read_kbd() {
             Some(v) => v,
             None => {
+                // 读不到键盘背光时下发了普通点亮值，档位已经与缓存脱钩：
+                // 作废缓存，等这条链路恢复后按当时的键盘亮度重新对齐
+                self.forget_cached();
                 if !self.warned {
                     self.warned = true;
                     eprintln!(
@@ -244,6 +262,7 @@ impl BrightnessFollower {
             None => {
                 // 提示由 `on_value` 负责，这里只记下状态供日志使用
                 self.warned = true;
+                self.forget_cached();
                 return None;
             }
         };
@@ -327,6 +346,98 @@ mod tests {
     fn zero_kbd_wins_over_unknown_max() {
         // max 读不到 + 键盘背光关着：两条兜底叠加时，仍必须保持最低档，不能回弹到中间档
         assert_eq!(map_kbd_level(0, 0, &levels()), 0x41);
+    }
+
+    // ---- 真实文件系统用例：用临时目录冒充 sysfs，验证「读失败后必须重发」 ----
+
+    struct FakeLeds {
+        dir: std::path::PathBuf,
+    }
+
+    impl FakeLeds {
+        fn new(tag: &str, kbd: Option<u32>) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "asus-numpad-leds-{tag}-{}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("max_brightness"), "3\n").unwrap();
+            if let Some(v) = kbd {
+                Self::write(&dir, v).unwrap();
+            }
+            Self { dir }
+        }
+
+        fn write(dir: &std::path::Path, v: u32) -> std::io::Result<()> {
+            std::fs::write(dir.join("brightness"), format!("{v}\n"))
+        }
+
+        fn set(&self, v: u32) {
+            Self::write(&self.dir, v).unwrap();
+        }
+
+        fn remove(&self) {
+            let _ = std::fs::remove_file(self.dir.join("brightness"));
+        }
+
+        fn path(&self) -> String {
+            self.dir.to_string_lossy().to_string()
+        }
+    }
+
+    impl Drop for FakeLeds {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[test]
+    fn unchanged_backlight_does_not_republish() {
+        let leds = FakeLeds::new("stable", Some(2));
+        let mut f = BrightnessFollower::new(&leds.path(), levels());
+        let first = f.on_value();
+        assert!(f.poll(10_000.0, 500.0).is_none(), "亮度没变不该重复下发");
+        assert_eq!(f.on_value(), first, "同一亮度应映射到同一档位");
+        assert!(f.poll(20_000.0, 500.0).is_none());
+    }
+
+    #[test]
+    fn read_failure_forgets_cache_so_next_read_republishes() {
+        // 合盖唤醒后 LED 类设备重建：先读不到，再读得到。灯在中断期间已被 EC 清零，
+        // 桥接层只能靠「再下发一次」把亮度补回来，不能因为键盘亮度值没变就跳过。
+        let leds = FakeLeds::new("wake", Some(2));
+        let mut f = BrightnessFollower::new(&leds.path(), levels());
+        let level = f.on_value();
+        assert!(f.poll(10_000.0, 500.0).is_none());
+
+        leds.remove();
+        assert!(f.poll(11_000.0, 500.0).is_none(), "读不到时不该乱发");
+        assert_eq!(f.read_kbd(), None, "确认链路确实断了");
+
+        leds.set(2);
+        assert_eq!(
+            f.poll(12_000.0, 500.0),
+            Some(f.on_value()),
+            "链路恢复后即使键盘亮度值没变也必须重新下发"
+        );
+        assert_eq!(f.on_value(), level);
+    }
+
+    #[test]
+    fn on_value_without_backlight_forgets_cache() {
+        let leds = FakeLeds::new("novalue", Some(3));
+        let mut f = BrightnessFollower::new(&leds.path(), levels());
+        assert_ne!(f.on_value(), VAL_ON);
+        leds.remove();
+        // 读不到：退回普通点亮值，并作废缓存
+        assert_eq!(f.on_value(), VAL_ON);
+        leds.set(3);
+        assert_eq!(
+            f.poll(10_000.0, 500.0),
+            Some(map_kbd_level(3, 3, &levels())),
+            "恢复后要把跟随档位补回来"
+        );
     }
 
     #[test]

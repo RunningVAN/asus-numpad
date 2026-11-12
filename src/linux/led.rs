@@ -123,6 +123,9 @@ pub struct HidrawLed {
     /// 点亮报文的拼装方式：默认就是上面那 5 字节，配置里可以换。
     proto: crate::custom::LedProtoSpec,
     history: Vec<u8>,
+    /// 通道对应硬件的 `(vid, pid)`：节点编号会漂移，型号不会。
+    /// `None` 表示构造时就没认出这台设备（此时无从重连）。
+    id: Option<(u32, u32)>,
 }
 
 impl HidrawLed {
@@ -135,8 +138,57 @@ impl HidrawLed {
             path: path.to_string(),
             proto,
             history: Vec::new(),
+            id: dev_hid_id(path),
         }
     }
+
+    /// 通道打不开时按型号找回同一块硬件。
+    ///
+    /// 只认 `(vid, pid)`，绝不跨型号兜底：写错通道等于往别的 HID 设备灌 FEATURE 报文。
+    /// 返回 `true` 表示 `self.path` 已经换成新节点。
+    fn reattach(&mut self) -> bool {
+        let Some((vid, pid)) = self.id else {
+            return false;
+        };
+        let present = present_channels();
+        match crate::led_policy::reattach_channel(&self.path, vid, pid, &present) {
+            Some(dev) if dev != self.path => {
+                eprintln!(
+                    "{}",
+                    crate::i18n::tf("led.info.reattach", &[("old", &self.path), ("new", &dev)])
+                );
+                self.path = dev;
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+/// `/dev/hidrawN` → 该节点对应硬件的 `(vid, pid)`。
+fn dev_hid_id(dev: &str) -> Option<(u32, u32)> {
+    let name = Path::new(dev).file_name()?.to_str()?;
+    hid_id(&Path::new("/sys/class/hidraw").join(name))
+}
+
+/// 当前确实存在的全部 hidraw 节点与型号（供通道重连用）。
+fn present_channels() -> Vec<(String, u32, u32)> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir("/sys/class/hidraw") else {
+        return out;
+    };
+    for entry in rd.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let dev = format!("/dev/{name}");
+        // sysfs 里还在、/dev 下还没建出来的节点用不了，别把它当候选
+        if !Path::new(&dev).exists() {
+            continue;
+        }
+        if let Some((vid, pid)) = hid_id(&entry.path()) {
+            out.push((dev, vid, pid));
+        }
+    }
+    out
 }
 
 impl LedSink for HidrawLed {
@@ -151,6 +203,21 @@ impl LedSink for HidrawLed {
         // 每次写都重新 open/close：驱动占着 hidraw 句柄会让 EC 通路在其他工具里不可用
         let fd = match open_rw(&self.path) {
             Ok(fd) => fd,
+            // 挂起恢复 / USB 重枚举之后节点编号会漂移，此时旧路径永远打不开。
+            // 先按型号把通道接回来，接上了就不必让用户看到这条失败。
+            Err(err) if self.reattach() => match open_rw(&self.path) {
+                Ok(fd) => fd,
+                Err(_) => {
+                    eprintln!(
+                        "{}",
+                        crate::i18n::tf(
+                            "led.warn.open",
+                            &[("path", &self.path), ("err", &err.to_string())]
+                        )
+                    );
+                    return false;
+                }
+            },
             Err(err) => {
                 eprintln!(
                     "{}",
@@ -170,6 +237,23 @@ impl LedSink for HidrawLed {
         );
         let err = io::Error::last_os_error();
         unsafe { libc::close(fd) };
+        if rc < 0 && err.kind() == io::ErrorKind::NotFound {
+            // fd 已跟着设备一起消失：换节点后补发一次，这一档就算下发成功
+            if self.reattach() {
+                if let Ok(new_fd) = open_rw(&self.path) {
+                    let rc2 = do_ioctl(
+                        new_fd,
+                        hid_iocsfeature(buf.len() as u64),
+                        buf.as_mut_ptr() as *mut libc::c_void,
+                    );
+                    unsafe { libc::close(new_fd) };
+                    if rc2 >= 0 {
+                        self.history.push(value);
+                        return true;
+                    }
+                }
+            }
+        }
         if rc < 0 {
             eprintln!(
                 "{}",
@@ -331,6 +415,8 @@ impl LedSink for NullLed {
 use crate::led_policy::OMNI_PID;
 /// ELAN / ASUS vendor 与候选打分统一由跨平台模块 [`crate::led_policy`] 提供，
 /// 避免 Linux 侧与测试侧出现两套逻辑。
+/// 描述符判定与 `uevent` 解析来自跨平台模块，Linux 侧只负责把字节取回来。
+pub use crate::hid_desc::{feature_in_descriptor, FeatureProbe};
 pub use crate::led_policy::{
     candidate_rank, pick_best, presence_from, NumpadPresence, NumpadProbe, ASUS_VID, ELAN_VID,
     KNOWN_NUMPAD_PIDS, PIXART_VID, RANK_WARN_ASUS_FALLBACK, RANK_WARN_NO_FEATURE,
@@ -341,50 +427,11 @@ const OMNI_VID: u32 = ASUS_VID;
 /// 解析 `/sys/class/hidraw/hidrawN/device/uevent` 里的 `HID_ID=bus:vid:pid`。
 fn hid_id(entry: &Path) -> Option<(u32, u32)> {
     let text = std::fs::read_to_string(entry.join("device/uevent")).ok()?;
-    for line in text.lines() {
-        let Some(rest) = line.strip_prefix("HID_ID=") else {
-            continue;
-        };
-        let mut it = rest.trim().split(':');
-        let _bus = it.next()?;
-        let vid = u32::from_str_radix(it.next()?, 16).ok()?;
-        let pid = u32::from_str_radix(it.next()?, 16).ok()?;
-        return Some((vid, pid));
-    }
-    None
+    crate::hid_desc::hid_id_from_uevent(&text)
 }
 
-/// 报告描述符探测结果。
-///
-/// 必须把「确实没有 FEATURE 报告」与「没权限看」分开：后者是
-/// udev 的 `TAG+="uaccess"` 没生效（规则未装 / 未 trigger / 非 seat 会话），
-/// 报成“没有 FEATURE 0x0d”会把排障方向带到硬件上。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FeatureProbe {
-    /// 描述符里有 FEATURE 报告 `report_id`
-    Has,
-    /// 描述符里确实没有该 FEATURE 报告
-    Missing,
-    /// 节点打不开（权限不足，多为 uaccess 未生效）
-    NoAccess,
-    /// 打得开但读描述符失败（节点刚消失 / 驱动异常）
-    Unknown,
-}
-
-impl FeatureProbe {
-    /// 是否可作为“描述符证据成立”使用。
-    pub fn has(self) -> bool {
-        matches!(self, FeatureProbe::Has)
-    }
-}
-
-/// 读报告描述符，判断该节点是否真的带 FEATURE 报告 `report_id`。
-///
-/// 触摸板一次会导出多个 hidraw 接口，只有带 `0x0d` Feature 的那个能点灯；
-/// 选错接口时 ioctl 会返回 EINVAL/ENOENT，所以这里先按描述符筛一遍。
-///
-/// 返回值区分「有 / 确实没有 / 打不开」三种情况：权限不足被打包成「没有」，
-/// 会把排查方向带偏到「机型不对」，所以这里不用 bool。
+/// 描述符解析与 `uevent` 解析在跨平台模块里，Linux 侧只负责取字节。
+/// 这样选接口的判定逻辑在任意平台都能按样本跑单测。
 pub fn probe_feature_report(path: &str, report_id: u8) -> FeatureProbe {
     let fd = match open_ro(path) {
         Ok(fd) => fd,
@@ -415,31 +462,7 @@ pub fn probe_feature_report(path: &str, report_id: u8) -> FeatureProbe {
         return FeatureProbe::Unknown;
     }
     let len = (desc.size as usize).min(HID_MAX_DESCRIPTOR_SIZE);
-    let data = &desc.value[..len];
-    let mut i = 0usize;
-    let mut in_target = false;
-    while i < len {
-        let item = data[i];
-        if item == 0x85 {
-            // Report ID 主项（1 字节数据）
-            in_target = data.get(i + 1).copied() == Some(report_id);
-            i += 2;
-            continue;
-        }
-        if item == 0xb1 && in_target {
-            // Feature 主项
-            return FeatureProbe::Has;
-        }
-        let payload = match item & 0x03 {
-            0 => 0,
-            1 => 1,
-            2 => 2,
-            _ => 4,
-        };
-        i += 1 + payload;
-    }
-    // 描述符读全了也没找到该 FEATURE 报告：这是真的没有。
-    FeatureProbe::Missing
+    feature_in_descriptor(&desc.value[..len], report_id)
 }
 
 /// 一个背光候选节点的探测结果（`asus-numpad check` 会逐条列出）。

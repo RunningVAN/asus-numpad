@@ -29,3 +29,6 @@ keys-private/
 .apk-sign-key/
 .apk-sign-work/
 /verify-calibrate.txt
+
+# 自检脚本输出
+verify-*.txt

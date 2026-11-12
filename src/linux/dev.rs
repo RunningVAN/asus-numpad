@@ -253,8 +253,10 @@ impl InputDevice {
     pub fn read_led_numl(&self) -> io::Result<bool> {
         let mut buf = [0u8; 8];
         ioctl_ptr(self.fd, eviocgled(buf.len()), buf.as_mut_ptr())?;
-        let byte = buf[0];
-        Ok(byte & 1 != 0) // LED_NUML == bit 0
+        // 位图解析与「空位图 = 未知」的语义统一放在跨平台模块里
+        crate::hid_desc::numlock_led_on(&buf).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "EVIOCGLED returned empty bitmap")
+        })
     }
 
     /// 非阻塞读取一批事件，写入调用方给的缓冲（先清空）。
@@ -350,37 +352,37 @@ impl Drop for InputDevice {
     }
 }
 
-fn bits(buf: &[u8]) -> Vec<usize> {
-    let mut out = Vec::new();
-    for (i, byte) in buf.iter().enumerate() {
-        for bit in 0..8 {
-            if byte & (1 << bit) != 0 {
-                out.push(i * 8 + bit);
-            }
-        }
-    }
-    out
-}
+use crate::hid_desc::bits;
 
 // --------------------------------------------------------------------------- //
 // uinput
 // --------------------------------------------------------------------------- //
 
+/// uinput 设备的「配方」：重建时按这份记录重新登记能力，
+/// 否则重建出来的是个没有任何按键的裸设备。
+#[derive(Clone)]
+pub enum DevSpec {
+    Keyboard,
+    Touchpad {
+        abs_ranges: Vec<(u16, AbsInfo)>,
+        key_codes: Vec<u16>,
+    },
+}
+
 /// 虚拟键盘 / 虚拟触摸板。
 pub struct VirtualDevice {
     fd: RawFd,
     pub name: String,
+    spec: Option<DevSpec>,
+    /// 累计重建次数，便于调用方限流与日志交代
+    pub rebuilds: u32,
 }
 
 impl VirtualDevice {
     pub fn create_keyboard(name: &str) -> io::Result<Self> {
-        let dev = Self::open(name)?;
-        dev.enable_event_type(kc::EV_KEY)?;
-        dev.enable_event_type(kc::EV_SYN)?;
-        for &code in kc::ALL_KEYS.iter() {
-            dev.enable_key(code)?;
-        }
-        dev.finish()?;
+        let mut dev = Self::open(name)?;
+        dev.spec = Some(DevSpec::Keyboard);
+        dev.apply_spec()?;
         Ok(dev)
     }
 
@@ -393,17 +395,12 @@ impl VirtualDevice {
         abs_ranges: &[(u16, AbsInfo)],
         key_codes: &[u16],
     ) -> io::Result<Self> {
-        let dev = Self::open(name)?;
-        dev.enable_event_type(kc::EV_ABS)?;
-        dev.enable_event_type(kc::EV_KEY)?;
-        dev.enable_event_type(kc::EV_SYN)?;
-        for (code, info) in abs_ranges {
-            dev.setup_abs(*code, info)?;
-        }
-        for code in key_codes {
-            dev.enable_key(*code)?;
-        }
-        dev.finish()?;
+        let mut dev = Self::open(name)?;
+        dev.spec = Some(DevSpec::Touchpad {
+            abs_ranges: abs_ranges.to_vec(),
+            key_codes: key_codes.to_vec(),
+        });
+        dev.apply_spec()?;
         Ok(dev)
     }
 
@@ -416,7 +413,82 @@ impl VirtualDevice {
         Ok(Self {
             fd,
             name: name.to_string(),
+            spec: None,
+            rebuilds: 0,
         })
+    }
+
+    fn apply_spec(&self) -> io::Result<()> {
+        let Some(spec) = self.spec.as_ref() else {
+            return Err(io::Error::other("virtual device has no spec"));
+        };
+        match spec {
+            DevSpec::Keyboard => {
+                self.enable_event_type(kc::EV_KEY)?;
+                self.enable_event_type(kc::EV_SYN)?;
+                for &code in kc::ALL_KEYS.iter() {
+                    self.enable_key(code)?;
+                }
+            }
+            DevSpec::Touchpad {
+                abs_ranges,
+                key_codes,
+            } => {
+                self.enable_event_type(kc::EV_ABS)?;
+                self.enable_event_type(kc::EV_KEY)?;
+                self.enable_event_type(kc::EV_SYN)?;
+                for (code, info) in abs_ranges {
+                    self.setup_abs(*code, info)?;
+                }
+                for code in key_codes {
+                    self.enable_key(*code)?;
+                }
+            }
+        }
+        self.finish()
+    }
+
+    /// 重建 uinput 设备。
+    ///
+    /// 系统挂起/唤醒、uinput 模块被重载、或者设备节点被移除之后，原来那个 fd
+    /// 会一直写失败。这时候驱动表面上还在跑，实际上一个键都发不出去——用户
+    /// 看到的是「数字键盘突然彻底没反应，重启服务才好」。这里按原配方重开会话，
+    /// 因为外面拿的是 `Rc<RefCell<VirtualDevice>>`，重建对上层不可见。
+    pub fn rebuild(&mut self) -> io::Result<()> {
+        if self.fd >= 0 {
+            let _ = ioctl_ptr(self.fd, UI_DEV_DESTROY, std::ptr::null_mut());
+            // SAFETY: fd 是上面 open 得到的，close 之后立刻置 -1，不会二次释放
+            unsafe { libc::close(self.fd) };
+            self.fd = -1;
+        }
+        let path = CString::new("/dev/uinput").unwrap();
+        let fd = unsafe { libc::open(path.as_ptr(), libc::O_WRONLY | libc::O_NONBLOCK) };
+        if fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        self.fd = fd;
+        if let Err(err) = self.apply_spec() {
+            let _ = ioctl_ptr(self.fd, UI_DEV_DESTROY, std::ptr::null_mut());
+            // SAFETY: 同上，置 -1 之前只会关一次
+            unsafe { libc::close(self.fd) };
+            self.fd = -1;
+            return Err(err);
+        }
+        self.rebuilds += 1;
+        Ok(())
+    }
+
+    /// 写事件；写失败时重建一次设备再重试。
+    ///
+    /// 返回值只报告「最终有没有写出去」，重建的细节交给 `rebuilds` 计数。
+    pub fn write_or_recover(&mut self, ev: &Event) -> io::Result<()> {
+        match self.write_event(ev) {
+            Ok(()) => Ok(()),
+            Err(first) => {
+                self.rebuild()?;
+                self.write_event(ev).map_err(|_| first)
+            }
+        }
     }
 
     fn enable_event_type(&self, etype: u16) -> io::Result<()> {

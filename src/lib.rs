@@ -10,7 +10,7 @@
 //! | `engine` | `AsusNUMPADFilter` 的 Algo 状态机 | 触点状态机、点灯联动、混合模式 |
 //! | `linux` | — | evdev 抓取、uinput 虚拟设备、hidraw/i2c 点灯、热插拔 |
 //!
-//! 纯逻辑部分（`layout` / `engine`）不依赖 Linux，可在任意平台跑单测；
+//! 纯逻辑部分（`layout` / `engine` / `hid_desc` / `led_policy`）不依赖 Linux，可在任意平台跑单测；
 //! 硬件相关代码全部用 trait 注入，接入设备只需实现对应 trait。
 //!
 //! ## 一处来源差异
@@ -23,10 +23,12 @@ pub mod brightness;
 pub mod config;
 pub mod custom;
 pub mod engine;
+pub mod hid_desc;
 pub mod i18n;
 pub mod keycodes;
 pub mod layout;
 pub mod led_policy;
+pub mod lifecycle;
 pub mod led_proto;
 pub mod partition;
 pub mod sku;

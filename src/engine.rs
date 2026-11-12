@@ -189,6 +189,8 @@ pub struct Engine {
     primary: Option<i32>,
     has_mt_tracking: bool,
     last_activity_ms: f64,
+    /// 上次尝试 grab 的时刻：失败后按 `lifecycle::GRAB_RETRY_MS` 节奏重试
+    grab_retry_at: f64,
     last_tap: HashMap<u16, f64>,
 
     gesture_seen: bool,
@@ -298,6 +300,7 @@ impl Engine {
             numlock_forced: false,
             idle_blanked: false,
             grabbed: false,
+            grab_retry_at: now,
             running: true,
             slot: 0,
             primary: None,
@@ -702,6 +705,23 @@ impl Engine {
         self.log(crate::i18n::t("engine.state.enter"));
     }
 
+    /// 挂起恢复（或长时间阻塞）之后重新对齐硬件状态。
+    ///
+    /// 内部状态和硬件在挂起期间会走散：EC 侧背光被清零、LED 类设备可能被重建，
+    /// 而引擎里 `lit` 仍是 true。此时不能等下一次亮度变化——`lit` 为 true 会让
+    /// 空闲判定继续按「已经亮着」走，用户看到的就是「合盖唤醒后数字区彻底不亮」。
+    /// 这里主动作废亮度缓存并按当前键盘背光重发一次；本来是熄灭状态就保持熄灭。
+    pub fn resync_after_resume(&mut self) {
+        self.brightness.invalidate();
+        if !self.lit {
+            return;
+        }
+        // 硬件状态已不可信：把内部标记放掉，走一遍完整点亮流程（含两段式下发
+        // 与 NumLock 判定），而不是只补一条档位命令
+        self.lit = false;
+        self.led_on(&crate::i18n::t("engine.state.resync"));
+    }
+
     pub fn disable(&mut self) {
         if !self.enabled {
             return;
@@ -978,7 +998,20 @@ impl Engine {
             }
         }
 
-        // 跟随键盘背光：只读 sysfs，按 brightness_poll_ms 节流。
+        // grab 运行期重试：启动那一下没抓住（被别的进程占着 / 权限刚放开）时，
+    // 事件会同时打到桌面——按数字键既出数字又动光标。只在点亮期间重试，
+    // 熄灭时事件本来就该让给桌面。
+    if crate::lifecycle::should_retry_grab(
+        self.cfg.grab,
+        self.grabbed,
+        self.lit,
+        now - self.grab_retry_at,
+    ) {
+        self.grab_retry_at = now;
+        self.grab();
+    }
+
+    // 跟随键盘背光：只读 sysfs，按 brightness_poll_ms 节流。
         // 数字区未点亮时不写 —— 否则会把已经熄灭的灯又点起来。
         if self.lit {
             if let Some(level) = self
@@ -1066,8 +1099,59 @@ impl Engine {
         }
     }
 
+    /// 内核事件缓冲溢出（`SYN_DROPPED`）后的状态自愈。
+    ///
+    /// evdev 在缓冲区溢出时会插入 `SYN_DROPPED`，表示「前面丢了事件，当前状态不可信」。
+    /// 丢掉的很可能是抬起事件：那会让内部一直以为手指还按着——轻则某个虚拟键卡在
+    /// 按下态（用户眼里就是键盘失灵），重则混合模式下的光标一直「拖」着走。
+    /// 这里把按键、触点、待发队列全部当作已失效清干净，宁可少认一次输入，
+    /// 也不能留下按下去的键。
+    pub fn handle_syn_dropped(&mut self) {
+        if let Some(k) = self.pressed_key.take() {
+            self.release(k);
+        }
+        // 混合模式：先给虚拟触摸板补一组「全部抬起」，否则桌面会留住按下的手指
+        if self.forwarding {
+            let slots: Vec<i32> = self.active_slots.iter().copied().collect();
+            if let Some(p) = self.pointer.as_mut() {
+                for slot in slots {
+                    p.feed(&Event {
+                        etype: kc::EV_ABS,
+                        code: kc::ABS_MT_SLOT,
+                        value: slot,
+                    });
+                    p.feed(&Event {
+                        etype: kc::EV_ABS,
+                        code: kc::ABS_MT_TRACKING_ID,
+                        value: -1,
+                    });
+                }
+                p.feed(&Event {
+                    etype: kc::EV_SYN,
+                    code: 0,
+                    value: 0,
+                });
+            }
+        }
+        self.active_slots.clear();
+        self.slot_pos.clear();
+        self.slot = 0;
+        self.primary = None;
+        self.pending_events.clear();
+        self.pending_level = None;
+        // 双击窗口跨过一段丢事件就不再可信，别把两次无关的点击配成双击
+        self.last_tap.clear();
+        self.reset_contact();
+        self.log(crate::i18n::t("engine.state.syn_dropped"));
+    }
+
     /// 统一入口：先维护多指集合，再跑官方状态机，最后决定事件去向。
     pub fn handle_event(&mut self, ev: &Event) {
+        // 溢出标记必须最先处理：它前面的状态已经被内核宣告不可信
+        if ev.etype == kc::EV_SYN && ev.code == kc::SYN_DROPPED {
+            self.handle_syn_dropped();
+            return;
+        }
         self.track_slots(ev);
         self.handle_event_inner(ev);
         self.route(ev);
@@ -1573,18 +1657,37 @@ mod tests {
         now: Rc<std::cell::Cell<f64>>,
         led_log: Rc<RefCell<Vec<u8>>>,
     ) -> (Engine, Rc<RefCell<Vec<Event>>>) {
+        engine_raw_numlock(cfg, now, led_log, Some(Box::new(NumLockOn))).0
+    }
+
+    /// 同上，但 NumLock 源由调用方给：None 表示「读不到 NumLock 状态」。
+    #[allow(clippy::type_complexity)]
+    fn engine_raw_numlock(
+        cfg: Config,
+        now: Rc<std::cell::Cell<f64>>,
+        led_log: Rc<RefCell<Vec<u8>>>,
+        numlock: Option<Box<dyn NumLockSource>>,
+    ) -> ((Engine, Rc<RefCell<Vec<Event>>>), Rc<RefCell<FakeKeys>>) {
         let geom = Geometry::new(0, 3000, 0, 2000, 10.0, 10.0, GH3XLNDZ);
         let pointer: Rc<RefCell<Vec<Event>>> = Rc::new(RefCell::new(Vec::new()));
         let keys: Rc<RefCell<FakeKeys>> = Rc::new(RefCell::new(FakeKeys::default()));
         let deps = Deps {
             led: Box::new(SpyLed { log: led_log }),
-            keys: Box::new(keys),
+            keys: Box::new(keys.clone()),
             pointer: Some(Box::new(pointer.clone())),
-            numlock: Some(Box::new(NumLockOn)),
+            numlock,
             grabber: Some(Box::new(FakeGrab)),
             clock: Box::new(ManualClock { now }),
         };
-        (Engine::new(cfg, geom, deps, true), pointer)
+        ((Engine::new(cfg, geom, deps, true), pointer), keys)
+    }
+
+    /// NumLock 状态可随时翻转的源（`None` = 这台机器读不到）。
+    struct SwitchableNumLock(Rc<std::cell::Cell<Option<bool>>>);
+    impl NumLockSource for SwitchableNumLock {
+        fn numlock_on(&self) -> Option<bool> {
+            self.0.get()
+        }
     }
 
     /// 造一台已进入小键盘态的引擎（时钟与 LED 调用方可控）。
@@ -1607,6 +1710,253 @@ mod tests {
     fn engine(mixed: MixedMode) -> (Engine, Rc<RefCell<Vec<Event>>>) {
         let now = Rc::new(std::cell::Cell::new(0.0));
         engine_with(mixed, now, Rc::new(RefCell::new(Vec::new())))
+    }
+
+    // ---------------- grab 运行期重试 ----------------
+
+    /// 前 N 次 grab 失败，之后成功——模拟「启动时被别的进程占着」。
+    struct FlakyGrab {
+        fails: Rc<std::cell::Cell<usize>>,
+        calls: Rc<std::cell::Cell<usize>>,
+    }
+    impl GrabSink for FlakyGrab {
+        fn grab(&mut self) -> bool {
+            self.calls.set(self.calls.get() + 1);
+            if self.fails.get() > 0 {
+                self.fails.set(self.fails.get() - 1);
+                false
+            } else {
+                true
+            }
+        }
+        fn ungrab(&mut self) {}
+    }
+
+    #[test]
+    fn grab_retries_while_lit_and_succeeds_later() {
+        // 启动时 grab 失败（别的进程占着触摸板）：不能一直等到用户重启服务，
+        // 否则数字键会同时打到桌面——按下出数字又移动光标。
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let led: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let fails = Rc::new(std::cell::Cell::new(2));
+        let calls = Rc::new(std::cell::Cell::new(0));
+        let geom = Geometry::new(0, 3000, 0, 2000, 10.0, 10.0, GH3XLNDZ);
+        let deps = Deps {
+            led: Box::new(SpyLed { log: led }),
+            keys: Box::new(Rc::new(RefCell::new(FakeKeys::default()))),
+            pointer: Some(Box::new(Rc::new(RefCell::new(Vec::new())))),
+            numlock: Some(Box::new(NumLockOn)),
+            grabber: Some(Box::new(FlakyGrab {
+                fails: fails.clone(),
+                calls: calls.clone(),
+            })),
+            clock: Box::new(ManualClock { now: now.clone() }),
+        };
+        let mut e = Engine::new(Config::default(), geom, deps, true);
+        e.enable();
+        assert!(e.lit);
+        assert!(!e.grabbed, "启动时抓不住");
+        let after_enable = calls.get();
+
+        // 未到重试间隔：不该反复砸同一个失败调用
+        now.set(now.get() + 100.0);
+        e.tick();
+        assert_eq!(calls.get(), after_enable, "间隔没到不该重试");
+
+        // 到点了：重试一次，仍然失败
+        now.set(now.get() + crate::lifecycle::GRAB_RETRY_MS);
+        e.tick();
+        assert_eq!(calls.get(), after_enable + 1);
+        assert!(!e.grabbed);
+
+        // 再过一轮：这次成功
+        now.set(now.get() + crate::lifecycle::GRAB_RETRY_MS);
+        e.tick();
+        assert!(e.grabbed, "占用释放后应当抓住");
+
+        // 抓住之后不再无谓重试
+        let settled = calls.get();
+        now.set(now.get() + crate::lifecycle::GRAB_RETRY_MS * 3.0);
+        e.tick();
+        assert_eq!(calls.get(), settled);
+    }
+
+    #[test]
+    fn grab_retry_waits_for_dark_state() {
+        // 熄灯期间事件本就该给桌面，不该去抢
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let led: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let calls = Rc::new(std::cell::Cell::new(0));
+        let geom = Geometry::new(0, 3000, 0, 2000, 10.0, 10.0, GH3XLNDZ);
+        let deps = Deps {
+            led: Box::new(SpyLed { log: led }),
+            keys: Box::new(Rc::new(RefCell::new(FakeKeys::default()))),
+            pointer: Some(Box::new(Rc::new(RefCell::new(Vec::new())))),
+            numlock: Some(Box::new(NumLockOn)),
+            grabber: Some(Box::new(FlakyGrab {
+                fails: Rc::new(std::cell::Cell::new(usize::MAX)),
+                calls: calls.clone(),
+            })),
+            clock: Box::new(ManualClock { now: now.clone() }),
+        };
+        let mut e = Engine::new(Config::default(), geom, deps, true);
+        e.enable();
+        e.disable();
+        assert!(!e.lit);
+        let before = calls.get();
+        now.set(now.get() + crate::lifecycle::GRAB_RETRY_MS * 2.0);
+        e.tick();
+        assert_eq!(calls.get(), before, "熄灭状态不该去抢设备");
+    }
+
+    // ---------------- 事件丢失自愈：SYN_DROPPED ----------------
+
+    fn syn_dropped() -> Event {
+        Event {
+            etype: kc::EV_SYN,
+            code: kc::SYN_DROPPED,
+            value: 0,
+        }
+    }
+
+    #[test]
+    fn syn_dropped_releases_stuck_key() {
+        // 抬起事件被内核丢掉 = 用户眼里「键盘卡住了」。自愈必须补一次抬起。
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let led: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let ((mut e, _p), keys) = engine_raw_numlock(
+            Config::default(),
+            now,
+            led,
+            Some(Box::new(NumLockOn)),
+        );
+        e.enable();
+        // 手动摆成「正按着 KP1」的现场：按下事件已发，抬起丢了
+        e.down = true;
+        e.mode = Mode::Key;
+        e.pressed_key = Some(kc::KEY_KP1);
+        e.active_slots.insert(0);
+        e.press(kc::KEY_KP1);
+        let before = keys.borrow().log.len();
+
+        e.handle_event(&syn_dropped());
+
+        let released = keys.borrow().log[before..].to_vec();
+        assert_eq!(
+            released,
+            vec![(kc::KEY_KP1, 0)],
+            "丢事件后必须把按下的键抬起来"
+        );
+        assert!(!e.down, "触点状态应复位");
+        assert!(e.pressed_key.is_none());
+        assert_eq!(e.mode, Mode::None);
+        assert!(e.active_slots.is_empty(), "触点集合要清干净");
+    }
+
+    #[test]
+    fn syn_dropped_flushes_forwarded_contacts() {
+        // 混合模式正在把触点转给虚拟触摸板时丢事件：不补抬起，光标会一直「拖着」走
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let led: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let cfg = Config {
+            mixed_mode: MixedMode::Auto,
+            ..Config::default()
+        };
+        let ((mut e, pointer), _keys) =
+            engine_raw_numlock(cfg, now, led, Some(Box::new(NumLockOn)));
+        e.enable();
+        e.forwarding = true;
+        e.active_slots.insert(2);
+        let before = pointer.borrow().len();
+
+        e.handle_event(&syn_dropped());
+
+        let tail: Vec<(u16, i32)> = pointer.borrow()[before..]
+            .iter()
+            .map(|ev| (ev.code, ev.value))
+            .collect();
+        assert_eq!(
+            tail,
+            vec![
+                (kc::ABS_MT_SLOT, 2),
+                (kc::ABS_MT_TRACKING_ID, -1),
+                (0, 0),
+            ],
+            "要给虚拟触摸板补 SLOT/TRACKING_ID=-1/SYN 三件套"
+        );
+        assert!(!e.forwarding, "转发态应结束");
+    }
+
+    #[test]
+    fn syn_dropped_without_state_is_harmless() {
+        // 空闲时（没有触点、没有按键）收到溢出标记不应发任何东西
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let led: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let ((mut e, pointer), keys) =
+            engine_raw_numlock(Config::default(), now, led, Some(Box::new(NumLockOn)));
+        e.enable();
+        let kb = keys.borrow().log.len();
+        let pt = pointer.borrow().len();
+        e.handle_event(&syn_dropped());
+        assert_eq!(keys.borrow().log.len(), kb);
+        assert_eq!(pointer.borrow().len(), pt);
+        assert!(!e.down);
+    }
+
+    // ---------------- 挂起恢复：resync_after_resume ----------------
+
+    #[test]
+    fn resume_while_lit_replays_full_lighting() {
+        // 合盖唤醒后 EC 已把背光清零，引擎内部却还认为亮着：
+        // resync 必须重新走一遍点亮流程，否则数字区再也亮不起来
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let log: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let (mut e, _p) = engine_raw(Config::default(), now, log.clone());
+        e.enable();
+        assert!(e.lit);
+        let before = log.borrow().len();
+        e.resync_after_resume();
+        assert!(e.lit, "重发后仍应是点亮状态");
+        assert!(log.borrow().len() > before, "挂起恢复必须重新下发点亮命令");
+        // 幂等：再挂起一次仍然要再补一次灯（每次唤醒后 EC 都可能重新清零）
+        let before2 = log.borrow().len();
+        e.resync_after_resume();
+        assert!(log.borrow().len() > before2, "每次唤醒都应补灯");
+        assert!(e.lit);
+    }
+
+    #[test]
+    fn resume_while_dark_stays_dark() {
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let log: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let (mut e, _p) = engine_raw(Config::default(), now, log.clone());
+        e.enable();
+        e.disable();
+        assert!(!e.lit);
+        let before = log.borrow().len();
+        e.resync_after_resume();
+        assert!(!e.lit);
+        assert_eq!(log.borrow().len(), before, "原本就暗着，唤醒后不该自己亮起来");
+    }
+
+    #[test]
+    fn resume_respects_numlock_off() {
+        // 挂起恢复时 NumLock 是关的：不能把灯硬点起来（那会把用户的开关键状态也改掉）
+        let now = Rc::new(std::cell::Cell::new(0.0));
+        let log: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let state = Rc::new(std::cell::Cell::new(Some(true)));
+        let ((mut e, _p), _k) = engine_raw_numlock(
+            Config::default(),
+            now,
+            log.clone(),
+            Some(Box::new(SwitchableNumLock(state.clone()))),
+        );
+        e.enable();
+        assert!(e.lit);
+        state.set(Some(false));
+        e.resync_after_resume();
+        // 内部标记要与硬件一致：否则下一次唤醒会误以为「还亮着」而不再补灯
+        assert!(!e.lit, "NumLock 已关，唤醒后不应点灯");
     }
 
     /// 用力按触摸板 = 切换小键盘：从真实事件入口喂压力，而不是直接调压力闸。
@@ -1769,8 +2119,233 @@ mod tests {
         assert!(pointer.borrow().is_empty());
     }
 
-    /// 两段式点灯：亮度档推迟到 tick 补发，主循环不再被 sleep 卡住；
-    /// 期间若熄灭，未下发的档位必须作废，否则灯会被重新点亮。
+    // ---------------- NumLock 三模式（自动联动的核心） ----------------
+
+    /// 造一台 NumLock 状态可随时翻转的引擎。
+    #[allow(clippy::type_complexity)]
+    fn engine_numlock(
+        mode: NumLockMode,
+        state: Option<bool>,
+    ) -> (
+        Engine,
+        Rc<RefCell<Vec<u8>>>,
+        Rc<RefCell<FakeKeys>>,
+        Rc<std::cell::Cell<Option<bool>>>,
+        Rc<std::cell::Cell<f64>>,
+    ) {
+        let cfg = Config { numlock: mode, ..Config::default() };
+        let now = Rc::new(std::cell::Cell::new(1000.0));
+        let led_log: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let cell = Rc::new(std::cell::Cell::new(state));
+        let ((eng, _pointer), keys) = engine_raw_numlock(
+            cfg,
+            now.clone(),
+            led_log.clone(),
+            Some(Box::new(SwitchableNumLock(cell.clone()))),
+        );
+        (eng, led_log, keys, cell, now)
+    }
+
+    /// 日志里有没有发过 NumLock 按键（按 + 放）。
+    fn numlock_clicks(keys: &Rc<RefCell<FakeKeys>>) -> usize {
+        keys.borrow()
+            .log
+            .iter()
+            .filter(|(code, _)| *code == kc::KEY_NUMLOCK)
+            .count()
+    }
+
+    #[test]
+    fn sync_mode_turns_numlock_on_when_it_is_off() {
+        let (mut eng, led, keys, _cell, _now) = engine_numlock(NumLockMode::Sync, Some(false));
+        eng.enable();
+        // 先补按 NumLock（按下 + 抬起），再点灯
+        assert_eq!(numlock_clicks(&keys), 2);
+        assert!(!led.borrow().is_empty(), "补按后应当点灯");
+        // 退出时把 NumLock 恢复成关：又按一次
+        eng.disable();
+        assert_eq!(numlock_clicks(&keys), 4);
+    }
+
+    #[test]
+    fn sync_mode_leaves_numlock_on_untouched() {
+        let (mut eng, led, keys, _cell, _now) = engine_numlock(NumLockMode::Sync, Some(true));
+        eng.enable();
+        assert_eq!(numlock_clicks(&keys), 0, "NumLock 已开就不该再按");
+        assert!(!led.borrow().is_empty());
+        eng.disable();
+        assert_eq!(numlock_clicks(&keys), 0, "本来就没按过，退出不应还原");
+    }
+
+    #[test]
+    fn toggle_mode_always_clicks_and_restores() {
+        // 已经是 on 也要切（这才是 Toggle 的语义），退出时切回去
+        let (mut eng, _led, keys, _cell, _now) = engine_numlock(NumLockMode::Toggle, Some(true));
+        eng.enable();
+        assert_eq!(numlock_clicks(&keys), 2);
+        eng.disable();
+        assert_eq!(numlock_clicks(&keys), 4);
+    }
+
+    #[test]
+    fn off_mode_keeps_light_off_when_numlock_is_off() {
+        // 不动 NumLock，也不该在 NumLock 关着时点灯（否则打出来的不是数字）
+        let (mut eng, led, keys, _cell, _now) = engine_numlock(NumLockMode::Off, Some(false));
+        eng.enable();
+        assert_eq!(numlock_clicks(&keys), 0);
+        assert!(led.borrow().is_empty(), "NumLock 关着时不应点灯");
+    }
+
+    #[test]
+    fn unknown_numlock_state_still_lights() {
+        // 读不到 NumLock 时不能全禁：很多机型没有键盘灯节点，
+        // 一律按关处理会让整个数字区永远不亮
+        let (mut eng, led, keys, _cell, _now) = engine_numlock(NumLockMode::Off, None);
+        eng.enable();
+        assert_eq!(numlock_clicks(&keys), 0);
+        assert!(!led.borrow().is_empty(), "读不到状态时应当照常点灯");
+    }
+
+    #[test]
+    fn numlock_flipping_off_blocks_wake_up() {
+        // 熄灯后（空闲只熄灯、不退出）能否复亮取决于 NumLock：
+        // 关着就保持熄灭，否则用户以为在打数字、实际在移动光标。
+        let (mut eng, led, _keys, cell, now) = engine_numlock(NumLockMode::Sync, Some(true));
+        eng.enable();
+        let after_enable = led.borrow().len();
+        assert!(after_enable > 0);
+
+        // 推进过空闲阈值：tick 只熄灯，仍处于「已启用」
+        now.set(now.get() + eng.cfg.max_work_time_ms as f64 + 10.0);
+        eng.tick();
+        assert_eq!(led.borrow().last().copied(), Some(0), "空闲后应下发熄灭");
+        let before_touch = led.borrow().len();
+
+        // 动作区外点一下：真实事件序是 TRACKING_ID → POSITION_X/Y，缺坐标不会开始触点
+        let tap = |e: &mut Engine, x: i32, y: i32, id: i32| {
+            e.handle_event(&Event::abs(kc::ABS_MT_TRACKING_ID, id));
+            e.handle_event(&Event::abs(kc::ABS_MT_POSITION_X, x));
+            e.handle_event(&Event::abs(kc::ABS_MT_POSITION_Y, y));
+            e.handle_event(&Event::abs(kc::ABS_MT_TRACKING_ID, -1));
+        };
+
+        // NumLock 被关掉 → 触摸不复亮
+        cell.set(Some(false));
+        tap(&mut eng, 100, 100, 3);
+        assert_eq!(led.borrow().len(), before_touch, "NumLock 关着不应复亮");
+
+        // NumLock 又开了 → 触摸复亮
+        cell.set(Some(true));
+        tap(&mut eng, 100, 100, 4);
+        assert!(
+            led.borrow().len() > before_touch,
+            "NumLock 开着时触摸应自动复亮"
+        );
+    }
+
+    // ---------------- LED 通道失败与解锁序列 ----------------
+
+    /// 可选：前 `fail_times` 次 send 全部失败，之后成功。用来验证「通道不通不置位」。
+    struct FlakyLed {
+        log: Rc<RefCell<Vec<u8>>>,
+        fail_times: Rc<std::cell::Cell<usize>>,
+        unlock: bool,
+    }
+    impl LedSink for FlakyLed {
+        fn send(&mut self, v: u8) -> bool {
+            self.log.borrow_mut().push(v);
+            let left = self.fail_times.get();
+            if left > 0 {
+                self.fail_times.set(left - 1);
+                return false;
+            }
+            true
+        }
+        fn channel(&self) -> String {
+            "flaky".to_string()
+        }
+        fn needs_unlock(&self) -> bool {
+            self.unlock
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn engine_flaky(
+        cfg: Config,
+        fail_times: usize,
+        unlock: bool,
+    ) -> (Engine, Rc<RefCell<Vec<u8>>>, Rc<std::cell::Cell<usize>>) {
+        let now = Rc::new(std::cell::Cell::new(1000.0));
+        let log: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+        let left = Rc::new(std::cell::Cell::new(fail_times));
+        let geom = Geometry::new(0, 3000, 0, 2000, 10.0, 10.0, GH3XLNDZ);
+        let deps = Deps {
+            led: Box::new(FlakyLed {
+                log: log.clone(),
+                fail_times: left.clone(),
+                unlock,
+            }),
+            keys: Box::new(Rc::new(RefCell::new(FakeKeys::default()))),
+            pointer: None,
+            numlock: Some(Box::new(NumLockOn)),
+            grabber: Some(Box::new(FakeGrab)),
+            clock: Box::new(ManualClock { now }),
+        };
+        (Engine::new(cfg, geom, deps, true), log, left)
+    }
+
+    #[test]
+    fn failed_lighting_keeps_lit_false_and_retries_next_time() {
+        // 通道第一次全失败（亮 + 档位都发不出去）：不能置 lit，
+        // 否则后续唤醒/联动全部跳过重试，表现为「灯永远不亮」
+        let cfg = Config { follow_keyboard_brightness: false, ..Config::default() };
+        let (mut eng, log, left) = engine_flaky(cfg, 2, false);
+        eng.enable();
+        assert!(!eng.lit, "下发失败时不应标记为已点亮");
+        let after_first = log.borrow().len();
+        assert!(after_first >= 1);
+        left.set(0);
+        // 再触发一次点灯，这次成功
+        eng.enable();
+        assert!(eng.lit, "通道恢复后应点亮");
+        assert!(log.borrow().len() > after_first);
+    }
+
+    #[test]
+    fn i2c_channel_sends_unlock_before_level() {
+        // i2c 直写 EC 走官方两段式：先 0x60 解锁，再下档位/亮
+        let cfg = Config { follow_keyboard_brightness: false, manual_brightness_step: 4, ..Config::default() };
+        let (mut eng, log, _left) = engine_flaky(cfg, 0, true);
+        eng.enable();
+        let sent = log.borrow().clone();
+        assert_eq!(sent.first().copied(), Some(VAL_UNLOCK), "首个字节应为解锁字");
+        assert!(sent.contains(&VAL_ON), "解锁后应下发点亮");
+    }
+
+    #[test]
+    fn hidraw_channel_skips_unlock() {
+        let cfg = Config { follow_keyboard_brightness: false, ..Config::default() };
+        let (mut eng, log, _left) = engine_flaky(cfg, 0, false);
+        eng.enable();
+        assert!(
+            !log.borrow().contains(&VAL_UNLOCK),
+            "hidraw FEATURE 通道不需要 0x60"
+        );
+    }
+
+    #[test]
+    fn off_send_failure_still_marks_dark() {
+        // 熄灭无论成不成功都必须转成「未点亮」：卡在 lit=true 会让
+        // 唤醒逻辑永远提前 return，用户再摸也不会亮
+        let cfg = Config { follow_keyboard_brightness: false, ..Config::default() };
+        let (mut eng, _log, left) = engine_flaky(cfg, 0, false);
+        eng.enable();
+        assert!(eng.lit);
+        left.set(1);
+        eng.disable();
+        assert!(!eng.lit);
+    }
+
     #[test]
     fn staged_level_deferred_to_tick_and_cancelled_on_off() {
         let now = Rc::new(std::cell::Cell::new(0.0));

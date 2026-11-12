@@ -7,6 +7,8 @@
 
 // ---- 事件类型 ----
 pub const EV_SYN: u16 = 0x00;
+/// 内核事件缓冲溢出：此后的事件流不可信，客户端必须丢弃并重新同步
+pub const SYN_DROPPED: u16 = 0x03;
 pub const EV_KEY: u16 = 0x01;
 pub const EV_ABS: u16 = 0x03;
 pub const EV_LED: u16 = 0x11;

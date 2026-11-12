@@ -101,6 +101,28 @@ pub enum NumpadPresence {
     Unknown,
 }
 
+/// 背光通道失效后，从「当前实际存在」的节点表里把同一块硬件捞回来。
+///
+/// 挂起恢复、USB 重枚举、驱动重载都会让 `/dev/hidrawN` 的编号整体漂移：
+/// 昨天是 `hidraw3`，醒来变成 `hidraw7`，旧的路径永远打不开。内置链路这时
+/// 只会每次点灯刷一条 warning，灯一路黑到用户手动重启服务——所以要按
+/// `(vid:pid)` 认设备，而不是按节点编号认设备。
+///
+/// `present` 是调用方扫出来的 `(节点路径, vid, pid)` 列表；`None` 表示没找到同型号。
+/// 优先选**同名节点**（编号被同一个设备抢回来，通常就是它）。
+pub fn reattach_channel(dev: &str, vid: u32, pid: u32, present: &[(String, u32, u32)]) -> Option<String> {
+    let same_model: Vec<&(String, u32, u32)> = present
+        .iter()
+        .filter(|(_, v, p)| *v == vid && *p == pid)
+        .collect();
+    if let Some(hit) = same_model.iter().find(|(d, _, _)| d == dev) {
+        return Some(hit.0.clone());
+    }
+    // 同型号可能不止一个接口，也可能换成别的编号：取第一个能用的。
+    // 不能跨型号兜底——写错通道会往别的设备发 FEATURE 报文。
+    same_model.first().map(|(d, _, _)| d.clone())
+}
+
 /// 把逐节点的探测结果收敛成一个结论。
 ///
 /// 优先级：有就是有 → 有「确实没有」才敢判无硬件 → 只剩「没权限」就说明判不了。
@@ -224,5 +246,37 @@ mod tests {
     fn pick_best_returns_none_when_only_receiver() {
         let cands = vec![(0x0b05, 0x1ace, true)];
         assert_eq!(pick_best(&cands), None);
+    }
+    #[test]
+    fn reattach_prefers_same_node_number() {
+        let present = vec![
+            ("/dev/hidraw7".to_string(), ELAN_VID, 0x3275),
+            ("/dev/hidraw3".to_string(), ELAN_VID, 0x3275),
+        ];
+        // 编号回来了就用它，别去动兄弟接口
+        assert_eq!(
+            reattach_channel("/dev/hidraw3", ELAN_VID, 0x3275, &present).as_deref(),
+            Some("/dev/hidraw3")
+        );
+    }
+
+    #[test]
+    fn reattach_falls_back_to_same_model_new_number() {
+        let present = vec![("/dev/hidraw9".to_string(), ELAN_VID, 0x3275)];
+        assert_eq!(
+            reattach_channel("/dev/hidraw3", ELAN_VID, 0x3275, &present).as_deref(),
+            Some("/dev/hidraw9")
+        );
+    }
+
+    #[test]
+    fn reattach_never_crosses_models() {
+        // 只剩无线接收器 / 别的触摸板时宁可保持断开，也不能往错设备写报文
+        let present = vec![
+            ("/dev/hidraw4".to_string(), ASUS_VID, OMNI_PID),
+            ("/dev/hidraw5".to_string(), PIXART_VID, 0x2808),
+        ];
+        assert_eq!(reattach_channel("/dev/hidraw3", ELAN_VID, 0x3275, &present), None);
+        assert_eq!(reattach_channel("/dev/hidraw3", ELAN_VID, 0x3275, &[]), None);
     }
 }
