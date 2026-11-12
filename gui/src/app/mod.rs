@@ -100,82 +100,82 @@ impl Page {
 
 pub struct App {
     /// 当前生效的调色板（深浅色各一套，见 [`crate::theme`]）
-    palette: Palette,
-    backend: Box<dyn Backend>,
-    devices: Vec<backend::DeviceInfo>,
-    selected: Option<usize>,
-    settings: Settings,
+    pub(in crate::app) palette: Palette,
+    pub(in crate::app) backend: Box<dyn Backend>,
+    pub(in crate::app) devices: Vec<backend::DeviceInfo>,
+    pub(in crate::app) selected: Option<usize>,
+    pub(in crate::app) settings: Settings,
     /// 设置改过但还没落盘
-    settings_dirty: bool,
+    pub(in crate::app) settings_dirty: bool,
     /// 最后一次改动的时间，用来判断「停手了没有」
-    settings_dirty_at: Option<Instant>,
-    log: VecDeque<LogEntry>,
-    status: String,
-    status_bad: bool,
-    last_poll: Instant,
-    last_numlock: Option<bool>,
-    sent_numlock: Option<bool>,
-    autostart_on: bool,
-    font_note: Option<String>,
+    pub(in crate::app) settings_dirty_at: Option<Instant>,
+    pub(in crate::app) log: VecDeque<LogEntry>,
+    pub(in crate::app) status: String,
+    pub(in crate::app) status_bad: bool,
+    pub(in crate::app) last_poll: Instant,
+    pub(in crate::app) last_numlock: Option<bool>,
+    pub(in crate::app) sent_numlock: Option<bool>,
+    pub(in crate::app) autostart_on: bool,
+    pub(in crate::app) font_note: Option<String>,
     /// 平台状态快照（机型、布局、背光通道、后台服务）
-    state: Snapshot,
-    state_at: Instant,
+    pub(in crate::app) state: Snapshot,
+    pub(in crate::app) state_at: Instant,
     /// 后台重读平台状态的收件口。`snapshot()` 在 Linux 上要起几个 `systemctl`
     /// 子进程，同步跑会每隔 10 秒把界面卡住几十毫秒（systemd 忙的时候更久），
     /// 所以改成「发给线程、下一帧取回」，与命令面板同一套路。
-    state_rx: Option<std::sync::mpsc::Receiver<Snapshot>>,
+    pub(in crate::app) state_rx: Option<std::sync::mpsc::Receiver<Snapshot>>,
     /// 有人要求「刷新一下状态」。放在这里而不是直接调用，是因为发起刷新的地方
     /// （命令执行完、点了刷新按钮）未必手上有 `egui::Context`。
-    state_want: bool,
+    pub(in crate::app) state_want: bool,
     /// 服务动作（启停 / 重启 / 开机自启）的收件口。`systemctl restart` 要等服务真
     /// 起来才返回，慢盘或者 systemd 忙的时候一两秒，同步跑就是明显的卡顿；同一时刻
     /// 只放行一件，免得连点几下「重启」派出几条 systemctl 互相打架。
-    op_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
+    pub(in crate::app) op_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     /// 上一次设置写盘失败的原因：同一条错误只往状态栏报一次，避免每 400 ms 刷一遍。
-    settings_save_err: Option<String>,
+    pub(in crate::app) settings_save_err: Option<String>,
     /// 是否画 Linux 全套面板；Windows 只画灯光
-    ui_full: bool,
+    pub(in crate::app) ui_full: bool,
     /// 右侧当前页（只有全套模式才显示页签）
-    tab: Page,
+    pub(in crate::app) tab: Page,
     /// Linux 侧驱动配置（`asus-numpad.json`）的编辑草稿
-    driver: driver::Draft,
+    pub(in crate::app) driver: driver::Draft,
     /// 扩展页「校验扩展项」的结果（布局装没装上、HID 打没打架、报文合不合法）
-    ext_notes: Vec<String>,
+    pub(in crate::app) ext_notes: Vec<String>,
     /// 扩展页里自定义报文模板的十六进制草稿
-    ext_proto: String,
+    pub(in crate::app) ext_proto: String,
     /// 草稿是否正被编辑：编辑期间不用配置里的值覆盖，免得打到一半跳一下
-    ext_proto_dirty: bool,
-    ext_proto_err: Option<String>,
+    pub(in crate::app) ext_proto_dirty: bool,
+    pub(in crate::app) ext_proto_err: Option<String>,
     /// 扩展页「配置片段」文本框：四项打包成一段 JSON，方便同机型之间互传
-    ext_snippet: String,
+    pub(in crate::app) ext_snippet: String,
     /// 片段导入结果：`(文案, 是否出错)`
-    ext_snippet_msg: Option<(String, bool)>,
+    pub(in crate::app) ext_snippet_msg: Option<(String, bool)>,
     /// 校准页：样本文件路径（真机采到的落点）
-    calib_samples_path: String,
+    pub(in crate::app) calib_samples_path: String,
     /// 校准页：解算时按几列几行（与键表一致）
-    calib_cols: usize,
-    calib_rows: usize,
+    pub(in crate::app) calib_cols: usize,
+    pub(in crate::app) calib_rows: usize,
     /// 校准页：回放结果 `(文案, 是否出错)`
-    calib_msg: Option<(String, bool)>,
+    pub(in crate::app) calib_msg: Option<(String, bool)>,
     /// 校准页：上次解析过的样本路径，与 `calib_samples_path` 不同就重解析，
     /// 样本点因此能跟着输入框变，不用再点一次「读取并解算」
-    calib_probe_path: String,
+    pub(in crate::app) calib_probe_path: String,
     /// 校准页：样本点（原始坐标 + 应落格），画在预览图上
-    calib_probes: Vec<calib_view::Probe>,
+    pub(in crate::app) calib_probes: Vec<calib_view::Probe>,
     /// 校准页：样本文件解析失败的原因
-    calib_probe_msg: Option<String>,
+    pub(in crate::app) calib_probe_msg: Option<String>,
     /// 校准页「配置片段」：partition + calibration 打包
-    calib_snippet: String,
-    calib_snippet_msg: Option<(String, bool)>,
+    pub(in crate::app) calib_snippet: String,
+    pub(in crate::app) calib_snippet_msg: Option<(String, bool)>,
     /// 后台服务是否开机自启；Windows 用注册表那份，Linux 用这一份
-    service_enabled: bool,
+    pub(in crate::app) service_enabled: bool,
     /// 命令面板：与 `asus-numpad` CLI 同一套实现，界面只负责拼参数
-    cmd: CommandForm,
-    cmd_bin: Option<std::path::PathBuf>,
-    cmd_rx: Option<std::sync::mpsc::Receiver<Completion>>,
-    cmd_running: bool,
-    cmd_out: Option<String>,
-    cmd_ok: bool,
+    pub(in crate::app) cmd: CommandForm,
+    pub(in crate::app) cmd_bin: Option<std::path::PathBuf>,
+    pub(in crate::app) cmd_rx: Option<std::sync::mpsc::Receiver<Completion>>,
+    pub(in crate::app) cmd_running: bool,
+    pub(in crate::app) cmd_out: Option<String>,
+    pub(in crate::app) cmd_ok: bool,
 }
 
 impl App {
